@@ -36,6 +36,7 @@ def build_dummy():
         "-m",
         "PyInstaller",
         "--onefile",
+        "--windowed",
         "--noconfirm",
         "--clean",
         "--name",

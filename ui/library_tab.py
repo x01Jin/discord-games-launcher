@@ -281,20 +281,6 @@ class LibraryTab(QWidget):
 
         if success:
             self.refresh_library()
-            # Show info about GUI window
-            game_data = self._get_game_data(game_id)
-            game_name = game_data['name'] if game_data else 'Game'
-            
-            QMessageBox.information(
-                self,
-                "Game Started",
-                f"{game_name} is now running with a GUI window.\n\n"
-                "The window helps Discord detect the game. If Discord doesn't show \"Playing\" status:\n"
-                "• Run Discord as Administrator\n"
-                "• Enable \"Display current activity\" in Discord settings\n"
-                "• Wait 30-60 seconds for Discord to detect\n"
-                "• Restart Discord if still not detected"
-            )
         else:
             QMessageBox.warning(self, "Failed to Start", message)
 

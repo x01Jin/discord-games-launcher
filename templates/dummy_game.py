@@ -42,8 +42,8 @@ try:
         def _setup_ui(self):
             """Setup the minimal game window UI."""
             self.setWindowTitle(self.game_name)
-            self.setMinimumSize(480, 200)
-            self.resize(480, 200)
+            self.setMinimumSize(480, 280)
+            self.resize(480, 280)
 
             # Dark theme colors
             dark_bg = "#1e1e1e"
@@ -78,10 +78,24 @@ try:
             layout.addWidget(self.name_label)
 
             # Subtitle
-            subtitle = QLabel("(game is supposed to be running...)")
+            subtitle = QLabel("Game Started!")
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            subtitle.setStyleSheet("color: #888; font-size: 11px;")
+            subtitle.setStyleSheet("color: #4ade80; font-size: 12px; font-weight: bold;")
             layout.addWidget(subtitle)
+
+            # Info message
+            info_message = QLabel(
+                "This window helps Discord detect the game.\n\n"
+                "If Discord doesn't show \"Playing\" status:\n"
+                "• Run Discord as Administrator\n"
+                "• Enable \"Display current activity\" in Discord settings\n"
+                "• Wait 30-60 seconds for Discord to detect\n"
+                "• Restart Discord if still not detected"
+            )
+            info_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            info_message.setStyleSheet("color: #888; font-size: 9px; line-height: 1.4;")
+            info_message.setWordWrap(True)
+            layout.addWidget(info_message)
 
             layout.addStretch()
 
