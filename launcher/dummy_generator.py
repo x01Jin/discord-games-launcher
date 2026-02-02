@@ -11,6 +11,7 @@ The approach is simple:
 
 import shutil
 import os
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -49,14 +50,27 @@ class DummyGenerator:
 
         Search order:
         1. templates/dist/DummyGame.exe (normal development/installed location)
-        2. DUMMYGAME_EXE environment variable
-        3. Same directory as this script
+        2. PyInstaller bundled location (_internal/templates/dist)
+        3. DUMMYGAME_EXE environment variable
+        4. Same directory as this script
+        5. Output directory (in case it was placed there)
         """
-        # Check templates/dist/ directory
+        # Check templates/dist/ directory (development)
         project_root = Path(__file__).parent.parent
         template_path = project_root / "templates" / "dist" / self.TEMPLATE_EXE_NAME
         if template_path.exists():
             return template_path
+
+        # Check PyInstaller _internal folder (when running as packaged executable)
+        if getattr(sys, "frozen", False):
+            # When running from packaged directory, the exe is at dist/dcgl/dcgl.exe
+            # and _internal is at dist/dcgl/_internal/
+            exe_dir = Path(sys.executable).parent
+            pyinstaller_template = (
+                exe_dir / "_internal" / "templates" / "dist" / self.TEMPLATE_EXE_NAME
+            )
+            if pyinstaller_template.exists():
+                return pyinstaller_template
 
         # Check environment variable
         env_path = os.environ.get("DUMMYGAME_EXE")

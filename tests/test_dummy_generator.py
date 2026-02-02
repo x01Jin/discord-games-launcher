@@ -165,7 +165,7 @@ def test_dummy_path_with_subdirectory():
 
 
 def test_ensure_dummy_with_template():
-    """Test ensure_dummy_for_game with a mock template."""
+    """Test ensure_dummy_for_game creates correct directory structure."""
     print("Testing ensure_dummy_for_game...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -184,16 +184,22 @@ def test_ensure_dummy_with_template():
         # Ensure dummy is created
         exe_path, actual_name = gen.ensure_dummy_for_game(game_id, process_name)
 
+        # Verify file was created with correct content
         assert exe_path.exists(), "Dummy executable should be created"
-        assert actual_name == "test.exe"
         assert exe_path.read_bytes() == template_content, (
             "Content should match template"
         )
+        assert actual_name == "test.exe"
         print(f"  Created dummy: {exe_path}")
 
-        # Ensure idempotent - calling again should not fail
+        # Verify directory structure: output_dir/game_id/process_name
+        expected_path = output_dir / str(game_id) / "test.exe"
+        assert exe_path == expected_path, f"Expected {expected_path}, got {exe_path}"
+        print(f"  Correct directory structure: {exe_path.relative_to(output_dir)}")
+
+        # Ensure idempotent - calling again should return same path without error
         exe_path2, actual_name2 = gen.ensure_dummy_for_game(game_id, process_name)
-        assert exe_path2 == exe_path
+        assert exe_path2 == exe_path, "Should return same path on subsequent calls"
         assert actual_name2 == actual_name
         print("  Idempotent check: OK")
 
