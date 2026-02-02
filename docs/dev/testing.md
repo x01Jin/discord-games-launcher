@@ -126,17 +126,23 @@ def test_save_and_retrieve_game(temp_db):
 
 ```python
 def test_get_win32_executable():
-    """Test filtering Windows executables."""
+    """Test filtering Windows executables with smart scoring."""
     executables = [
-        {"name": "game.exe", "os": "win32", "is_launcher": False},
+        {"name": "_launcher.exe", "os": "win32", "is_launcher": True},
+        {"name": "_retail_/wow-64.exe", "os": "win32", "is_launcher": False},
+        {"name": "wow.exe", "os": "win32", "is_launcher": False},
         {"name": "game.app", "os": "darwin", "is_launcher": False}
     ]
-    win_exe = DiscordAPIClient.get_win32_executable(executables)
-    assert win_exe["name"] == "game.exe"
-
+    
+    # Get all Windows executables sorted by score
+    win_exes = DiscordAPIClient.get_best_win32_executables(executables)
+    assert len(win_exes) == 3  # 3 Windows (not 4 total)
+    assert win_exes[0]["name"] == "wow.exe"  # Highest score (no launcher, no path, no underscore)
+    
 def test_normalize_process_name():
     """Test process name normalization."""
     assert DiscordAPIClient.normalize_process_name("path/game.exe") == "game.exe"
+    assert DiscordAPIClient.normalize_process_name("_retail_/wow-64.exe") == "wow-64.exe"
     assert DiscordAPIClient.normalize_process_name("game.exe") == "game.exe"
 
 def test_icon_url_generation(api_client):

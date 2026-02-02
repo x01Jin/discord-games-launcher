@@ -49,9 +49,9 @@ This is your personal game collection:
 1. Find your desired game in the search results
 2. Click the **"Add to Library"** button
 3. The button changes to **"In Library"** (green)
-4. The launcher generates a dummy executable in the background
+4. The launcher copies a pre-built template and adds the game instantly
 
-**Note:** This may take a few seconds the first time as the dummy executable is created.
+**Note:** This happens nearly instantly - the dummy executable is created by copying a template, not compilation.
 
 ### Step 3: Go to Your Library
 
@@ -107,13 +107,14 @@ The game database syncs automatically:
 ### Performance
 
 - The launcher runs dummy processes with minimal CPU usage
-- Each dummy process uses ~1-2 MB RAM
+- Each dummy process uses ~10-20 MB RAM (GUI window)
 - No impact on gaming performance
+- Adding games is instant (copy-based, no compilation)
 
 ### Discord Status
 
 - Discord must be running to see the status
-- Status appears within seconds of starting a game
+- Status appears within ~15 seconds of starting a game
 - Some games may take longer for Discord to detect
 - Status clears when you stop the game or close Discord
 
@@ -126,10 +127,10 @@ The game database syncs automatically:
 
 ### Safety
 
-- Dummy executables are harmless and only sleep in a loop
+- Dummy executables are simple processes that display a GUI window
 - No malicious activity is performed
 - Generated executables are stored in your user data directory
-- Antivirus may flag them initially (false positive)
+- Antivirus may flag them initially (false positive - they're legitimate copies of a template)
 
 ## What to Do Next
 

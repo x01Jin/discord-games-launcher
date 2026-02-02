@@ -138,52 +138,64 @@ if icon_path:
     print(f"Icon cached at: {icon_path}")
 ```
 
-#### get_win32_executable()
+#### get_best_win32_executables()
 
-**Line:** 134 (static method)
+**Line:** 146 (static method)
 
-Filters executables list to find Windows executables.
+Get all Windows executables sorted by smart scoring for intelligent selection.
 
 ```python
 @staticmethod
-def get_win32_executable(
-    executables: List[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]
+def get_best_win32_executables(
+    executables: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]
 ```
 
 **Parameters:**
 
 - `executables` - List of executable configurations from API
 
-**Returns:** First Windows executable config, or `None`
+**Returns:** Sorted list of Windows executable configs (best first)
 
 **Executable Config Structure:**
 
 ```python
 {
-    "is_launcher": bool,
-    "name": str,  # Process name like "overwatch.exe"
-    "os": str,    # "win32", "darwin", or "linux"
-    "arguments": List[str]  # Optional
+    "is_launcher": bool,           # CRITICAL: Discord ignores launchers!
+    "name": str,                   # Process name like "overwatch.exe"
+    "os": str,                     # "win32", "darwin", or "linux"
+    "arguments": List[str]         # Optional
 }
 ```
+
+**Scoring System:**
+
+- Non-launcher: +1000 (CRITICAL - Discord ignores launchers!)
+- Shorter name: -10 per character (simpler is better)
+- No path separators: +50 (avoid "_retail_/bg3.exe")
+- No underscore prefix: +20 (avoid "_wow.exe")
 
 **Example:**
 
 ```python
 executables = [
-    {"name": "overwatch.exe", "os": "win32", "is_launcher": False},
-    {"name": "overwatch.app", "os": "darwin", "is_launcher": False}
+    {"name": "_launcher.exe", "os": "win32", "is_launcher": True},
+    {"name": "_retail_/wow-64.exe", "os": "win32", "is_launcher": False},
+    {"name": "wow.exe", "os": "win32", "is_launcher": False},
 ]
-win_exe = DiscordAPIClient.get_win32_executable(executables)
-# Returns: {"name": "overwatch.exe", "os": "win32", ...}
+sorted_exes = DiscordAPIClient.get_best_win32_executables(executables)
+# Returns sorted list with "wow.exe" first (highest score)
 ```
+
+**Why This Matters:**
+
+Discord's detection is strict. A launcher executable may fail completely, while a shorter, non-prefixed path is much more reliable for detection.
 
 #### normalize_process_name()
 
-**Line:** 150 (static method)
+**Line:** 181 (static method)
 
-Normalizes process names that may contain path separators.
+Normalizes process names that may contain path separators. Returns only the filename for Discord detection.
 
 ```python
 @staticmethod
@@ -192,9 +204,9 @@ def normalize_process_name(name: str) -> str
 
 **Parameters:**
 
-- `name` - Raw process name from API
+- `name` - Raw process name from API (may include paths)
 
-**Returns:** Normalized executable filename
+**Returns:** Normalized executable filename for Discord detection
 
 **Examples:**
 
@@ -203,9 +215,14 @@ def normalize_process_name(name: str) -> str
 DiscordAPIClient.normalize_process_name("_retail_/wow-64.exe")
 # Returns: "wow-64.exe"
 
+DiscordAPIClient.normalize_process_name("devil may cry 5/devilmaycry5.exe")
+# Returns: "devilmaycry5.exe"
+
 DiscordAPIClient.normalize_process_name("overwatch.exe")
 # Returns: "overwatch.exe"
 ```
+
+**Note:** The full path is preserved in the filesystem for proper Discord detection (e.g., creating `_retail_/wow-64.exe`), but the normalized name is used for Discord's process lookup.
 
 ## Exceptions
 
@@ -322,11 +339,14 @@ try:
         # Download icon
         icon_path = client.download_icon(game.id, game.icon_hash, size=128)
         
-    # Get Windows executable
+    # Get all Windows executables sorted by score
     if game:
-        exe = client.get_win32_executable(game.executables)
-        if exe:
-            print(f"Process name: {exe['name']}")
+        exes = client.get_best_win32_executables(game.executables)
+        if exes:
+            best_exe = exes[0]  # Highest score
+            normalized = client.normalize_process_name(best_exe['name'])
+            print(f"Best executable: {best_exe['name']}")
+            print(f"Normalized name: {normalized}")
             
 except DiscordAPIError as e:
     print(f"API error: {e}")

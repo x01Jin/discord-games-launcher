@@ -221,13 +221,13 @@ User clicks "Add to Library"
 │ add_to_library()    │
 └─────────────────────┘
          │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────┐
-│Database│ │API Client│
-│get_game│ │get_win32 │
-│        │ │executable│
-└────────┘ └──────────┘
+    ┌────┴─────────────┐
+    ▼                  ▼
+┌────────┐    ┌──────────────────┐
+│Database│    │  API Client      │
+│get_game│    │get_best_win32_exe│
+│        │    │normalize_name    │
+└────────┘    └──────────────────┘
          │
          ▼
 ┌─────────────────────┐
@@ -240,6 +240,7 @@ User clicks "Add to Library"
 ┌─────────────────────┐
 │      Database       │
 │  add_to_library()   │
+│(with all exe opts)  │
 └─────────────────────┘
 ```
 

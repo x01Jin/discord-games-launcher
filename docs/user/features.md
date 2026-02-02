@@ -49,15 +49,14 @@ Manage your game collection in a clean, scannable list view with rich formatting
 
 When you add a game:
 
-1. Finds the Windows executable name from Discord's database
-2. Generates a Python script with tkinter GUI window
-3. Compiles with PyInstaller to create the executable
-4. Names it exactly as Discord expects (handles paths like `_retail_/wow.exe`)
-5. Stores in your user data directory
+1. Finds the Windows executable name from Discord's database (with smart scoring for best match)
+2. Copies a pre-built dummy executable template
+3. Renames it to match Discord's expected process name
+4. Stores in your user data directory
 
 When you start a game:
 
-1. Launcher runs the dummy executable
+1. Launcher runs the dummy executable with game name as argument
 2. A small window opens showing "{Game Name} is running"
 3. Process stays active with the GUI window open
 4. Discord detects it within ~15 seconds
@@ -74,6 +73,7 @@ Show "Playing [Game]" in Discord with dummy processes that display GUI windows.
 - **Multiple Games:** Run multiple games simultaneously
 - **Proper Termination:** Recursive child process killing for complete cleanup
 - **Real-time Updates:** Status bar shows running count
+- **Instant Addition:** Copy-based template system
 
 **Discord Detection:**
 
@@ -122,11 +122,9 @@ Removing a game from library performs complete cleanup.
 **Cleanup Actions:**
 
 1. **Stop Process:** If running, stops with recursive termination
-2. **Remove Executable:** Deletes the .exe file
-3. **Remove PID File:** Cleans up tracking file
-4. **Remove Build Artifacts:** Deletes dist/, build/, .spec files
-5. **Remove Directory:** Removes entire game directory
-6. **Database Cleanup:** Removes library entry
+2. **Remove Executable:** Deletes the copied .exe file
+3. **Remove Directory:** Removes game folder
+4. **Database Cleanup:** Removes library entry
 
 **Result:** Zero leftover files or processes.
 

@@ -43,7 +43,7 @@ class Game:
 
 **Line:** 29
 
-Represents a game in the user's library.
+Represents a game in the user's library with full executable tracking.
 
 ```python
 @dataclass
@@ -51,6 +51,8 @@ class LibraryGame:
     game_id: int
     executable_path: Optional[str]
     process_name: str
+    normalized_process_name: str  # For Discord detection
+    executables: List[Dict[str, Any]]  # All available executables
     added_at: datetime
 ```
 
@@ -58,8 +60,38 @@ class LibraryGame:
 
 - `game_id` - Reference to games_cache.id
 - `executable_path` - Path to generated dummy executable
-- `process_name` - Process name for Discord detection
+- `process_name` - Original process name from API (may have paths)
+- `normalized_process_name` - Normalized name for Discord detection (filename only)
+- `executables` - All Windows executable candidates for smart retry
 - `added_at` - When added to library
+
+### ExecutableHistory
+
+**Line:** 41
+
+Tracks executable attempt success/failure for smart selection.
+
+```python
+@dataclass
+class ExecutableHistory:
+    id: int
+    game_id: int
+    executable_name: str
+    success_count: int
+    failure_count: int
+    last_attempt_at: datetime
+    last_success_at: Optional[datetime]
+```
+
+**Fields:**
+
+- `id` - Primary key (auto-increment)
+- `game_id` - Reference to the game
+- `executable_name` - Which executable was tried
+- `success_count` - How many times this executable started successfully
+- `failure_count` - How many times this executable failed
+- `last_attempt_at` - Last time tried
+- `last_success_at` - Last successful attempt timestamp
 
 ## Database Schema
 
@@ -89,17 +121,58 @@ CREATE INDEX idx_games_cached_at ON games_cache(cached_at);
 
 ### user_library
 
-Stores user's game library.
+Stores user's game library with executable tracking for smart retry logic.
 
 ```sql
 CREATE TABLE user_library (
     game_id INTEGER PRIMARY KEY,
     executable_path TEXT,
     process_name TEXT NOT NULL,
+    normalized_process_name TEXT,
+    executables TEXT,  -- JSON array of all Windows executables
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games_cache(id)
 );
 ```
+
+**New Columns:**
+
+- `normalized_process_name` - Normalized name for Discord detection (e.g., "wow-64.exe" from "_retail_/wow-64.exe")
+- `executables` - JSON array of all available Windows executable options for this game
+
+### executable_history
+
+Tracks executable selection success/failure for smart retry logic.
+
+```sql
+CREATE TABLE executable_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id INTEGER NOT NULL,
+    executable_name TEXT NOT NULL,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    last_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_success_at TIMESTAMP,
+    UNIQUE(game_id, executable_name),
+    FOREIGN KEY (game_id) REFERENCES user_library(game_id)
+);
+```
+
+**Purpose:**
+
+- Tracks which executables have worked vs failed
+- Used for intelligent retry when a game fails to detect
+- Allows system to try alternative executables if primary fails
+
+**Example:**
+
+If World of Warcraft has multiple executables:
+
+- `wow.exe` (success_count=15, failure_count=0)
+- `wow-64.exe` (success_count=5, failure_count=0)
+- `_retail_/wow.exe` (success_count=0, failure_count=3)
+
+The system will prefer the first based on success history.
 
 ### running_processes
 
@@ -267,13 +340,28 @@ games = db.search_games("overwatch", limit=10)
 
 ```python
 def add_to_library(
-    self, game_id: int, executable_path: str, process_name: str
+    self, 
+    game_id: int, 
+    executable_path: str, 
+    process_name: str,
+    normalized_process_name: str,
+    executables: List[Dict[str, Any]]
 ) -> None
 ```
 
-Adds a game to user's library.
+Adds a game to user's library with all executable candidates.
+
+**Parameters:**
+
+- `game_id` - Discord game ID
+- `executable_path` - Path to the copied dummy executable
+- `process_name` - Original process name from API (may include paths like "_retail_/wow.exe")
+- `normalized_process_name` - Normalized name for Discord detection (filename only like "wow.exe")
+- `executables` - List of all available Windows executables for this game (for smart retry)
 
 **Uses UPSERT** to handle re-adding existing games.
+
+**Note:** All executable candidates are stored for smart retry logic. If the primary executable fails to detect, the system can try alternatives.
 
 #### remove_from_library()
 

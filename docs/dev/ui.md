@@ -106,14 +106,6 @@ BrowserTab
 │   └── Column 2: Status (Available/In Library)
 └── Buttons Layout
     └── Add Selected Button
-
-CompilationQueueWidget (NEW - Shows when adding games)
-├── Header (stats: Queue | Active | Completed)
-├── Queue Items (QScrollArea)
-│   └── QueueItemWidget (game name, progress bar, cancel button)
-└── Controls
-    ├── Cancel All Button
-    └── Clear Completed Button
 ```
 
 ### Tree Widget Styling
@@ -153,7 +145,7 @@ self.games_tree.setStyleSheet(f"""
 
 - **Search:** Type in search box to filter games instantly
 - **Multi-select:** Hold Ctrl to select multiple games
-- **Add Selected:** Click button to add all selected games
+- **Add Selected:** Click button to add all selected games (instant copy-based operation)
 - **Context Menu:** Right-click game for quick add
 - **Visual Feedback:** Games in library show green "In Library" status
 
@@ -178,7 +170,6 @@ class LibraryTab(QWidget):
 - Double-click to toggle start/stop
 - Context menu for actions
 - Stop All button for quick cleanup
-- **NEW:** GUI mode for better Discord game detection with status info dialog
 
 ### UI Structure__
 
@@ -448,60 +439,6 @@ for item in selected_items:
 - **Library:** QListWidget with PyQt6 custom widget items (clean, scannable)
 - **Items:** Native PyQt6 widgets (QLabel with proper styling)
 - Benefits: Better organization, easier navigation, professional appearance, proper rendering
-
-## Testing Checklist
-
-- [ ] Search functionality filters correctly
-- [ ] Tree widget displays games properly
-- [ ] List widget shows library with widget-based items
-- [ ] Multi-select works in browser
-- [ ] Context menus appear and function
-- [ ] Double-click toggles start/stop
-- [ ] Status updates reflect process state
-- [ ] Dark theme consistent throughout
-- [ ] Resize handling works properly
-- [ ] Empty library message displays
-- [ ] Library items render correctly (not showing HTML)
-
-## Compilation Queue Widget
-
-**File:** `ui/queue_widget.py`
-
-### CompilationQueueWidget Class
-
-Widget for displaying compilation queue with real-time progress updates during PyInstaller execution.
-
-```python
-class CompilationQueueWidget(QWidget):
-    def __init__(self, parent: Optional[QWidget] = None)
-```
-
-**Features:**
-
-- Shows all queued, active, and completed compilations
-- Real-time progress updates from worker threads
-- Queue statistics (queued count, active workers, completed count)
-- Cancel individual or all compilations
-- Clear completed items button
-- Auto-shows when games are added, hides when queue empties
-- Floating window style
-
-### QueueItemWidget Class
-
-Individual item in the compilation queue with progress display.
-
-```python
-class QueueItemWidget(QFrame):
-    def __init__(self, game_id: int, game_name: str, parent: Optional[QWidget] = None)
-```
-
-**Features:**
-
-- Game name and status badge
-- Progress bar with percentage
-- Status message
-- Cancel button (only visible when active)
-- Color-coded status (Queued/Compiling/Complete/Failed)
 
 ## Worker Threads
 
