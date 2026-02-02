@@ -110,6 +110,15 @@ Manages dummy executables by copying a pre-built template. This approach is insp
 2. When a game is added, the template is **copied** and **renamed** to match the target process name
 3. When launched, the game name is passed as a **command-line argument**
 
+**Path-Based Detection:**
+
+Discord's detection database stores executable names that may include relative folder paths (e.g., `devil may cry 5/devilmaycry5.exe`, `_retail_/wow.exe`). The Dummy Generator preserves this folder structure to ensure proper detection:
+
+- For `devil may cry 5/devilmaycry5.exe`:
+  - Creates folder: `games/<game_id>/devil may cry 5/`
+  - Creates exe: `devilmaycry5.exe` inside that folder
+- Discord matches the running process by checking if its full path ends with the expected pattern
+
 **Key Features:**
 
 - **Instant game addition** - Just a file copy, no compilation needed
@@ -145,6 +154,25 @@ Manages lifecycle of dummy game processes.
 - **Process verification:** Checks executable path to ensure correct game association
 - **Recursive termination:** Kills child processes before parent
 - Stale process detection and cleanup
+
+**Thread Management:**
+
+The Process Manager uses PyQt6's QThread with a worker object pattern for game detection:
+
+```python
+# Worker object pattern - proper cleanup sequence
+thread = QThread()
+worker = DetectionWorker(...)
+worker.moveToThread(thread)
+
+# Signal connections for safe cleanup:
+thread.started.connect(worker.run)      # Start worker when thread starts
+worker.finished.connect(thread.quit)    # Request thread quit when worker done
+thread.finished.connect(worker.deleteLater)  # Delete worker after thread stops
+thread.finished.connect(thread.deleteLater)  # Delete thread after it stops
+```
+
+**Critical:** Worker and thread deletion must be handled via `deleteLater()` connected to `thread.finished`, not `worker.finished`. This ensures the thread has actually stopped before Qt cleans up objects, preventing "QThread: Destroyed while thread is still running" crashes.
 
 **Process Launch:**
 

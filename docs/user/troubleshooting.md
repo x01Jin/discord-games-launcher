@@ -6,35 +6,51 @@
 
 **Problem:** Started a game but Discord doesn't show "Playing" status.
 
+**Important:** The launcher CANNOT verify Discord detection. It only creates a process that Discord should detect. Whether Discord actually detects it depends on Discord's settings and behavior.
+
 **Solutions:**
 
 1. **Check Discord is running**
-   - Discord must be open (not just in system tray)
+   - Discord must be open and logged in
    - Use Discord desktop app (web version won't work)
+   - Try running Discord as Administrator
 
-2. **Wait a moment**
-   - Status can take 5-10 seconds to appear
-   - Some games take longer for Discord to detect
+2. **Check Discord settings (CRITICAL)**
+   - Discord Settings > Activity Privacy
+   - Ensure "Display current activity as a status message" is ON
+   - This is the most common reason for detection failure
 
-3. **Verify process is running**
+3. **Wait for Discord's scan cycle**
+   - Discord scans for processes every 15-30 seconds
+   - Wait at least 30-60 seconds after starting a game
+   - Status may not appear immediately
+
+4. **Verify process is running**
    - Check launcher shows "Running" status
    - Open Task Manager and look for the process
-   - Process name should match the game executable (e.g., `overwatch.exe`)
+   - Process name should match the game executable (e.g., `devilmaycry5.exe`)
 
-4. **Restart Discord**
-   - Close Discord completely
+5. **Restart Discord**
+   - Close Discord completely (exit from system tray)
    - Reopen Discord
-   - Start the game again from launcher
+   - Wait for it to fully load
+   - Check if status appears
 
-5. **Check Discord settings**
-   - Discord Settings > Activity Privacy
-   - Ensure "Display currently running game as a status message" is ON
+6. **Try a different game**
+   - Some games have better detection than others
+   - Popular games (Overwatch, VALORANT, League of Legends) usually work well
+   - Test with a known working game first
 
-**Still not working?**
+**Understanding the Detection Process:**
 
-- Some games may have detection issues
-- Try a different, more popular game
-- Check if game is in Discord's supported list
+The launcher creates a process with the exact name Discord expects (e.g., `devilmaycry5.exe`). Discord independently scans running processes and matches them against its database. The launcher has no way to verify if Discord detected the game - it can only verify the process is running.
+
+**If Discord still doesn't detect:**
+
+- The game might not be in Discord's detectable games database
+- Discord might have bugs with specific games
+- Windows security software might be blocking Discord from seeing processes
+- Discord might need elevated permissions (run as Administrator)
 
 ### Issue: Launcher Won't Start
 

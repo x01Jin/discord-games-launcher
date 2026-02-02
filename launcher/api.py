@@ -131,33 +131,70 @@ class DiscordAPIClient:
             return None
 
     @staticmethod
-    def get_win32_executable(
+    def get_best_win32_executables(
         executables: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        """Get the first Windows executable from the list.
+    ) -> List[Dict[str, Any]]:
+        """Get all Windows executables sorted by smart scoring.
 
         Discord's executables array contains objects with:
-        - is_launcher: bool
+        - is_launcher: bool - CRITICAL: Discord ignores launchers!
         - name: str (process name like "overwatch.exe")
         - os: str ("win32", "darwin", or "linux")
         - arguments: List[str] (optional, sometimes contains path)
+
+        Scoring system:
+        - Non-launcher: +1000 (CRITICAL - Discord ignores launchers!)
+        - Shorter name: -10 per character
+        - No path separators: +50 (avoid "_retail_/bg3.exe")
+        - No underscore prefix: +20 (avoid "_wow.exe")
+
+        Returns:
+            List of executables sorted by score (best first)
         """
+        win_executables = []
+
         for exe in executables:
-            if exe.get("os") == "win32":
-                # Try to get name from various possible locations
-                name = exe.get("name")
-                if not name:
-                    # Some executables have arguments array with path
-                    args = exe.get("arguments", [])
-                    if args and len(args) > 0:
-                        # Extract filename from first argument path
-                        path = args[0]
-                        name = Path(path).name
-                if name:
-                    # Normalize and set the name field
-                    exe["name"] = name
-                    return exe
-        return None
+            if exe.get("os") != "win32":
+                continue
+
+            # Try to get name from various possible locations
+            name = exe.get("name")
+            if not name:
+                args = exe.get("arguments", [])
+                if args and len(args) > 0:
+                    path = args[0]
+                    name = Path(path).name
+
+            if not name:
+                continue
+
+            exe_copy = dict(exe)
+            exe_copy["name"] = name
+
+            score = 0
+
+            # CRITICAL: Check if launcher (Discord ignores these!)
+            if not exe_copy.get("is_launcher", False):
+                score += 1000
+
+            # Prefer shorter names
+            score -= len(name) * 10
+
+            # Prefer names without path separators
+            if "/" not in name and "\\" not in name:
+                score += 50
+
+            # Prefer names not starting with underscore
+            if not name.startswith("_"):
+                score += 20
+
+            exe_copy["_score"] = score
+            win_executables.append(exe_copy)
+
+        # Sort by score (descending)
+        win_executables.sort(key=lambda x: x["_score"], reverse=True)
+
+        return win_executables
 
     @staticmethod
     def normalize_process_name(name: str) -> str:
@@ -166,7 +203,6 @@ class DiscordAPIClient:
         Some executables have path separators like "_retail_/wow-64.exe"
         We need to extract just the executable filename.
         """
-        # Handle cases like "_retail_/wow-64.exe"
         if "/" in name:
             return name.split("/")[-1]
         return name

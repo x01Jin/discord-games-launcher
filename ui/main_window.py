@@ -1,7 +1,7 @@
 """Discord Games Launcher - UI Main Window module.
 
 Main application window with dark theme styling.
-Manages the tab interface and application lifecycle.
+Manages tab interface and application lifecycle.
 """
 
 from PyQt6.QtWidgets import (
@@ -37,12 +37,13 @@ class MainWindow(QMainWindow):
     def __init__(self, game_manager: GameManager):
         super().__init__()
         self.game_manager = game_manager
+        self.worker_threads = []
         self._setup_ui()
         self._apply_dark_theme()
         self._setup_timers()
 
     def _setup_ui(self):
-        """Initialize the UI components."""
+        """Initialize UI components."""
         self.setWindowTitle("Discord Games Launcher")
         self.setMinimumSize(1000, 700)
 
@@ -80,7 +81,7 @@ class MainWindow(QMainWindow):
         self._update_status_bar()
 
     def _create_header(self) -> QWidget:
-        """Create the header widget with title and sync button."""
+        """Create header widget with title and sync button."""
         header = QWidget()
         layout = QHBoxLayout(header)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -112,24 +113,39 @@ class MainWindow(QMainWindow):
 
     def _apply_dark_theme(self):
         """Apply dark theme stylesheet."""
+        # Use Windows API for dark title bar
+        try:
+            import ctypes
+
+            hwnd = int(self.winId())
+            DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                ctypes.byref(ctypes.c_int(1)),
+                ctypes.sizeof(ctypes.c_int()),
+            )
+        except Exception:
+            pass  # Fallback on non-Windows or if API unavailable
+
         self.setStyleSheet(f"""
             QMainWindow {{
                 background-color: {DARK_BG};
             }}
-            
+
             QWidget {{
                 background-color: {DARK_BG};
                 color: {TEXT_COLOR};
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 10pt;
             }}
-            
+
             QTabWidget::pane {{
                 border: 1px solid {BORDER_COLOR};
                 background-color: {DARKER_BG};
                 border-radius: 4px;
             }}
-            
+
             QTabBar::tab {{
                 background-color: {DARK_BG};
                 color: {TEXT_COLOR};
@@ -140,16 +156,16 @@ class MainWindow(QMainWindow):
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
             }}
-            
+
             QTabBar::tab:selected {{
                 background-color: {DARKER_BG};
                 border-bottom: 2px solid {ACCENT_COLOR};
             }}
-            
+
             QTabBar::tab:hover:!selected {{
                 background-color: {BORDER_COLOR};
             }}
-            
+
             QPushButton {{
                 background-color: {ACCENT_COLOR};
                 color: white;
@@ -158,20 +174,20 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 font-weight: bold;
             }}
-            
+
             QPushButton:hover {{
                 background-color: #005a9e;
             }}
-            
+
             QPushButton:pressed {{
                 background-color: #004578;
             }}
-            
+
             QPushButton:disabled {{
                 background-color: {BORDER_COLOR};
                 color: #666;
             }}
-            
+
             QLineEdit {{
                 background-color: {DARKER_BG};
                 border: 1px solid {BORDER_COLOR};
@@ -179,53 +195,53 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 color: {TEXT_COLOR};
             }}
-            
+
             QLineEdit:focus {{
                 border: 1px solid {ACCENT_COLOR};
             }}
-            
+
             QScrollArea {{
                 border: none;
                 background-color: {DARKER_BG};
             }}
-            
+
             QScrollBar:vertical {{
                 background-color: {DARK_BG};
                 width: 12px;
                 border-radius: 6px;
             }}
-            
+
             QScrollBar::handle:vertical {{
                 background-color: {BORDER_COLOR};
                 border-radius: 6px;
                 min-height: 30px;
             }}
-            
+
             QScrollBar::handle:vertical:hover {{
                 background-color: #555;
             }}
-            
+
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
             }}
-            
+
             QStatusBar {{
                 background-color: {ACCENT_COLOR};
                 color: white;
             }}
-            
+
             QLabel {{
                 color: {TEXT_COLOR};
             }}
-            
+
             QMessageBox {{
                 background-color: {DARK_BG};
             }}
-            
+
             QMessageBox QLabel {{
                 color: {TEXT_COLOR};
             }}
-            
+
             QMessageBox QPushButton {{
                 min-width: 80px;
             }}
@@ -295,11 +311,20 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, a0):
         """Handle window close event.
-        
+
+        Force-terminate all workers, stop games, cleanup resources.
+
         Parameter name 'a0' matches PyQt6 type stub signature.
         """
-        # Stop all running processes on exit
+        # Force-terminate library tab worker
+        self.library_tab.cleanup()
+
+        # Stop all running processes
         running = self.game_manager.stop_all_games()
+
+        # Force cleanup all process records
+        self.game_manager.process_mgr.force_cleanup_all()
+
         if running > 0:
             self.status_bar.showMessage(f"Stopped {running} games")
 

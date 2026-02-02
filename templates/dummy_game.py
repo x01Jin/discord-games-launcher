@@ -45,6 +45,21 @@ try:
             self.setMinimumSize(480, 280)
             self.resize(480, 280)
 
+            # Apply dark title bar on Windows
+            try:
+                import ctypes
+
+                hwnd = int(self.winId())
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    ctypes.byref(ctypes.c_int(1)),
+                    ctypes.sizeof(ctypes.c_int()),
+                )
+            except Exception:
+                pass  # Fallback on non-Windows or if API unavailable
+
             # Dark theme colors
             dark_bg = "#1e1e1e"
             text_color = "#cccccc"
@@ -80,17 +95,21 @@ try:
             # Subtitle
             subtitle = QLabel("Game Started!")
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            subtitle.setStyleSheet("color: #4ade80; font-size: 12px; font-weight: bold;")
+            subtitle.setStyleSheet(
+                "color: #4ade80; font-size: 12px; font-weight: bold;"
+            )
             layout.addWidget(subtitle)
 
             # Info message
             info_message = QLabel(
                 "This window helps Discord detect the game.\n\n"
-                "If Discord doesn't show \"Playing\" status:\n"
-                "• Run Discord as Administrator\n"
-                "• Enable \"Display current activity\" in Discord settings\n"
-                "• Wait 30-60 seconds for Discord to detect\n"
-                "• Restart Discord if still not detected"
+                "IMPORTANT: This app cannot verify Discord detection!\n"
+                "Check your Discord profile to see if status appears.\n\n"
+                'If Discord doesn\'t show "Playing" status:\n'
+                "\u2022 Ensure 'Display current activity' is ON in Discord settings\n"
+                "\u2022 Run Discord as Administrator\n"
+                "\u2022 Wait 30-60 seconds for Discord to scan processes\n"
+                "\u2022 Restart Discord if still not detected"
             )
             info_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
             info_message.setStyleSheet("color: #888; font-size: 9px; line-height: 1.4;")

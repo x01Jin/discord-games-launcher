@@ -5,8 +5,12 @@ Coordinates between database, API, dummy generation, and process management.
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-from launcher.database import Database, Game
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from launcher.database import Game
+
+from launcher.database import Database
 from launcher.api import DiscordAPIClient
 from launcher.dummy_generator import DummyGenerator
 from launcher.process_manager import ProcessManager
@@ -27,13 +31,15 @@ class GameManager:
         api_client: DiscordAPIClient,
         dummy_generator: DummyGenerator,
         process_manager: ProcessManager,
+        logger=None,
     ):
         self.db = database
         self.api = api_client
         self.dummy_gen = dummy_generator
         self.process_mgr = process_manager
+        self.logger = logger
 
-    def sync_games(self, force: bool = False) -> Tuple[bool, int]:
+    def sync_games(self, force: bool = False) -> tuple:
         """Sync games from Discord API to local cache.
 
         Args:
@@ -49,23 +55,23 @@ class GameManager:
         except Exception as e:
             raise GameManagerError(f"Failed to sync games: {e}")
 
-    def search_games(self, query: str, limit: int = 100) -> List[Game]:
+    def search_games(self, query: str, limit: int = 100) -> List["Game"]:
         """Search cached games by name."""
         return self.db.search_games(query, limit)
 
-    def get_all_games(self, limit: Optional[int] = None) -> List[Game]:
+    def get_all_games(self, limit: Optional[int] = None) -> List["Game"]:
         """Get all cached games."""
         return self.db.get_all_games(limit)
 
-    def get_game(self, game_id: int) -> Optional[Game]:
+    def get_game(self, game_id: int) -> Optional["Game"]:
         """Get a specific game by ID."""
         return self.db.get_game(game_id)
 
-    def add_to_library(self, game_id: int) -> Tuple[bool, str]:
+    def add_to_library(self, game_id: int) -> tuple:
         """Add a game to the user's library.
 
         This copies the dummy executable template and adds to library.
-        Operation is instant since it's just a file copy.
+        Stores ALL executable candidates for smart retry.
 
         Args:
             game_id: The Discord game ID
@@ -89,31 +95,41 @@ class GameManager:
                 "Run 'python templates/build_dummy.py' to build it."
             )
 
-        # Find Windows executable
-        exe_config = self.api.get_win32_executable(game.executables)
-        if not exe_config:
+        # Get all Windows executables with smart scoring
+        win_executables = self.api.get_best_win32_executables(game.executables)
+
+        if not win_executables:
             return False, "No Windows executable found for this game"
 
-        process_name = exe_config["name"]
+        # Use the best executable for initial setup
+        best_exe = win_executables[0]
+        process_name = best_exe["name"]
 
-        # Normalize process name (handle cases like "_retail_/wow.exe")
+        # NOTE: Keep full path (e.g., "_retail_/wow.exe") for file creation
+        # The DummyGenerator correctly handles subdirectories.
+        # Normalization is only needed for Discord detection, not file storage.
+
+        # Calculate normalized name (filename only) for Discord detection
         normalized_name = self.api.normalize_process_name(process_name)
 
         try:
             # Copy dummy executable template (instant operation)
             exe_path, actual_name = self.dummy_gen.ensure_dummy_for_game(
-                game_id=game_id, process_name=normalized_name
+                game_id=game_id, process_name=process_name
             )
 
-            # Add to library database
-            self.db.add_to_library(game_id, str(exe_path), actual_name)
+            # Add to library database with ALL executable candidates
+            self.db.add_to_library(game_id, str(exe_path), normalized_name, normalized_name, win_executables)
 
-            return True, f"Added {game.name} to library"
+            if self.logger:
+                self.logger.game_add_library(game.name, game_id, len(win_executables))
+
+            return True, f"Added {game.name} to library ({len(win_executables)} executable variant(s))"
 
         except Exception as e:
             return False, f"Failed to add game: {e}"
 
-    def remove_from_library(self, game_id: int) -> Tuple[bool, str]:
+    def remove_from_library(self, game_id: int) -> tuple:
         """Remove a game from the user's library.
 
         This stops any running process and removes the dummy executable.
@@ -146,6 +162,11 @@ class GameManager:
         # Remove from library
         self.db.remove_from_library(game_id)
 
+        if self.logger:
+            game = self.db.get_game(game_id)
+            game_name = game.name if game else f"Game {game_id}"
+            self.logger.game_remove_library(game_name, game_id)
+
         return True, "Game removed from library"
 
     def get_library(self) -> List[Dict[str, Any]]:
@@ -162,8 +183,11 @@ class GameManager:
         """Check if a game is in the library."""
         return self.db.is_in_library(game_id)
 
-    def start_game(self, game_id: int) -> Tuple[bool, str]:
-        """Start a dummy process for a library game.
+    def start_game(self, game_id: int) -> tuple:
+        """Start a dummy process for a library game with detection verification.
+
+        This method initiates the detection process. The actual retry logic
+        and detection is handled by the ProcessManager in a worker thread.
 
         Args:
             game_id: The Discord game ID
@@ -186,27 +210,16 @@ class GameManager:
         if self.process_mgr.is_running(game_id):
             return False, "Game is already running"
 
-        # Check executable exists
-        if not lib_game.executable_path:
-            return False, "No executable path stored for this game"
+        # Check if we have executable candidates
+        if not lib_game.executables:
+            return False, "No executable candidates stored for this game"
 
-        exe_path = Path(lib_game.executable_path)
-        if not exe_path.exists():
-            return False, "Executable not found, try removing and re-adding the game"
+        if self.logger:
+            self.logger.game_start_request(game.name if game else f"Game {game_id}", game_id)
 
-        # Get display name for the dummy process
-        display_name = game.name if game else "Game"
+        return True, "Starting detection verification..."
 
-        try:
-            # Start process with game name as argument
-            pid = self.process_mgr.start_process(
-                game_id=game_id, exe_path=exe_path, game_name=display_name
-            )
-            return True, f"Started game (PID: {pid})"
-        except Exception as e:
-            return False, f"Failed to start game: {e}"
-
-    def stop_game(self, game_id: int) -> Tuple[bool, str]:
+    def stop_game(self, game_id: int) -> tuple:
         """Stop a running dummy process.
 
         Args:

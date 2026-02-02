@@ -505,100 +505,100 @@ class QueueItemWidget(QFrame):
 
 ## Worker Threads
 
-**File:** `ui/workers.py`
+### Detection Worker Pattern
 
-### GameAdditionWorker Class
+**Location:** `launcher/process_manager.py` and `ui/library_tab.py`
 
-Worker thread for adding a single game to library asynchronously.
-
-```python
-class GameAdditionWorker(QRunnable):
-    def __init__(self, game_id: int, game_manager: Any, progress_callback: Optional[Callable] = None)
-```
-
-**Features:**
-
-- Runs complete game addition workflow in background thread
-- Emits progress signals for UI updates
-- Emits finished/error signals on completion
-- Supports cancellation mid-compilation
-- Handles cleanup if cancelled
-
-**Workflow:**
-
-1. Validate game exists in cache
-2. Check if already in library
-3. Get Windows executable configuration
-4. Emit progress: "Generating dummy executable..."
-5. Call `DummyGenerator.generate_dummy()` (blocking)
-6. Emit progress: "Adding to library..."
-7. Update database
-8. Emit finished signal with result/error
-
-### WorkerSignals Class
-
-Signals emitted by worker threads.
+The Library Tab uses a QThread-based worker pattern for game detection that runs in the background, allowing the UI to remain responsive during the 15-second detection wait period.
 
 ```python
-class WorkerSignals(QObject):
-    progress = pyqtSignal(int, str, int, str)  # (game_id, game_name, percent, message)
-    finished = pyqtSignal(int, str, bool, str, str)  # (game_id, game_name, success, message, exe_path)
-    error = pyqtSignal(int, str, str, str)  # (game_id, game_name, error, traceback)
+class DetectionWorker(QObject):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(bool, object, str)
+    
+    def run(self):
+        # Detection logic runs here in separate thread
+        ...
 ```
 
-## Threading Architecture
+**Key Features:**
 
-### Thread Pool Configuration
+- Runs detection verification in a background thread
+- Emits progress signals for real-time UI updates
+- Emits finished signal with result when complete
+- Supports early cancellation via `stop()` method
 
-Browser tab uses `QThreadPool` with maximum 2 concurrent workers:
+### Thread Lifecycle Management
+
+The thread/worker cleanup sequence is critical to prevent crashes:
 
 ```python
-self.thread_pool = QThreadPool()
-self.thread_pool.setMaxThreadCount(2)
+# In ProcessManager.start_game_with_ui_updates():
+thread = QThread()
+worker = DetectionWorker(...)
+worker.moveToThread(thread)
+
+# Signal connections in correct order:
+thread.started.connect(worker.run)           # 1. Start worker when thread starts
+worker.finished.connect(thread.quit)         # 2. Request thread quit when worker finishes
+thread.finished.connect(worker.deleteLater)  # 3. Delete worker AFTER thread stops
+thread.finished.connect(thread.deleteLater)  # 4. Delete thread AFTER it stops
 ```
 
-This prevents overwhelming the system during PyInstaller compilation (CPU-intensive operation).
+**Critical Points:**
 
-### Adding Games Flow
+- `deleteLater()` must be connected to `thread.finished`, NOT `worker.finished`
+- This ensures the QThread has fully stopped before Qt cleans up objects
+- Python references should not be cleared until after Qt cleanup completes
+- Use `QTimer.singleShot()` to delay operations that depend on thread completion
 
-```flow
-User clicks "Add Selected"
-         │
-         ▼
-BrowserTab._add_selected_games()
-         │
-         ├─► Check if already in queue
-         ├─► Add to CompilationQueueWidget
-         ├─► Create GameAdditionWorker
-         ├─► Connect worker signals
-         │    ├─► progress → queue_widget.update_progress()
-         │    ├─► finished → queue_widget.mark_complete()
-         │    └─► error → queue_widget.mark_complete(success=False)
-         ├─► Register worker with queue widget
-         └─► thread_pool.start(worker)
-              │
-              ▼
-         Worker Thread (Background)
-              │
-              ├─► Get game info
-              ├─► Validate not in library
-              ├─► Get executable config
-              ├─► Generate dummy via PyInstaller (BLOCKING)
-              │     └─► Can take 30-60 seconds
-              ├─► Add to database
-              └─► Emit finished signal
-                    │
-                    ▼
-               UI Thread Updates (via signals)
-                    ├─► Queue item shows progress
-                    ├─► Progress bar updates
-                    └─► Status changes: Queued → Compiling → Complete
+### Library Tab Thread Handling
+
+```python
+class LibraryTab(QWidget):
+    def __init__(self, ...):
+        self.detection_worker = None  # Current worker reference
+        self.detection_thread = None  # Current thread reference
+    
+    def _start_game(self, game_id):
+        # Check if detection already running
+        if self.detection_thread is not None and self.detection_thread.isRunning():
+            return  # Block concurrent detection
+        
+        # Create worker and thread
+        worker, thread = self.game_manager.process_mgr.start_game_with_ui_updates(...)
+        
+        # Store references (but don't clear them in _on_detection_finished!)
+        self.detection_worker = worker
+        self.detection_thread = thread
+        
+        # Connect signals
+        worker.progress.connect(self._on_detection_progress)
+        worker.finished.connect(lambda s, e, m: self._on_detection_finished(...))
+        
+        thread.start()
+    
+    def _on_detection_finished(self, ...):
+        # DON'T clear references here - let Qt's deleteLater handle cleanup
+        # References cleared via QTimer.singleShot after cleanup completes
+        def show_result():
+            self.detection_worker = None
+            self.detection_thread = None
+            # Show result dialog...
+        QTimer.singleShot(200, show_result)
+    
+    def cleanup(self):
+        # Called on app close - must wait for thread to actually stop
+        if self.detection_worker is not None:
+            self.detection_worker.stop()
+        if self.detection_thread is not None and self.detection_thread.isRunning():
+            self.detection_thread.quit()
+            self.detection_thread.wait(2000)  # Block until thread stops
 ```
 
-### Benefits of Threading
+### Benefits of This Architecture
 
-- **UI Responsiveness:** Main thread never blocked during PyInstaller compilation
-- **Real-time Feedback:** Users see progress for all queued compilations
-- **Cancellation:** Users can cancel ongoing compilations
-- **Scalability:** Can queue multiple games, process in background
-- **User Experience:** Can continue browsing/using app while compilations run
+- **UI Responsiveness:** Main thread never blocked during 15-second detection wait
+- **Safe Cleanup:** Thread/worker objects properly cleaned up by Qt's event loop
+- **No Crashes:** Prevents "QThread: Destroyed while thread is still running" errors
+- **Cancellation:** Users can cancel ongoing detection or close the app safely

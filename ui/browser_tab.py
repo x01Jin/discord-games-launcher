@@ -196,6 +196,16 @@ class BrowserTab(QWidget):
             exe_text = "\n".join(exe_names)
             if len(win_exes) > 2:
                 exe_text += f"\n+{len(win_exes) - 2} more"
+            exe_text += f"\n({len(win_exes)} variants)"
+            item.setText(1, exe_text)
+
+        # Executables (column 1)
+        win_exes = [exe for exe in game.executables if exe.get("os") == "win32"]
+        if win_exes:
+            exe_names = [exe.get("name", "Unknown") for exe in win_exes[:2]]
+            exe_text = "\n".join(exe_names)
+            if len(win_exes) > 2:
+                exe_text += f"\n+{len(win_exes) - 2} more"
             item.setText(1, exe_text)
         else:
             item.setText(1, "No Windows executable")

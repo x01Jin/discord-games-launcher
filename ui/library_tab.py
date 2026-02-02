@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QAbstractItemView,
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont
 
 from launcher.game_manager import GameManager
@@ -38,6 +38,8 @@ class LibraryTab(QWidget):
     def __init__(self, game_manager: GameManager):
         super().__init__()
         self.game_manager = game_manager
+        self.detection_worker = None
+        self.detection_thread = None
         self._setup_ui()
         self.refresh_library()
 
@@ -177,35 +179,41 @@ class LibraryTab(QWidget):
         # Left side: Name and process
         left_layout = QVBoxLayout()
         left_layout.setSpacing(2)
-        
+
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {TEXT_COLOR};")
+        name_label.setStyleSheet(
+            f"font-size: 12px; font-weight: bold; color: {TEXT_COLOR};"
+        )
         name_font = QFont("Segoe UI", 10)
         name_font.setBold(True)
         name_label.setFont(name_font)
-        
+
         process_label = QLabel(process_name)
         process_label.setStyleSheet("font-size: 9px; color: #666;")
-        
+
         left_layout.addWidget(name_label)
         left_layout.addWidget(process_label)
         left_layout.addStretch()
-        
+
         layout.addLayout(left_layout, 70)
 
         # Right side: Status
         status_text = "Running" if is_running else "Stopped"
         status_color = SUCCESS_COLOR if is_running else "#888"
-        
+
         status_label = QLabel(status_text)
-        status_label.setStyleSheet(f"font-size: 10px; color: {status_color}; font-weight: bold;")
-        status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        status_label.setStyleSheet(
+            f"font-size: 10px; color: {status_color}; font-weight: bold;"
+        )
+        status_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         layout.addWidget(status_label, 30)
 
         # Add item to list and set widget
         self.library_list.addItem(item)
         self.library_list.setItemWidget(item, widget)
-        
+
         return item
 
     def _on_item_double_clicked(self, item: QListWidgetItem):
@@ -276,16 +284,93 @@ class LibraryTab(QWidget):
         return None
 
     def _start_game(self, game_id: int):
-        """Start a game with GUI window."""
+        """Start a game with detection verification via worker thread."""
+        # Check if detection is already in progress
+        if self.detection_thread is not None and self.detection_thread.isRunning():
+            QMessageBox.warning(
+                self,
+                "Detection in Progress",
+                "Another game detection is in progress. Please wait for it to complete.",
+            )
+            return
+
+        # Clear any stale references from previous completed detections
+        self.detection_worker = None
+        self.detection_thread = None
+
+        # Initiate game start
         success, message = self.game_manager.start_game(game_id)
 
-        if success:
-            self.refresh_library()
-        else:
+        if not success:
             QMessageBox.warning(self, "Failed to Start", message)
+            return
+
+        # Get library game info for executables
+        lib_game = self.game_manager.db.get_library_game(game_id)
+        if not lib_game or not lib_game.executables:
+            QMessageBox.warning(
+                self,
+                "No Executables",
+                "No executable candidates found. Try removing and re-adding the game.",
+            )
+            return
+
+        # Get game name
+        game = self.game_manager.get_game(game_id)
+        game_name = game.name if game else f"Game {game_id}"
+
+        # Update UI to show detection in progress
+        self.status_label.setText(message)
+
+        # Start detection worker
+        worker, thread = self.game_manager.process_mgr.start_game_with_ui_updates(
+            game_id, game_name, lib_game.executables
+        )
+
+        # Connect signals
+        worker.progress.connect(self._on_detection_progress)
+        worker.finished.connect(
+            lambda s, e, m: self._on_detection_finished(game_id, s, e, m)
+        )
+
+        # Store references
+        self.detection_worker = worker
+        self.detection_thread = thread
+
+        # Start thread
+        thread.start()
+
+    def _on_detection_progress(self, message: str):
+        """Handle detection progress updates."""
+        self.status_label.setText(message)
+
+    def _on_detection_finished(
+        self, game_id: int, success: bool, exe: dict, message: str
+    ):
+        """Handle detection completion."""
+        # DO NOT clear references here - they will be auto-deleted via deleteLater
+        # connected to thread.finished signal. Clearing here causes crash because
+        # the Python GC may destroy the thread while Qt is still cleaning up.
+        # The references will be cleared when starting a new detection or in cleanup()
+
+        # Refresh library to update running status
+        self.refresh_library()
+
+        # Clear references after event loop processes cleanup
+        def cleanup_refs():
+            # Now it's safe to clear the references after Qt has processed deleteLater
+            self.detection_worker = None
+            self.detection_thread = None
+
+        # Use longer delay to ensure thread cleanup is complete
+        QTimer.singleShot(200, cleanup_refs)
 
     def _stop_game(self, game_id: int):
         """Stop a game."""
+        # Stop any ongoing detection
+        if self.detection_worker is not None:
+            self.detection_worker.stop()
+
         success, message = self.game_manager.stop_game(game_id)
 
         if success:
@@ -330,3 +415,24 @@ class LibraryTab(QWidget):
     def update_running_status(self):
         """Update running status of all items (called periodically)."""
         self.refresh_library()
+
+    def cleanup(self):
+        """Cleanup resources when tab is destroyed."""
+        # Stop any ongoing detection first
+        if self.detection_worker is not None:
+            self.detection_worker.stop()
+
+        if self.detection_thread is not None:
+            if self.detection_thread.isRunning():
+                # Request thread to quit gracefully
+                self.detection_thread.quit()
+                # Wait up to 2 seconds for thread to finish
+                # This is blocking but necessary on app close
+                if not self.detection_thread.wait(2000):
+                    # Force terminate if still running
+                    self.detection_thread.terminate()
+                    self.detection_thread.wait(500)
+
+        # Only clear references after thread has stopped
+        self.detection_worker = None
+        self.detection_thread = None

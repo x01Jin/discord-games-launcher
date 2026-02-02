@@ -28,6 +28,7 @@ from platformdirs import user_data_dir  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 from PyQt6.QtGui import QFont, QFontDatabase  # noqa: E402
 
+from launcher.logger import GameLauncherLogger  # noqa: E402
 from launcher.database import Database  # noqa: E402
 from launcher.api import DiscordAPIClient  # noqa: E402
 from launcher.dummy_generator import DummyGenerator  # noqa: E402
@@ -75,19 +76,24 @@ def initialize_components():
     print(f"Database: {db_path}")
     print(f"Games directory: {games_dir}")
 
-    # Initialize components
-    database = Database(db_path)
+    # Initialize logger first
+    logger = GameLauncherLogger()
+    logger.app_start()
+
+    # Initialize components with logger
+    database = Database(db_path, logger=logger)
     api_client = DiscordAPIClient(database, cache_dir)
     dummy_generator = DummyGenerator(games_dir)
-    process_manager = ProcessManager(database)
+    process_manager = ProcessManager(database, logger=logger)
     game_manager = GameManager(
         database=database,
         api_client=api_client,
         dummy_generator=dummy_generator,
         process_manager=process_manager,
+        logger=logger,
     )
 
-    return game_manager
+    return game_manager, logger
 
 
 def main():
@@ -95,13 +101,16 @@ def main():
     print("Discord Games Launcher v1.0.0")
     print("=" * 40)
 
+    game_manager = None
+    logger = None
+
     try:
         # Initialize Qt application
         app = setup_application()
 
         # Initialize backend components
         print("Initializing components...")
-        game_manager = initialize_components()
+        game_manager, logger = initialize_components()
 
         # Create and show main window
         print("Loading UI...")
@@ -119,7 +128,19 @@ def main():
         import traceback
 
         traceback.print_exc()
+
+        if logger:
+            logger.critical(f"Fatal error: {e}")
+
         sys.exit(1)
+    finally:
+        # Cleanup all processes before exit
+        if game_manager:
+            game_manager.process_mgr.force_cleanup_all()
+
+        # Log application exit
+        if logger:
+            logger.app_exit()
 
 
 if __name__ == "__main__":
