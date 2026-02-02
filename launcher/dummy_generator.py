@@ -96,7 +96,7 @@ class DummyGenerator:
 
         Args:
             game_id: Discord game ID (used for folder organization)
-            process_name: Target process name (e.g., "overwatch.exe")
+            process_name: Target process name (e.g., "minecraft.exe")
 
         Returns:
             Tuple of (path_to_exe, actual_process_name)

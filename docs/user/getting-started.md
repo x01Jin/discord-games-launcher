@@ -41,7 +41,7 @@ This is your personal game collection:
 ### Step 1: Search for a Game
 
 1. Click on the **Browse Games** tab
-2. Type a game name in the search box (e.g., "Overwatch", "Minecraft", "Valorant")
+2. Type a game name in the search box (e.g., "Minecraft", "Cyberpunk 2077", "Valorant")
 3. Results appear instantly as you type
 
 ### Step 2: Add to Library
@@ -84,7 +84,7 @@ You can run multiple games simultaneously:
 
 ### Finding Games
 
-- Use partial names: "over" finds "Overwatch", "Overcooked", etc.
+- Use partial names: "mine" finds "Minecraft", "Minecraft Dungeons", etc.
 - Try aliases: Searching "wow" finds "World of Warcraft"
 - Browse all: Clear the search box to see all cached games
 

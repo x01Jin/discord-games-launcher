@@ -162,7 +162,7 @@ def get_best_win32_executables(
 ```python
 {
     "is_launcher": bool,           # CRITICAL: Discord ignores launchers!
-    "name": str,                   # Process name like "overwatch.exe"
+    "name": str,                   # Process name like "minecraft.exe"
     "os": str,                     # "win32", "darwin", or "linux"
     "arguments": List[str]         # Optional
 }
@@ -218,8 +218,8 @@ DiscordAPIClient.normalize_process_name("_retail_/wow-64.exe")
 DiscordAPIClient.normalize_process_name("devil may cry 5/devilmaycry5.exe")
 # Returns: "devilmaycry5.exe"
 
-DiscordAPIClient.normalize_process_name("overwatch.exe")
-# Returns: "overwatch.exe"
+DiscordAPIClient.normalize_process_name("minecraft.exe")
+# Returns: "minecraft.exe"
 ```
 
 **Note:** The full path is preserved in the filesystem for proper Discord detection (e.g., creating `_retail_/wow-64.exe`), but the normalized name is used for Discord's process lookup.
@@ -269,12 +269,12 @@ Discord API returns game objects with this structure:
 ```json
 {
   "id": "356869127241072640",
-  "name": "Overwatch 2",
-  "aliases": ["Overwatch"],
+  "name": "Minecraft",
+  "aliases": ["Minecraft"],
   "executables": [
     {
       "is_launcher": false,
-      "name": "overwatch.exe",
+      "name": "minecraft.exe",
       "os": "win32"
     }
   ],

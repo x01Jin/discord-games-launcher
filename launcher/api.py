@@ -138,7 +138,7 @@ class DiscordAPIClient:
 
         Discord's executables array contains objects with:
         - is_launcher: bool - CRITICAL: Discord ignores launchers!
-        - name: str (process name like "overwatch.exe")
+        - name: str (process name like "minecraft.exe")
         - os: str ("win32", "darwin", or "linux")
         - arguments: List[str] (optional, sometimes contains path)
 

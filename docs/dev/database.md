@@ -328,8 +328,8 @@ Searches games by name using SQL LIKE.
 **Example:**
 
 ```python
-games = db.search_games("overwatch", limit=10)
-# Returns games where name LIKE '%overwatch%'
+games = db.search_games("minecraft", limit=10)
+# Returns games where name LIKE '%minecraft%'
 ```
 
 ### Library Operations

@@ -79,7 +79,7 @@ Show "Playing [Game]" in Discord with dummy processes that display GUI windows.
 
 Discord detects running processes by their executable name. The launcher:
 
-- Creates processes with exact names Discord expects (e.g., `overwatch.exe`)
+- Creates processes with exact names Discord expects (e.g., `minecraft.exe`)
 - Handles path prefixes (e.g., `_retail_/wow-64.exe` → `wow-64.exe`)
 - GUI window keeps process active and alive
 - Discord scans every ~15 seconds for process changes

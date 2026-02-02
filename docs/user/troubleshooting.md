@@ -38,7 +38,7 @@
 
 6. **Try a different game**
    - Some games have better detection than others
-   - Popular games (Overwatch, VALORANT, League of Legends) usually work well
+   - Popular games (Minecraft, VALORANT, League of Legends) usually work well
    - Test with a known working game first
 
 **Understanding the Detection Process:**

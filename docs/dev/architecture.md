@@ -267,12 +267,12 @@ User clicks "Start"
 ┌─────────────────────┐
 │   Dummy Process     │
 │ (DummyGame Window)  │
-│ Shows: "Overwatch"  │
+│ Shows: "Minecraft"  │
 └─────────────────────┘
          │
          ▼
 Discord detects process name
-Shows "Playing Overwatch"
+Shows "Playing Minecraft"
 ```
 
 ## Directory Structure

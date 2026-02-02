@@ -36,7 +36,7 @@ Discord automatically detects running games by scanning process names. This laun
 
 ### Discord Detection
 
-Discord scans running processes every ~15 seconds. When it sees a matching executable name (e.g., `overwatch.exe`), it displays "Playing Overwatch 2" using the game ID and assets from its database.
+Discord scans running processes every ~15 seconds. When it sees a matching executable name (e.g., `minecraft.exe`), it displays "Playing minecraft" using the game ID and assets from its database.
 
 **Key Improvements:**
 
@@ -79,7 +79,7 @@ When you add a game to your library, the launcher:
 1. Finds the Windows executable name from Discord's database
 2. Generates a Python script with tkinter GUI showing "{Game} is running"
 3. Compiles it with PyInstaller to create the executable
-4. Names it exactly as Discord expects (e.g., `overwatch.exe`)
+4. Names it exactly as Discord expects (e.g., `game.exe`)
 5. Stores it in your user data directory
 
 ### Process Management
@@ -123,15 +123,6 @@ When you remove a game from library:
 
 For detailed documentation, check the **[Documentation Index](docs/index.md)**
 
-Key documents:
-
-- [Installation Guide](docs/user/installation.md)
-- [Getting Started](docs/user/getting-started.md)
-- [Features](docs/user/features.md)
-- [Troubleshooting](docs/user/troubleshooting.md)
-- [Architecture](docs/dev/architecture.md)
-- [UI Documentation](docs/dev/ui.md)
-
 ## Technical Details
 
 ### Built With
@@ -142,21 +133,6 @@ Key documents:
 - **psutil** - Process management and termination
 - **tkinter** - GUI for dummy executables
 - **SQLite** - Local database for caching and library
-
-### Architecture
-
-```structure
-UI (PyQt6)
-├── Browser Tab (QTreeWidget) - Browse/search games
-└── Library Tab (QListWidget) - Manage library
-
-Backend
-├── Game Manager - High-level coordination
-├── API Client - Discord API communication
-├── Database - SQLite storage
-├── Dummy Generator - PyInstaller + tkinter GUI
-└── Process Manager - psutil with recursive termination
-```
 
 ### Process Termination
 
@@ -183,12 +159,8 @@ parent.terminate()
 
 ## Disclaimer
 
-This tool is for legitimate use cases like testing and content creation. Don't use it to:
+This tool is for educational purpose only. Don't use it to:
 
 - Farm Discord quests/rewards (violates Discord ToS)
 - Impersonate games for malicious purposes
 - Circumvent game security/anti-cheat systems
-
-## License
-
-MIT - Use responsibly.
