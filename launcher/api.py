@@ -140,11 +140,23 @@ class DiscordAPIClient:
         - is_launcher: bool
         - name: str (process name like "overwatch.exe")
         - os: str ("win32", "darwin", or "linux")
-        - arguments: List[str] (optional)
+        - arguments: List[str] (optional, sometimes contains path)
         """
         for exe in executables:
             if exe.get("os") == "win32":
-                return exe
+                # Try to get name from various possible locations
+                name = exe.get("name")
+                if not name:
+                    # Some executables have arguments array with path
+                    args = exe.get("arguments", [])
+                    if args and len(args) > 0:
+                        # Extract filename from first argument path
+                        path = args[0]
+                        name = Path(path).name
+                if name:
+                    # Normalize and set the name field
+                    exe["name"] = name
+                    return exe
         return None
 
     @staticmethod

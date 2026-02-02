@@ -92,7 +92,7 @@ class GameManager:
         normalized_name = self.api.normalize_process_name(process_name)
 
         try:
-            # Generate dummy executable
+            # Generate dummy executable (GUI mode for better Discord detection)
             exe_path, actual_name = self.dummy_gen.generate_dummy(
                 game_id=game_id, game_name=game.name, process_name=normalized_name
             )
@@ -185,7 +185,8 @@ class GameManager:
             return False, "Executable not found, try removing and re-adding the game"
 
         try:
-            pid = self.process_mgr.start_process(game_id, exe_path)
+            # Start as GUI process for better Discord detection
+            pid = self.process_mgr.start_process(game_id, exe_path, is_gui=True)
             return True, f"Started game (PID: {pid})"
         except Exception as e:
             return False, f"Failed to start game: {e}"

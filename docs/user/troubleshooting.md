@@ -90,6 +90,9 @@
    - First-time generation takes 10-30 seconds
    - Button shows "Adding..." during generation
    - Don't close launcher during this time
+   - Check logs if it takes longer than expected:
+     - Location: `%LOCALAPPDATA%\discord-games-launcher\games\logs\`
+     - Files: `pyinstaller_YYYYMMDD_HHMMSS.log`
 
 3. **Check disk space**
    - Need at least 50 MB free
@@ -322,7 +325,8 @@ When reporting issues, include:
 3. **Python version** - `python --version`
 4. **OS version** - Windows 10/11, build number
 5. **Discord version** - Desktop app version
-6. **Logs** - Any console output
+6. **Logs** - PyInstaller compilation logs from:
+   - `%LOCALAPPDATA%\discord-games-launcher\games\logs\pyinstaller_*.log`
 
 ### Debug Mode
 
@@ -330,6 +334,18 @@ Run with verbose output:
 
 ```cmd
 python main.py 2>&1 | tee launcher.log
+```
+
+### View Compilation Logs
+
+Check PyInstaller logs for compilation issues:
+
+```cmd
+# Navigate to logs directory
+cd %LOCALAPPDATA%\discord-games-launcher\games\logs
+
+# View most recent log
+type pyinstaller_*.log | more
 ```
 
 ### Contact Support

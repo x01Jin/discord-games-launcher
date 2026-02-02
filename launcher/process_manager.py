@@ -5,7 +5,9 @@ Handles process lifecycle, cleanup, and status checking.
 """
 
 import subprocess
+import sys
 import psutil
+import time
 from pathlib import Path
 from typing import Dict, Optional, List
 from launcher.database import Database
@@ -29,12 +31,13 @@ class ProcessManager:
         """Refresh local PID cache from database."""
         self._local_pid_cache = self.db.get_running_processes()
 
-    def start_process(self, game_id: int, exe_path: Path) -> int:
+    def start_process(self, game_id: int, exe_path: Path, is_gui: bool = True) -> int:
         """Start a dummy process for a game.
 
         Args:
             game_id: The Discord game ID
             exe_path: Path to the dummy executable
+            is_gui: Whether this is a GUI process (needs window management)
 
         Returns:
             The process PID
@@ -45,20 +48,41 @@ class ProcessManager:
         if not exe_path.exists():
             raise ProcessError(f"Executable not found: {exe_path}")
 
-        # Check if already running
+        # Check if already running with system verification
         if self.is_running(game_id):
-            return self._local_pid_cache[game_id]
+            pid = self._local_pid_cache[game_id]
+            # Verify the process is actually our game
+            if self._verify_game_process(game_id, pid):
+                return pid
+            # Stale entry, clean it up
+            self.db.set_process_stopped(game_id)
+            del self._local_pid_cache[game_id]
 
         try:
-            # Start process without console window
-            process = subprocess.Popen(
-                [str(exe_path)],
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            # Start process
+            if is_gui:
+                # For GUI processes, allow window to be visible
+                # Use CREATE_NEW_CONSOLE on Windows for proper GUI behavior
+                process = subprocess.Popen(
+                    [str(exe_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0,
+                )
+            else:
+                # Background process (original behavior)
+                process = subprocess.Popen(
+                    [str(exe_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
             pid = process.pid
+
+            # Verify process started
+            time.sleep(0.5)  # Give GUI more time to initialize
+            if not self._pid_exists(pid):
+                raise ProcessError("Process failed to start")
 
             # Store in database and cache
             self.db.set_process_running(game_id, pid)
@@ -96,22 +120,44 @@ class ProcessManager:
             return False
 
     def _kill_process(self, pid: int) -> bool:
-        """Kill a process by PID.
+        """Kill a process by PID and all its children.
 
         Returns:
             True if killed successfully or already dead
         """
         try:
-            process = psutil.Process(pid)
-            process.terminate()
+            parent = psutil.Process(pid)
 
-            # Wait for process to terminate
+            # Get all child processes recursively
+            children = parent.children(recursive=True)
+
+            # Terminate all children first
+            for child in children:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    pass
+
+            # Wait for children to terminate
+            gone, alive = psutil.wait_procs(children, timeout=3)
+
+            # Force kill any remaining children
+            for child in alive:
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+
+            # Now terminate the parent
+            parent.terminate()
+
+            # Wait for parent to terminate
             try:
-                process.wait(timeout=3)
+                parent.wait(timeout=3)
             except psutil.TimeoutExpired:
                 # Force kill if graceful termination fails
-                process.kill()
-                process.wait(timeout=1)
+                parent.kill()
+                parent.wait(timeout=1)
 
             return True
 
@@ -203,6 +249,26 @@ class ProcessManager:
             }
         except psutil.NoSuchProcess:
             return None
+
+    def _verify_game_process(self, game_id: int, pid: int) -> bool:
+        """Verify that a running process matches the expected game.
+
+        Args:
+            game_id: The Discord game ID
+            pid: Process ID to verify
+
+        Returns:
+            True if process is valid, False otherwise
+        """
+        try:
+            process = psutil.Process(pid)
+            # Get the executable path
+            exe_path = process.exe()
+            # Check if it's in the game's directory
+            expected_dir = str(game_id)
+            return expected_dir in exe_path
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
 
     def force_cleanup_all(self) -> None:
         """Force cleanup of all process records (use on app exit)."""
