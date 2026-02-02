@@ -1,28 +1,22 @@
 # Discord Games Launcher
 
-A Windows application that creates dummy executables with GUI windows to trigger Discord's game detection. Browse Discord's supported games database, add them to your library, and launch dummy processes that display "{Game Name} is running" in a small window, making Discord show your "Playing" status.
+A Windows application that creates dummy executables with GUI windows to trigger Discord's game detection. Browse Discord's supported games database, add them to your library, and launch dummy processes, making Discord show your "Playing" status.
 
 ## What It Does
 
 Discord automatically detects running games by scanning process names. This launcher:
 
-1. Fetches Discord's official supported games database (3,000+ games)
-2. Lets you browse and search all supported games in a clean tree view
+1. Fetches Discord's official supported games database (20,000+ games)
+2. Lets you browse and search all supported games
 3. Generates dummy executables with matching process names and GUI windows
 4. Runs them in background windows so Discord shows your status
-
-**Use Cases:**
-
-- Streamers maintaining consistent "Playing" status during setup/breaks
-- Testing Discord integrations without launching full games
-- Managing your Discord activity presence
 
 ## Features
 
 ### Browse Games
 
 - **Tree View Display:** Organized view with columns for Game Name, Executables, and Status
-- **Real-time Search:** Filter 3000+ games instantly as you type
+- **Real-time Search:** Filter 20000+ games instantly as you type
 - **Multi-select:** Add multiple games to your library at once
 - **Visual Status:** See which games are already in your library
 
@@ -31,19 +25,11 @@ Discord automatically detects running games by scanning process names. This laun
 - **Clean List View:** See all your games with rich formatting and status indicators
 - **One-click Control:** Double-click to start/stop games
 - **Context Menus:** Right-click for quick actions (Start/Stop/Remove)
-- **Visual Feedback:** Green "Running" or gray "Stopped" indicators
 - **Proper Cleanup:** Removing a game stops its process and deletes all files completely
 
 ### Discord Detection
 
 Discord scans running processes every ~15 seconds. When it sees a matching executable name (e.g., `minecraft.exe`), it displays "Playing minecraft" using the game ID and assets from its database.
-
-**Key Improvements:**
-
-- **GUI Windows:** Each dummy displays "{Game Name} is running" in a small window
-- **Process Names:** Exact matching to Discord's database (handles paths like `_retail_/wow.exe`)
-- **Proper Termination:** Stopping a game kills all child processes recursively
-- **Complete Cleanup:** Removing a game stops processes and removes all files/folders
 
 ## Download
 
@@ -67,30 +53,8 @@ For detailed setup, see the [Download & Setup Guide](docs/user/installation.md)
 
 - **OS:** Windows 10/11 (64-bit)
 - **Discord:** Desktop app
-- **Storage:** ~50 MB for launcher + ~2 MB per game
+- **Storage:** 500 MB free storage
 - **Network:** Required for initial game database sync
-
-## How It Works
-
-### Dummy Executables
-
-When you add a game to your library, the launcher:
-
-1. Finds the Windows executable name from Discord's database
-2. Generates a Python script with tkinter GUI showing "{Game} is running"
-3. Compiles it with PyInstaller to create the executable
-4. Names it exactly as Discord expects (e.g., `game.exe`)
-5. Stores it in your user data directory
-
-### Process Management
-
-When you start a game:
-
-1. Launcher runs the dummy executable
-2. A small window opens showing game name and "is running" status
-3. Process name matches Discord's detection list
-4. Discord detects it within ~15 seconds
-5. Your status updates to "Playing [Game Name]"
 
 When you stop a game:
 
@@ -131,31 +95,7 @@ For detailed documentation, check the **[Documentation Index](docs/index.md)**
 - **httpx** - Async HTTP client for Discord API
 - **PyInstaller** - Compiles dummy scripts to executables
 - **psutil** - Process management and termination
-- **tkinter** - GUI for dummy executables
 - **SQLite** - Local database for caching and library
-
-### Process Termination
-
-Proper cleanup uses recursive process termination:
-
-```python
-# 1. Find all child processes
-children = parent.children(recursive=True)
-
-# 2. Terminate children gracefully
-for child in children:
-    child.terminate()
-
-# 3. Wait for termination
-psutil.wait_procs(children, timeout=3)
-
-# 4. Force kill if needed
-for child in alive:
-    child.kill()
-
-# 5. Terminate parent
-parent.terminate()
-```
 
 ## Disclaimer
 
