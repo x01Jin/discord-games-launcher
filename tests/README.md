@@ -4,19 +4,22 @@ This directory contains comprehensive tests for the Discord Games Launcher.
 
 ## Running Tests
 
-### Run all tests:
+### Run all tests
+
 ```bash
 pytest tests/ -v
 ```
 
-### Run specific test file:
+### Run specific test file
+
 ```bash
 pytest tests/test_database.py -v
 pytest tests/test_api.py -v
 pytest tests/test_dummy_generator.py -v
 ```
 
-### Run tests directly with Python:
+### Run tests directly with Python
+
 ```bash
 python tests/test_database.py
 python tests/test_api.py
@@ -37,6 +40,7 @@ python tests/test_dummy_generator.py
 ## Test Coverage
 
 ### Database Tests
+
 - Database initialization and schema creation
 - Game caching (save, retrieve, search)
 - Library operations (add, remove, query)
@@ -44,6 +48,7 @@ python tests/test_dummy_generator.py
 - Cache sync tracking
 
 ### API Tests
+
 - API client initialization
 - Windows executable filtering
 - Process name normalization
@@ -52,6 +57,7 @@ python tests/test_dummy_generator.py
 - Error handling
 
 ### Dummy Generator Tests
+
 - Generator initialization
 - Script template creation
 - Path calculations

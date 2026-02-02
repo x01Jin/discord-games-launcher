@@ -8,7 +8,7 @@ Discord Games Launcher follows a layered architecture with clear separation of c
 UI Layer (PyQt6)
 ├── MainWindow
 ├── BrowserTab (QTreeWidget)
-└── LibraryTab (QListWidget with custom widgets)
+└── LibraryTab (QListWidget)
        │
        ▼
 Game Manager (Coordinator)
@@ -20,7 +20,7 @@ API Client    Database    Process Manager
      │           │           │
      ▼           ▼           ▼
 HTTP (httpx)  Local Cache Dummy Generator
-Discord API   User Library (PyInstaller + background process)
+Discord API   User Library (Copy-based template)
 ```
 
 ## Components
@@ -29,30 +29,31 @@ Discord API   User Library (PyInstaller + background process)
 
 **Location:** `ui/`
 
-The user interface is built with PyQt6 and features a modern dark theme with proper list widgets for better organization.
+The user interface is built with PyQt6 and features a modern dark theme.
 
 **Files:**
 
 - `main_window.py` - Main application window with tabbed interface
 - `browser_tab.py` - Game browser using QTreeWidget with columns (Name, Executables, Status)
-- `library_tab.py` - Library management using QListWidget with PyQt6 widget-based items
+- `library_tab.py` - Library management using QListWidget with status indicators
 
 **Key Responsibilities:**
 
 - Display game database in tree view with sorting/filtering
-- Display user library in clean list view with status indicators using QLabel widgets
+- Display user library with status indicators
 - Handle user interactions (search, add, start, stop, remove)
 - Apply consistent dark theme styling
 - Support context menus for quick actions
 - Periodic status updates (every 5 seconds)
 
-**UI Improvements:**
+**UI Features:**
 
 - **Browser Tab:** QTreeWidget with 3 columns (Game name + aliases, Executables, Status)
-- **Library Tab:** QListWidget with PyQt6 custom widgets showing game name, process name, and running status
+- **Library Tab:** QListWidget showing game name, process name, and running status
 - **Context Menus:** Right-click for quick actions (Start/Stop/Remove)
 - **Double-click:** Toggle start/stop in library
 - **Multi-select:** Add multiple games at once from browser
+- **Instant Addition:** Games are added instantly (no compilation queue)
 
 ### 2. Game Manager
 
@@ -64,9 +65,9 @@ Central coordinator providing high-level interface for all game operations.
 
 - `sync_games()` - Sync with Discord API
 - `search_games()` - Search cached games
-- `add_to_library()` - Add game and generate dummy background process
-- `remove_from_library()` - Remove game, stop process, and cleanup all files
-- `start_game()` - Launch dummy background process
+- `add_to_library()` - Add game by copying dummy template (instant)
+- `remove_from_library()` - Remove game, stop process, cleanup files
+- `start_game()` - Launch dummy process with game name argument
 - `stop_game()` - Terminate process and all children
 - `stop_all_games()` - Stop all running processes
 
@@ -74,16 +75,15 @@ Central coordinator providing high-level interface for all game operations.
 
 **Location:** `launcher/api.py`
 
-Handles communication with Discord's applications API with improved executable field handling.
+Handles communication with Discord's applications API.
 
 **Key Features:**
 
 - Fetches 3000+ games from `discord.com/api/v10/applications/detectable`
 - Caches game data locally (7-day refresh)
 - Downloads game icons from Discord CDN
-- Filters Windows executables with flexible field detection (handles missing 'name' field)
+- Filters Windows executables
 - Normalizes process names (handles paths like `_retail_/wow.exe`)
-- Extracts executable names from `arguments` array when `name` field is missing
 
 ### 4. Database
 
@@ -102,47 +102,62 @@ SQLite database for local caching and user data persistence.
 
 **Location:** `launcher/dummy_generator.py`
 
-Generates executable files using PyInstaller that can run as either GUI or background processes.
+Manages dummy executables by copying a pre-built template. This approach is inspired by the reference project's simple and efficient design.
 
-**Process:**
+**How It Works:**
 
-1. Creates temporary Python script from template (GUI or background mode)
-2. Compiles with PyInstaller to single executable
-3. Names executable to match game's process name
-4. Generated executables run in background or with visible GUI window
-5. Process stays alive with minimal CPU usage (sleeps 60 seconds at a time)
-6. GUI mode includes PyQt6 bundle for visible window
+1. A pre-built `DummyGame.exe` template exists in `templates/dist/`
+2. When a game is added, the template is **copied** and **renamed** to match the target process name
+3. When launched, the game name is passed as a **command-line argument**
 
 **Key Features:**
 
-- GUI mode for better Discord game detection
-- Visible window with status panel (runtime, Discord status, troubleshooting tips)
-- System tray integration for minimization
-- Minimal CPU usage with sleep loop
-- Proper cleanup of all build artifacts and directories
-- PID file tracking for process management
-- Fallback to background process if PyQt6 unavailable
+- **Instant game addition** - Just a file copy, no compilation needed
+- **Single template** - One DummyGame.exe serves all games
+- **Simple architecture** - No PyInstaller at runtime
+- **Flexible naming** - Handles subdirectory paths like `_retail_/wow.exe`
 
-**Template Locations:**
+**Template Location:**
 
-- `templates/gui_dummy_template.py` - GUI window with status panel (default)
-- `templates/dummy_template.py` - Silent background process (fallback)
+- `templates/dummy_game.py` - Source code for the dummy game window
+- `templates/dist/DummyGame.exe` - Pre-built template (built once with PyInstaller)
+- `templates/build_dummy.py` - Build script to create the template
+
+**Building the Template:**
+
+```bash
+python templates/build_dummy.py
+```
+
+This creates `templates/dist/DummyGame.exe` which is then copied for each game.
 
 ### 6. Process Manager
 
 **Location:** `launcher/process_manager.py`
 
-Manages lifecycle of dummy game processes with proper child process handling and duplicate prevention.
+Manages lifecycle of dummy game processes.
 
 **Key Features:**
 
-- Starts processes as background tasks (no console window needed)
+- Starts processes with game name as argument
 - Tracks PIDs in database with verification
 - **Duplicate prevention:** Verifies existing processes before starting new ones
 - **Process verification:** Checks executable path to ensure correct game association
 - **Recursive termination:** Kills child processes before parent
 - Stale process detection and cleanup
-- Graceful termination with fallback to force kill
+
+**Process Launch:**
+
+```python
+# Start process with game name as argument
+process = subprocess.Popen(
+    [str(exe_path), game_name],  # Pass game name as argument
+    cwd=str(working_dir),
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    creationflags=subprocess.CREATE_NEW_CONSOLE,
+)
+```
 
 **Process Termination:**
 
@@ -165,19 +180,6 @@ for child in alive:
 parent.terminate()
 ```
 
-**Duplicate Prevention:**
-
-```python
-# Before starting, verify existing process
-if self.is_running(game_id):
-    pid = self._local_pid_cache[game_id]
-    if self._verify_game_process(game_id, pid):
-        return pid  # Return existing valid process
-    # Clean up stale entry
-    self.db.set_process_stopped(game_id)
-    del self._local_pid_cache[game_id]
-```
-
 ## Data Flow
 
 ### Adding a Game to Library
@@ -197,38 +199,18 @@ User clicks "Add to Library"
 │Database│ │API Client│
 │get_game│ │get_win32 │
 │        │ │executable│
-│        │ │(handles   │
-│        │ │missing    │
-│        │ │name field)│
 └────────┘ └──────────┘
          │
          ▼
 ┌─────────────────────┐
-│  DummyGenerator     │
-│  generate_dummy()   │
-│                     │
-│ - Creates temp      │
-│   Python script     │
-│ - Runs PyInstaller  │
-│ - Logs all output   │
-│   to file in        │
-│   logs/ directory   │
+│   DummyGenerator    │
+│ensure_dummy_for_game│
+│   (copies template) │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
-│   PyInstaller       │
-│ (creates .exe with  │
-│  background process)│
-│                     │
-│ Output logged to:   │
-│ games/logs/         │
-│ pyinstaller_*.log   │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│     Database        │
+│      Database       │
 │  add_to_library()   │
 └─────────────────────┘
 ```
@@ -241,149 +223,91 @@ User clicks "Start"
          ▼
 ┌─────────────────────┐
 │   GameManager       │
-│    start_game()     │
+│   start_game()      │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
 │  ProcessManager     │
 │  start_process()    │
-│  (duplicate check)  │
+│  (passes game name  │
+│   as argument)      │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
-│  subprocess.Popen   │
-│ (no console window) │
+│   Dummy Process     │
+│ (DummyGame Window)  │
+│ Shows: "Overwatch"  │
 └─────────────────────┘
          │
          ▼
-┌─────────────────────┐
-│   Dummy Executable  │
-│ (background process │
-│  - no GUI window)   │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│     Database        │
-│ set_process_running │
-└─────────────────────┘
+Discord detects process name
+Shows "Playing Overwatch"
 ```
 
-### Stopping a Game (Proper Cleanup)
+## Directory Structure
 
-```flow
-User clicks "Stop" or "Remove"
-         │
-         ▼
-┌─────────────────────┐
-│   GameManager       │
-│ stop_game() or      │
-│ remove_from_library │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  ProcessManager     │
-│  stop_process()     │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   _kill_process()   │
-│                     │
-│ 1. Get children     │
-│ 2. Terminate kids   │
-│ 3. Wait (3s)        │
-│ 4. Force kill kids  │
-│ 5. Terminate parent │
-│ 6. Wait (3s)        │
-│ 7. Force kill parent│
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  DummyGenerator     │
-│  remove_dummy()     │
-│                     │
-│ - Remove .exe       │
-│ - Remove .pid file  │
-│ - Remove dist/      │
-│ - Remove build/     │
-│ - Remove .spec      │
-│ - Remove game dir/  │
-└─────────────────────┘
+```structure
+discord-games-launcher/
+├── launcher/           # Core business logic
+│   ├── api.py         # Discord API client
+│   ├── database.py    # SQLite operations
+│   ├── dummy_generator.py  # Copy-based dummy management
+│   ├── game_manager.py     # High-level coordinator
+│   └── process_manager.py  # Process lifecycle
+│
+├── ui/                 # PyQt6 user interface
+│   ├── main_window.py # Main window
+│   ├── browser_tab.py # Game browser
+│   └── library_tab.py # Library management
+│
+├── templates/          # Dummy executable template
+│   ├── dummy_game.py      # Template source code
+│   ├── build_dummy.py     # Build script
+│   └── dist/              # Built template
+│       └── DummyGame.exe
+│
+├── tests/              # Test suite
+│   ├── test_api.py
+│   ├── test_database.py
+│   ├── test_dummy_generator.py
+│   └── test_integration.py
+│
+├── docs/               # Documentation
+├── main.py            # Entry point
+└── requirements.txt   # Dependencies
 ```
 
-## Configuration
+## Key Design Decisions
 
-### Data Directories
+### Copy-Based Dummy Generation
 
-Uses `platformdirs` for cross-platform paths:
+Instead of compiling a new executable for each game using PyInstaller at runtime, we:
 
-```python
-from platformdirs import user_data_dir
-app_data_dir = Path(user_data_dir("discord-games-launcher", appauthor=False))
+1. Pre-build a single `DummyGame.exe` template
+2. Copy and rename it for each game
+3. Pass the game name as a command-line argument at launch
 
-# Windows: %LOCALAPPDATA%\discord-games-launcher\
-# Linux: ~/.local/share/discord-games-launcher/
-# macOS: ~/Library/Application Support/discord-games-launcher/
-```
+**Benefits:**
 
-**Subdirectories:**
+- **Instant game addition** - Copying is much faster than compilation
+- **Smaller disk footprint** - All games use the same template (just renamed copies)
+- **Simpler code** - No need for PyInstaller at runtime
+- **More reliable** - No compilation errors or dependency issues
 
-- `launcher.db` - SQLite database
-- `cache/icons/` - Downloaded game icons
-- `games/{game_id}/` - Generated dummy executables and related files
-- `games/logs/` - PyInstaller compilation logs (timestamped)
+### Game Name as Argument
 
-### Cache TTL
+The game name is passed to the dummy process at launch time, not embedded in the executable. This means:
 
-Default cache refresh interval: **7 days**
+- The same executable can display any game name
+- The window title matches the game name
+- The user sees what game is "running"
 
-```python
-def needs_sync(self, max_age_days: int = 7) -> bool:
-    last_sync = self.get_last_sync()
-    if not last_sync:
-        return True
-    return datetime.now() - last_sync > timedelta(days=max_age_days)
-```
+### Process Tracking
 
-## Threading and Concurrency
+We track running processes in the database and verify them on each check:
 
-- **UI Thread:** All PyQt6 UI operations on main thread
-- **Timers:** Periodic updates via `QTimer` (5-second intervals)
-- **HTTP:** Synchronous httpx client
-- **Process Management:** Subprocess calls are non-blocking
-- **PyInstaller:** Runs in background via `QThreadPool` with max 2 concurrent workers
-- **Compilation Queue:** Real-time progress updates via worker signals to keep UI responsive
-- **Worker Classes:** `GameAdditionWorker` for individual games, `BatchGameAdditionWorker` for multiple games
-
-## Error Handling
-
-Each module defines custom exceptions:
-
-```python
-class DiscordAPIError(Exception):
-    """Raised when Discord API request fails."""
-
-class GameManagerError(Exception):
-    """Raised when game manager operation fails."""
-
-class DummyGenerationError(Exception):
-    """Raised when dummy executable generation fails."""
-
-class ProcessError(Exception):
-    """Raised when process operation fails."""
-```
-
-## Dependencies
-
-See `requirements.txt` for full list:
-
-- **PyQt6>=6.9.0** - GUI framework
-- **httpx[http2]>=0.27.0** - HTTP client
-- **platformdirs>=4.5.1** - App directories
-- **pyinstaller>=6.14.1** - Dummy executable generation
-- **psutil>=6.0.0** - Process management
+- Prevents duplicate processes
+- Detects when processes exit unexpectedly
+- Cleans up stale records automatically

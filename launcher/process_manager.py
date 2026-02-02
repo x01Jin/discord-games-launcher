@@ -31,13 +31,15 @@ class ProcessManager:
         """Refresh local PID cache from database."""
         self._local_pid_cache = self.db.get_running_processes()
 
-    def start_process(self, game_id: int, exe_path: Path, is_gui: bool = True) -> int:
+    def start_process(
+        self, game_id: int, exe_path: Path, game_name: str = "Game"
+    ) -> int:
         """Start a dummy process for a game.
 
         Args:
             game_id: The Discord game ID
             exe_path: Path to the dummy executable
-            is_gui: Whether this is a GUI process (needs window management)
+            game_name: Display name to pass to the dummy process
 
         Returns:
             The process PID
@@ -59,28 +61,27 @@ class ProcessManager:
             del self._local_pid_cache[game_id]
 
         try:
-            # Start process
-            if is_gui:
-                # For GUI processes, allow window to be visible
-                # Use CREATE_NEW_CONSOLE on Windows for proper GUI behavior
-                process = subprocess.Popen(
-                    [str(exe_path)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0,
-                )
-            else:
-                # Background process (original behavior)
-                process = subprocess.Popen(
-                    [str(exe_path)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            # Working directory is the exe's parent directory
+            working_dir = exe_path.parent
+
+            # Start process with game name as argument
+            # Use CREATE_NEW_CONSOLE on Windows for proper GUI behavior
+            creationflags = (
+                subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+            )
+
+            process = subprocess.Popen(
+                [str(exe_path), game_name],
+                cwd=str(working_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+            )
 
             pid = process.pid
 
             # Verify process started
-            time.sleep(0.5)  # Give GUI more time to initialize
+            time.sleep(0.3)
             if not self._pid_exists(pid):
                 raise ProcessError("Process failed to start")
 

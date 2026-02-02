@@ -64,7 +64,8 @@ class GameManager:
     def add_to_library(self, game_id: int) -> Tuple[bool, str]:
         """Add a game to the user's library.
 
-        This generates the dummy executable and adds to library.
+        This copies the dummy executable template and adds to library.
+        Operation is instant since it's just a file copy.
 
         Args:
             game_id: The Discord game ID
@@ -81,6 +82,13 @@ class GameManager:
         if self.db.is_in_library(game_id):
             return False, "Game is already in library"
 
+        # Check if template is available
+        if not self.dummy_gen.is_template_available():
+            return False, (
+                "DummyGame.exe template not found. "
+                "Run 'python templates/build_dummy.py' to build it."
+            )
+
         # Find Windows executable
         exe_config = self.api.get_win32_executable(game.executables)
         if not exe_config:
@@ -92,12 +100,12 @@ class GameManager:
         normalized_name = self.api.normalize_process_name(process_name)
 
         try:
-            # Generate dummy executable (GUI mode for better Discord detection)
-            exe_path, actual_name = self.dummy_gen.generate_dummy(
-                game_id=game_id, game_name=game.name, process_name=normalized_name
+            # Copy dummy executable template (instant operation)
+            exe_path, actual_name = self.dummy_gen.ensure_dummy_for_game(
+                game_id=game_id, process_name=normalized_name
             )
 
-            # Add to library
+            # Add to library database
             self.db.add_to_library(game_id, str(exe_path), actual_name)
 
             return True, f"Added {game.name} to library"
@@ -167,8 +175,10 @@ class GameManager:
         if not self.db.is_in_library(game_id):
             return False, "Game is not in library"
 
-        # Get library entry
+        # Get library entry and game info
         lib_game = self.db.get_library_game(game_id)
+        game = self.db.get_game(game_id)
+
         if not lib_game:
             return False, "Failed to get library entry"
 
@@ -184,9 +194,14 @@ class GameManager:
         if not exe_path.exists():
             return False, "Executable not found, try removing and re-adding the game"
 
+        # Get display name for the dummy process
+        display_name = game.name if game else "Game"
+
         try:
-            # Start as GUI process for better Discord detection
-            pid = self.process_mgr.start_process(game_id, exe_path, is_gui=True)
+            # Start process with game name as argument
+            pid = self.process_mgr.start_process(
+                game_id=game_id, exe_path=exe_path, game_name=display_name
+            )
             return True, f"Started game (PID: {pid})"
         except Exception as e:
             return False, f"Failed to start game: {e}"

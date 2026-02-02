@@ -1,7 +1,7 @@
 """Discord Games Launcher - Browser Tab UI module.
 
-Tab for browsing and searching Discord's game database with proper tree view.
-Allows adding games to library asynchronously with queue display.
+Tab for browsing and searching Discord's game database.
+Allows adding games to library with instant synchronous operations.
 """
 
 from PyQt6.QtWidgets import (
@@ -18,13 +18,11 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QMenu,
 )
-from PyQt6.QtCore import Qt, QThreadPool
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QBrush, QColor
 
 from launcher.game_manager import GameManager
 from launcher.database import Game
-from ui.workers import GameAdditionWorker
-from ui.queue_widget import CompilationQueueWidget
 
 
 # Dark theme colors (consistent with main window)
@@ -34,6 +32,7 @@ ACCENT_COLOR = "#007acc"
 TEXT_COLOR = "#cccccc"
 BORDER_COLOR = "#3e3e42"
 SUCCESS_COLOR = "#4ec9b0"
+WARNING_COLOR = "#ff9800"
 
 
 class BrowserTab(QWidget):
@@ -43,18 +42,6 @@ class BrowserTab(QWidget):
         super().__init__()
         self.game_manager = game_manager
         self.all_games = []
-
-        # Setup thread pool with max 2 workers for compilation
-        self.thread_pool = QThreadPool()
-        self.thread_pool.setMaxThreadCount(2)
-
-        # Create compilation queue widget
-        self.queue_widget = CompilationQueueWidget()
-        self.queue_widget.item_cancelled.connect(self._on_item_cancelled)
-
-        # Track active workers
-        self.active_workers: dict = {}
-
         self._setup_ui()
         self._load_initial_games()
 
@@ -290,52 +277,28 @@ class BrowserTab(QWidget):
         menu.exec(self.games_tree.mapToGlobal(position))
 
     def _add_game(self, game_id: int):
-        """Add a single game to library asynchronously."""
-        # Check if already in queue
-        if self.queue_widget.is_game_in_queue(game_id):
-            QMessageBox.information(
-                self, "Already Queued", "This game is already in the compilation queue."
-            )
-            return
-
+        """Add a single game to library (instant operation)."""
         # Get game info
         game = self.game_manager.get_game(game_id)
         if not game:
             QMessageBox.warning(self, "Error", "Game not found")
             return
 
-        # Add to queue widget
-        self.queue_widget.add_item(game_id, game.name)
+        # Add to library (synchronous - just copies a file)
+        success, message = self.game_manager.add_to_library(game_id)
 
-        # Create and start worker
-        worker = GameAdditionWorker(game_id, self.game_manager)
-        worker.signals.progress.connect(
-            lambda gid, name, pct, msg: self._on_compilation_progress(
-                gid, name, pct, msg
-            )
-        )
-        worker.signals.finished.connect(
-            lambda gid, name, success, msg, path: self._on_compilation_finished(
-                gid, name, success, msg
-            )
-        )
-        worker.signals.error.connect(
-            lambda gid, name, err, tb: self._on_compilation_error(gid, name, err)
-        )
-
-        self.active_workers[game_id] = worker
-        self.queue_widget.register_worker(game_id, worker)
-        self.thread_pool.start(worker)
-
-        # Show queue widget if not visible
-        if not self.queue_widget.isVisible():
-            self.queue_widget.show()
-            self._center_queue_widget()
+        if success:
+            self.results_label.setText(f"✓ Added {game.name} to library")
+            self._refresh_current_display()
+        else:
+            QMessageBox.warning(self, "Error", message)
+            self.results_label.setText(f"✗ {message}")
 
     def _add_selected_games(self):
-        """Add all selected games to library asynchronously."""
+        """Add all selected games to library."""
         selected_items = self.games_tree.selectedItems()
-        queued_count = 0
+        added_count = 0
+        failed_count = 0
 
         for item in selected_items:
             game_id = item.data(0, Qt.ItemDataRole.UserRole)
@@ -346,96 +309,25 @@ class BrowserTab(QWidget):
             if self.game_manager.is_in_library(game_id):
                 continue
 
-            # Check if already in queue
-            if self.queue_widget.is_game_in_queue(game_id):
-                continue
+            # Add to library (synchronous)
+            success, message = self.game_manager.add_to_library(game_id)
 
-            # Get game info
-            game = self.game_manager.get_game(game_id)
-            if not game:
-                continue
+            if success:
+                added_count += 1
+            else:
+                failed_count += 1
 
-            # Add to queue widget
-            self.queue_widget.add_item(game_id, game.name)
-
-            # Create and start worker
-            worker = GameAdditionWorker(game_id, self.game_manager)
-            worker.signals.progress.connect(
-                lambda gid, name, pct, msg: self._on_compilation_progress(
-                    gid, name, pct, msg
-                )
-            )
-            worker.signals.finished.connect(
-                lambda gid, name, success, msg, path: self._on_compilation_finished(
-                    gid, name, success, msg
-                )
-            )
-            worker.signals.error.connect(
-                lambda gid, name, err, tb: self._on_compilation_error(gid, name, err)
-            )
-
-            self.active_workers[game_id] = worker
-            self.queue_widget.register_worker(game_id, worker)
-            self.thread_pool.start(worker)
-
-            queued_count += 1
-
-        if queued_count > 0:
-            # Show queue widget
-            if not self.queue_widget.isVisible():
-                self.queue_widget.show()
-                self._center_queue_widget()
-
-            self.results_label.setText(
-                f"Queued {queued_count} game(s) for compilation..."
-            )
-
-    def _on_compilation_progress(
-        self, game_id: int, game_name: str, percent: int, message: str
-    ):
-        """Handle compilation progress update."""
-        self.queue_widget.update_progress(game_id, percent, message)
-
-    def _on_compilation_finished(
-        self, game_id: int, game_name: str, success: bool, message: str
-    ):
-        """Handle compilation completion."""
-        self.queue_widget.mark_complete(game_id, success, message)
-
-        if success:
+        # Update display
+        if added_count > 0:
             self._refresh_current_display()
-            # Show success in results label temporarily
-            self.results_label.setText(f"✓ {game_name} added successfully")
+
+        # Show result
+        if failed_count == 0:
+            self.results_label.setText(f"✓ Added {added_count} game(s) to library")
         else:
-            self.results_label.setText(f"✗ {game_name}: {message}")
-
-        # Clean up worker reference
-        if game_id in self.active_workers:
-            del self.active_workers[game_id]
-
-    def _on_compilation_error(self, game_id: int, game_name: str, error: str):
-        """Handle compilation error."""
-        self.queue_widget.mark_complete(game_id, False, f"Error: {error}")
-        self.results_label.setText(f"✗ {game_name} failed: {error}")
-
-        if game_id in self.active_workers:
-            del self.active_workers[game_id]
-
-    def _on_item_cancelled(self, game_id: int):
-        """Handle item cancellation from queue widget."""
-        if game_id in self.active_workers:
-            worker = self.active_workers[game_id]
-            if hasattr(worker, "cancel"):
-                worker.cancel()
-
-    def _center_queue_widget(self):
-        """Center the queue widget on the browser tab."""
-        # Center on this widget
-        rect = self.geometry()
-        self.queue_widget.move(
-            rect.center().x() - self.queue_widget.width() // 2,
-            rect.center().y() - self.queue_widget.height() // 2,
-        )
+            self.results_label.setText(
+                f"Added {added_count}, failed {failed_count} game(s)"
+            )
 
     def _refresh_current_display(self):
         """Refresh the current display."""
