@@ -60,10 +60,10 @@ The launcher creates a process with the exact name Discord expects (e.g., `devil
 
 1. **Check Python version**
 
-   ```cmd
-   python --version
-   # Should be 3.13.11 or higher
-   ```
+    ```cmd
+    python --version
+    # Should be 3.13 or higher
+    ```
 
 2. **Activate virtual environment**
 
@@ -99,24 +99,21 @@ The launcher creates a process with the exact name Discord expects (e.g., `devil
 
 1. **Check game has Windows executable**
    - Some games are macOS/Linux only
-   - Game card shows available executables
+   - Game row shows available executables
    - Look for "win32" in the list
 
-2. **Wait for PyInstaller**
-   - First-time generation takes 10-30 seconds
-   - Button shows "Adding..." during generation
-   - Don't close launcher during this time
-   - Check logs if it takes longer than expected:
-     - Location: `%LOCALAPPDATA%\discord-games-launcher\games\logs\`
-     - Files: `pyinstaller_YYYYMMDD_HHMMSS.log`
+2. **Check dummy template is available**
+   - The launcher uses a pre-built template for instant game addition
+   - Template must be in `templates/dist/DummyGame.exe`
+   - If template is missing, games cannot be added
 
 3. **Check disk space**
    - Need at least 50 MB free
-   - Each dummy executable is ~1-2 MB
+   - Each dummy executable is ~2 MB
 
 4. **Check antivirus**
-   - PyInstaller may trigger false positives
-   - Add exception for `%LOCALAPPDATA%\discord-games-launcher\`
+   - Antivirus may flag the template executable as a false positive
+   - Add exception for `%LOCALAPPDATA%\discord-games-launcher\` and project directory
 
 -- **Error: "No Windows executable found"** --
 
@@ -197,15 +194,15 @@ The launcher creates a process with the exact name Discord expects (e.g., `devil
    - Periodic updates every 5 seconds
    - Check if refresh timer is stuck
 
-3. **PyInstaller generation**
-   - High CPU during executable generation (normal)
-   - Should only happen when adding new games
-   - Generation takes 10-30 seconds
+3. **Game addition**
+   - Copying template is instant (low CPU usage)
+   - Should complete immediately
+   - No compilation needed
 
 **Normal Resource Usage:**
 
 - Launcher: ~50-100 MB RAM, <1% CPU
-- Each dummy: ~1-2 MB RAM, 0% CPU (sleeping)
+- Each dummy: ~10-20 MB RAM, 0% CPU (sleeping)
 
 ### Issue: Duplicate Games in Library
 
@@ -341,8 +338,8 @@ When reporting issues, include:
 3. **Python version** - `python --version`
 4. **OS version** - Windows 10/11, build number
 5. **Discord version** - Desktop app version
-6. **Logs** - PyInstaller compilation logs from:
-   - `%LOCALAPPDATA%\discord-games-launcher\games\logs\pyinstaller_*.log`
+6. **Logs** - Application logs from:
+   - Run with verbose output: `python main.py 2>&1 | tee launcher.log`
 
 ### Debug Mode
 
@@ -350,18 +347,6 @@ Run with verbose output:
 
 ```cmd
 python main.py 2>&1 | tee launcher.log
-```
-
-### View Compilation Logs
-
-Check PyInstaller logs for compilation issues:
-
-```cmd
-# Navigate to logs directory
-cd %LOCALAPPDATA%\discord-games-launcher\games\logs
-
-# View most recent log
-type pyinstaller_*.log | more
 ```
 
 ### Contact Support

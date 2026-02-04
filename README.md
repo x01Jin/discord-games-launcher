@@ -8,15 +8,15 @@ Discord automatically detects running games by scanning process names. This laun
 
 1. Fetches Discord's official supported games database (20,000+ games)
 2. Lets you browse and search all supported games
-3. Generates dummy executables with matching process names and GUI windows
-4. Runs them in background windows so Discord shows your status
+3. Copies a pre-built dummy executable template and renames it to match process names
+4. Runs dummy processes with GUI windows so Discord shows your status
 
 ## Features
 
 ### Browse Games
 
 - **Tree View Display:** Organized view with columns for Game Name, Executables, and Status
-- **Real-time Search:** Filter 20000+ games instantly as you type
+- **Real-time Search:** Filter 20,000+ games instantly as you type
 - **Multi-select:** Add multiple games to your library at once
 - **Visual Status:** See which games are already in your library
 
@@ -56,7 +56,16 @@ For detailed setup, see the [Download & Setup Guide](docs/user/installation.md)
 - **Storage:** 500 MB free storage
 - **Network:** Required for initial game database sync
 
-When you stop a game:
+### Process Lifecycle
+
+**Starting a game:**
+
+1. Launcher copies a pre-built dummy executable template (instant operation)
+2. Renames it to match Discord's expected process name
+3. Launches the process with game name as argument
+4. Discord detects process within ~15 seconds
+
+**Stopping a game:**
 
 1. Launcher finds the process and all its children recursively
 2. Gracefully terminates child processes first
@@ -64,16 +73,11 @@ When you stop a game:
 4. Dummy window closes automatically
 5. Discord removes the status within ~15 seconds
 
-### Cleanup on Removal
-
-When you remove a game from library:
+**Removing a game:**
 
 1. Stops the process if running (with recursive termination)
-2. Removes the executable file
-3. Removes the PID tracking file
-4. Removes PyInstaller build artifacts (dist/, build/, .spec)
-5. Removes the entire game directory
-6. Removes the database entry
+2. Removes the executable file and game directory
+3. Removes the database entry
 
 ## Limitations
 
@@ -93,9 +97,9 @@ For detailed documentation, check the **[Documentation Index](docs/index.md)**
 
 - **PyQt6** - Modern GUI framework with dark theme
 - **httpx** - Async HTTP client for Discord API
-- **PyInstaller** - Compiles dummy scripts to executables
 - **psutil** - Process management and termination
 - **SQLite** - Local database for caching and library
+- **Copy-based template system** - Instant dummy executable creation
 
 ## Disclaimer
 

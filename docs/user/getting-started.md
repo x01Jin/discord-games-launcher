@@ -16,11 +16,11 @@ The Discord Games Launcher has a clean, dark-themed interface with two main tabs
 
 This is your game discovery area:
 
-- **Search Bar:** Type to search through 3000+ Discord-supported games
-- **Game Cards:** Each card shows:
+- **Search Bar:** Type to search through 20,000+ Discord-supported games
+- **Game Tree:** Each row shows:
   - Game name and aliases (alternative names)
   - Supported executables (Windows versions)
-  - "Add to Library" button
+  - Status (Available or In Library)
 
 ### My Library Tab
 
@@ -48,10 +48,9 @@ This is your personal game collection:
 
 1. Find your desired game in the search results
 2. Click the **"Add to Library"** button
-3. The button changes to **"In Library"** (green)
-4. The launcher copies a pre-built template and adds the game instantly
+3. The game is added instantly (copy-based template system)
 
-**Note:** This happens nearly instantly - the dummy executable is created by copying a template, not compilation.
+**Note:** This happens instantly - the dummy executable is created by copying a pre-built template, not compilation.
 
 ### Step 3: Go to Your Library
 
@@ -136,7 +135,7 @@ The game database syncs automatically:
 
 Now that you know the basics:
 
-1. **Explore the game database** - Browse through 3000+ supported games
+1. **Explore the game database** - Browse through 20,000+ supported games
 2. **Build your library** - Add 5-10 games you play most
 3. **Test with Discord** - Start a game and verify your status updates
 4. **Read feature documentation** - Learn about advanced features in [Features](./features.md)

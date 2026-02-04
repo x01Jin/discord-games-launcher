@@ -45,7 +45,7 @@ Download and install Discord from [discord.com](https://discord.com/download)
 2. **What happens on first run:**
    - Creates data directory: `%LOCALAPPDATA%\discord-games-launcher\`
    - Initializes SQLite database
-   - Syncs game database from Discord API (3000+ games, ~5-10 seconds)
+   - Syncs game database from Discord API (20,000+ games, ~5-10 seconds)
    - Opens main window with dark theme
 
 ## Data Directory Structure

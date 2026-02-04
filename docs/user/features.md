@@ -2,7 +2,7 @@
 
 ## Overview
 
-Discord Games Launcher provides a complete solution for managing your Discord "Playing" status with support for 3000+ games. Features proper list views, GUI windows for running games, and robust process management.
+Discord Games Launcher provides a complete solution for managing your Discord "Playing" status with support for 20,000+ games. Features proper list views, GUI windows for running games, and robust process management.
 
 ## Core Features
 
@@ -13,7 +13,7 @@ Browse and search Discord's official supported games database in an organized tr
 **Features:**
 
 - **Tree View Display:** Three columns showing Game Name, Executables, and Status
-- **Real-time Search:** Instant filtering as you type across 3000+ games
+- **Real-time Search:** Instant filtering as you type across 20,000+ games
 - **Multi-select Support:** Add multiple games at once with Ctrl+Click or Shift+Click
 - **Visual Indicators:** Green "In Library" status for games you've already added
 - **Detailed Information:** Shows game aliases and available Windows executables
@@ -261,13 +261,13 @@ Crisp display on high-resolution monitors.
 ### Compatibility
 
 - **OS:** Windows 10/11 (64-bit)
-- **Python:** 3.13.11+
+- **Python:** 3.13+
 - **Discord:** Desktop app required (not web)
 - **Permissions:** User-level (no admin required)
 
 ### Scalability
 
-- **Games:** 3000+ in database
+- **Games:** 20,000+ in database
 - **Library:** Unlimited games (tested with 100+)
 - **Concurrent:** Multiple games can run simultaneously
 

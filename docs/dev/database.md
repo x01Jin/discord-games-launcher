@@ -545,7 +545,13 @@ See `tests/test_database.py` for comprehensive tests:
 def test_add_to_library(temp_db):
     game = create_sample_game(1)
     temp_db.save_games([game])
-    temp_db.add_to_library(1, "/path/to/exe", "game.exe")
+    temp_db.add_to_library(
+        1,
+        "/path/to/exe",
+        "game.exe",
+        "game.exe",
+        [{"os": "win32", "name": "game.exe"}]
+    )
     
     assert temp_db.is_in_library(1)
     lib = temp_db.get_library()
@@ -572,7 +578,13 @@ db.save_games(games)
 tf2_games = db.search_games("Team Fortress", limit=10)
 
 # Library management
-db.add_to_library(440, "/games/440/hl2.exe", "hl2.exe")
+db.add_to_library(
+    440,
+    "/games/440/hl2.exe",
+    "hl2.exe",
+    "hl2.exe",
+    [{"os": "win32", "name": "hl2.exe"}]
+)
 db.remove_from_library(440)
 
 # Process tracking

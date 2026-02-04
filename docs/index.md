@@ -40,10 +40,10 @@ End-user documentation for installing and using the launcher.
 
 Discord Games Launcher is a Windows application that allows users to browse Discord's supported games database and create dummy processes that trigger Discord's "Playing [Game]" status display. It provides:
 
-- Browse 3000+ Discord-supported games
+- Browse 20,000+ Discord-supported games
 - Search and filter game database
 - Add games to personal library
-- Generate dummy executables for Discord detection
+- Copy pre-built dummy executable templates for Discord detection
 - Run multiple games simultaneously
 - Dark theme interface
 
@@ -53,7 +53,7 @@ Discord Games Launcher is a Windows application that allows users to browse Disc
 - **PyQt6** - GUI framework
 - **SQLite** - Local database
 - **httpx** - HTTP client for Discord API
-- **PyInstaller** - Dummy executable generation
+- **Copy-based template system** - Instant dummy executable generation
 - **psutil** - Process management
 
 ## Project Structure
@@ -78,4 +78,4 @@ discord-games-launcher/
 
 ---
 
-- *Last updated: 2026-02-02* -
+- *Last updated: 2025-02-04* -
