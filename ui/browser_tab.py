@@ -4,26 +4,27 @@ Tab for browsing and searching Discord's game database.
 Allows adding games to library with instant synchronous operations.
 """
 
+import sqlite3
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QBrush, QColor, QFont
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QAbstractItemView,
     QHBoxLayout,
+    QHeaderView,
+    QLabel,
     QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QPushButton,
-    QLabel,
-    QMessageBox,
-    QAbstractItemView,
-    QHeaderView,
-    QMenu,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QBrush, QColor
 
-from launcher.game_manager import GameManager
 from launcher.database import Game
-
+from launcher.game_manager import GameManager, GameManagerError
 
 # Dark theme colors (consistent with main window)
 DARK_BG = "#1e1e1e"
@@ -145,7 +146,7 @@ class BrowserTab(QWidget):
                 self.results_label.setText(
                     f"Using cached data ({stats['cached_games']:,} games)"
                 )
-        except Exception as e:
+        except (GameManagerError, sqlite3.Error, OSError) as e:
             self.results_label.setText(f"Cache error: {e}")
 
         # Load games
@@ -197,15 +198,6 @@ class BrowserTab(QWidget):
             if len(win_exes) > 2:
                 exe_text += f"\n+{len(win_exes) - 2} more"
             exe_text += f"\n({len(win_exes)} variants)"
-            item.setText(1, exe_text)
-
-        # Executables (column 1)
-        win_exes = [exe for exe in game.executables if exe.get("os") == "win32"]
-        if win_exes:
-            exe_names = [exe.get("name", "Unknown") for exe in win_exes[:2]]
-            exe_text = "\n".join(exe_names)
-            if len(win_exes) > 2:
-                exe_text += f"\n+{len(win_exes) - 2} more"
             item.setText(1, exe_text)
         else:
             item.setText(1, "No Windows executable")
@@ -320,7 +312,7 @@ class BrowserTab(QWidget):
                 continue
 
             # Add to library (synchronous)
-            success, message = self.game_manager.add_to_library(game_id)
+            success, _message = self.game_manager.add_to_library(game_id)
 
             if success:
                 added_count += 1

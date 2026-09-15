@@ -14,17 +14,17 @@ not just in isolation.
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from launcher.database import Database  # noqa: E402
-from launcher.api import DiscordAPIClient  # noqa: E402
-from launcher.dummy_generator import DummyGenerator  # noqa: E402
-from launcher.process_manager import ProcessManager  # noqa: E402
-from launcher.game_manager import GameManager  # noqa: E402
+from launcher.api import DiscordAPIClient
+from launcher.database import Database
+from launcher.dummy_generator import DummyGenerator
+from launcher.game_manager import GameManager
+from launcher.process_manager import ProcessManager
 
 
 def test_full_workflow():
@@ -176,10 +176,6 @@ def test_cache_persistence():
 
         # First session - save games
         db1 = Database(db_path)
-        api1 = DiscordAPIClient(db1, tmpdir / "cache")
-        dummy1 = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        proc1 = ProcessManager(db1)
-        gmgr1 = GameManager(db1, api1, dummy1, proc1)
 
         # Add test game in first session
         test_game = {
@@ -308,7 +304,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - runner must continue past failures
             print(f"  FAILED: {e}")
             import traceback
 

@@ -43,7 +43,7 @@ No installation required - just download and run!
 2. **First Launch:** Double-click to run (auto-fetches Discord games database)
 3. **Browse Tab:** Search for games, select them, click "Add Selected to Library"
 4. **Library Tab:** Double-click a game or right-click and select "Start Game"
-5. **Dummy Window:** A small window appears showing "{Game} is running"
+5. **Dummy Window:** A small window appears showing the game name, "Game Started!", and a live runtime counter
 6. **Check Discord:** Your status shows "Playing [Game Name]" within 15 seconds
 7. **Stop:** Close the dummy window, double-click in library, or click "Stop All"
 
@@ -90,21 +90,3 @@ For detailed setup, see the [Download & Setup Guide](docs/user/installation.md)
 ## Documentation
 
 For detailed documentation, check the **[Documentation Index](docs/index.md)**
-
-## Technical Details
-
-### Built With
-
-- **PyQt6** - Modern GUI framework with dark theme
-- **httpx** - Async HTTP client for Discord API
-- **psutil** - Process management and termination
-- **SQLite** - Local database for caching and library
-- **Copy-based template system** - Instant dummy executable creation
-
-## Disclaimer
-
-This tool is for educational purpose only. Don't use it to:
-
-- Farm Discord quests/rewards (violates Discord ToS)
-- Impersonate games for malicious purposes
-- Circumvent game security/anti-cheat systems

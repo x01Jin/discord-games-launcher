@@ -5,8 +5,8 @@
 The Discord Games Launcher includes a comprehensive test suite using pytest.
 
 **Location:** `tests/`
-**Framework:** pytest>=8.3.0
-**Additional:** pytest-qt>=4.4.0, pytest-asyncio>=0.23.0
+**Framework:** pytest>=9.1.1
+**Additional:** pytest-qt>=4.5.0, pytest-asyncio>=1.4.0
 
 ## Test Structure
 
@@ -378,7 +378,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.13
+          python-version: '3.14'
       
       - name: Install dependencies
         run: |

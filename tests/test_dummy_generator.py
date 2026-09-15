@@ -15,7 +15,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from launcher.dummy_generator import DummyGenerator, DummyGeneratorError  # noqa: E402
+from launcher.dummy_generator import DummyGenerator, DummyGeneratorError
 
 
 def test_generator_initialization():
@@ -340,7 +340,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - runner must continue past failures
             print(f"  FAILED: {e}")
             import traceback
 

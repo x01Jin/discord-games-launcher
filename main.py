@@ -16,25 +16,25 @@ Features:
     - Dark theme interface
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add project root to path for imports
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from platformdirs import user_data_dir  # noqa: E402
-from PyQt6.QtWidgets import QApplication  # noqa: E402
-from PyQt6.QtGui import QFont, QFontDatabase  # noqa: E402
+from platformdirs import user_data_dir
+from PyQt6.QtGui import QFont, QFontDatabase
+from PyQt6.QtWidgets import QApplication
 
-from launcher.logger import GameLauncherLogger  # noqa: E402
-from launcher.database import Database  # noqa: E402
-from launcher.api import DiscordAPIClient  # noqa: E402
-from launcher.dummy_generator import DummyGenerator  # noqa: E402
-from launcher.process_manager import ProcessManager  # noqa: E402
-from launcher.game_manager import GameManager  # noqa: E402
-from ui.main_window import MainWindow  # noqa: E402
+from launcher.api import DiscordAPIClient
+from launcher.database import Database
+from launcher.dummy_generator import DummyGenerator
+from launcher.game_manager import GameManager
+from launcher.logger import GameLauncherLogger
+from launcher.process_manager import ProcessManager
+from ui.main_window import MainWindow
 
 
 def setup_application():
@@ -45,7 +45,7 @@ def setup_application():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Discord Games Launcher")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("2.0.0")
     app.setOrganizationName("discord-games-launcher")
 
     # Set application font
@@ -98,7 +98,7 @@ def initialize_components():
 
 def main():
     """Main application entry point."""
-    print("Discord Games Launcher v1.0.0")
+    print("Discord Games Launcher v2.0.0")
     print("=" * 40)
 
     game_manager = None
@@ -123,7 +123,7 @@ def main():
         # Run application
         sys.exit(app.exec())
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - last resort: report anything before exit
         print(f"Fatal error: {e}")
         import traceback
 

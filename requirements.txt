@@ -1,22 +1,26 @@
 # Discord Games Launcher - Requirements
-# Compatible with Python 3.13.11
+# Compatible with Python 3.14.7
 
 # GUI Framework
-PyQt6>=6.9.0
+PyQt6>=6.11.0
 
 # HTTP Client (modern, async/sync support)
-httpx[http2]>=0.27.0
+httpx[http2]>=0.28.1
 
 # Cross-platform application directories
-platformdirs>=4.5.1
+platformdirs>=4.11.8
 
 # Executable bundler for dummy processes
-pyinstaller>=6.14.1
+pyinstaller>=6.22.3
 
 # Process management
-psutil>=6.0.0
+psutil>=7.2.2
 
 # Testing framework
-pytest>=8.3.0
-pytest-qt>=4.4.0
-pytest-asyncio>=0.23.0
+pytest>=9.1.1
+pytest-qt>=4.5.0
+pytest-asyncio>=1.4.0
+
+# Linting and type checking
+ruff>=0.16.7
+pyright>=1.1.414

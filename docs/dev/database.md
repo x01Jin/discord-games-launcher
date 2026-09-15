@@ -20,10 +20,10 @@ Represents a Discord-supported game from the API.
 class Game:
     id: int
     name: str
-    aliases: List[str]
-    executables: List[Dict[str, Any]]
-    icon_hash: Optional[str]
-    themes: List[str]
+    aliases: list[str]
+    executables: list[dict[str, Any]]
+    icon_hash: str | None
+    themes: list[str]
     is_published: bool
     cached_at: datetime
 ```
@@ -49,10 +49,10 @@ Represents a game in the user's library with full executable tracking.
 @dataclass
 class LibraryGame:
     game_id: int
-    executable_path: Optional[str]
+    executable_path: str | None
     process_name: str
     normalized_process_name: str  # For Discord detection
-    executables: List[Dict[str, Any]]  # All available executables
+    executables: list[dict[str, Any]]  # All available executables
     added_at: datetime
 ```
 
@@ -60,7 +60,7 @@ class LibraryGame:
 
 - `game_id` - Reference to games_cache.id
 - `executable_path` - Path to generated dummy executable
-- `process_name` - Original process name from API (may have paths)
+- `process_name` - Normalized process name stored for the library entry (filename only)
 - `normalized_process_name` - Normalized name for Discord detection (filename only)
 - `executables` - All Windows executable candidates for smart retry
 - `added_at` - When added to library
@@ -80,7 +80,7 @@ class ExecutableHistory:
     success_count: int
     failure_count: int
     last_attempt_at: datetime
-    last_success_at: Optional[datetime]
+    last_success_at: datetime | None
 ```
 
 **Fields:**
@@ -202,18 +202,20 @@ CREATE TABLE cache_metadata (
 **Used for:**
 
 - `last_sync` - ISO format timestamp of last API sync
+- `schema_version` - Expected database schema version (recreates the database on mismatch)
 
 ## Database Class
 
 ### Initialization
 
 ```python
-db = Database(db_path: Path)
+db = Database(db_path: Path, logger=None)
 ```
 
 **Parameters:**
 
 - `db_path` - Path to SQLite database file
+- `logger` - Optional `GameLauncherLogger` for database operation logging
 
 **Auto-creates:**
 
@@ -245,10 +247,10 @@ def _connect(self):
 **Line:** 113
 
 ```python
-def get_last_sync(self) -> Optional[datetime]
+def get_last_sync(self) -> datetime | None
 ```
 
-Returns timestamp of last API sync, or None if never synced.
+Returns timestamp of last API sync, or None if never synced. Timestamps are timezone-aware (UTC); rows written before timezone-aware storage are treated as UTC.
 
 #### set_last_sync()
 
@@ -355,7 +357,7 @@ Adds a game to user's library with all executable candidates.
 
 - `game_id` - Discord game ID
 - `executable_path` - Path to the copied dummy executable
-- `process_name` - Original process name from API (may include paths like "_retail_/wow.exe")
+- `process_name` - Normalized process name for the library entry (filename only, e.g. "wow.exe"); the full API path is used only when copying the dummy file
 - `normalized_process_name` - Normalized name for Discord detection (filename only like "wow.exe")
 - `executables` - List of all available Windows executables for this game (for smart retry)
 
@@ -371,12 +373,15 @@ Adds a game to user's library with all executable candidates.
 def remove_from_library(self, game_id: int) -> None
 ```
 
-Removes game from library and cleans up running processes.
+Removes a game's rows from the library and related tables.
 
-**Automatically:**
+**Deletes:**
 
-- Stops any running process for this game
-- Removes from library table
+- Library entry from `user_library`
+- Running-process record from `running_processes`
+- Attempt history from `executable_history`
+
+Stopping the process and deleting the dummy files happens in `GameManager.remove_from_library()` before this call.
 
 #### get_library()
 
@@ -491,9 +496,10 @@ Returns cache statistics:
 
 ```python
 {
-    "cached_games": int,      # Total games in cache
-    "library_games": int,     # Games in user library
-    "running_processes": int  # Active dummy processes
+    "cached_games": int,       # Total games in cache
+    "library_games": int,      # Games in user library
+    "running_processes": int,  # Active dummy processes
+    "executable_history": int  # Recorded detection attempts
 }
 ```
 

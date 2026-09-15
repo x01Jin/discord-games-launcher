@@ -6,9 +6,10 @@ All messages are logged to files in %APPDATA%/discord-games-launcher/logs/
 
 import logging
 import sys
-from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
 from platformdirs import user_data_dir
 
 
@@ -34,12 +35,15 @@ class GameLauncherLogger:
         logs_dir.mkdir(parents=True, exist_ok=True)
 
         # Create rotating file handler (10MB per file, 5 files = 50MB max)
-        log_file = logs_dir / f"dcgl_{datetime.now().strftime('%Y-%m-%d')}.log"
+        log_file = (
+            logs_dir
+            / f"dcgl_{datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d')}.log"
+        )
         file_handler = RotatingFileHandler(
             log_file,
             maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
         )
         file_handler.setLevel(logging.DEBUG)
 
@@ -49,8 +53,7 @@ class GameLauncherLogger:
 
         # Create formatter
         formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
@@ -97,9 +100,13 @@ class GameLauncherLogger:
 
     def all_executables_failed(self, game_name: str, total_attempts: int):
         """Log when all executables failed."""
-        self.error(f"All executables FAILED for {game_name} after {total_attempts} attempts")
+        self.error(
+            f"All executables FAILED for {game_name} after {total_attempts} attempts"
+        )
 
-    def retry_attempt(self, game_name: str, exe_name: str, attempt_num: int, total: int):
+    def retry_attempt(
+        self, game_name: str, exe_name: str, attempt_num: int, total: int
+    ):
         """Log retry attempt."""
         self.info(f"Retry {attempt_num}/{total} for {game_name}: trying {exe_name}")
 
@@ -150,7 +157,9 @@ class GameLauncherLogger:
 
     def game_add_library(self, game_name: str, game_id: int, exe_count: int):
         """Log game added to library."""
-        self.info(f"Game added to library: {game_name} (ID: {game_id}, {exe_count} executables)")
+        self.info(
+            f"Game added to library: {game_name} (ID: {game_id}, {exe_count} executables)"
+        )
 
     def game_remove_library(self, game_name: str, game_id: int):
         """Log game removed from library."""

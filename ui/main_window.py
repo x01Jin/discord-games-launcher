@@ -4,24 +4,26 @@ Main application window with dark theme styling.
 Manages tab interface and application lifecycle.
 """
 
-from PyQt6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTabWidget,
-    QLabel,
-    QStatusBar,
-    QPushButton,
-    QMessageBox,
-)
+import sqlite3
+from contextlib import suppress
+
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStatusBar,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-from launcher.game_manager import GameManager
+from launcher.game_manager import GameManager, GameManagerError
 from ui.browser_tab import BrowserTab
 from ui.library_tab import LibraryTab
-
 
 # Dark theme colors
 DARK_BG = "#1e1e1e"
@@ -113,8 +115,8 @@ class MainWindow(QMainWindow):
 
     def _apply_dark_theme(self):
         """Apply dark theme stylesheet."""
-        # Use Windows API for dark title bar
-        try:
+        # Dark title bar is Windows-only; skip silently elsewhere.
+        with suppress(AttributeError, OSError):
             import ctypes
 
             hwnd = int(self.winId())
@@ -125,8 +127,6 @@ class MainWindow(QMainWindow):
                 ctypes.byref(ctypes.c_int(1)),
                 ctypes.sizeof(ctypes.c_int()),
             )
-        except Exception:
-            pass  # Fallback on non-Windows or if API unavailable
 
         self.setStyleSheet(f"""
             QMainWindow {{
@@ -267,7 +267,7 @@ class MainWindow(QMainWindow):
                 self.browser_tab.refresh_games()
             else:
                 self.status_bar.showMessage("Cache is up to date")
-        except Exception as e:
+        except (GameManagerError, sqlite3.Error, OSError, ValueError) as e:
             QMessageBox.critical(self, "Sync Failed", f"Failed to sync games: {e}")
             self.status_bar.showMessage("Sync failed")
         finally:

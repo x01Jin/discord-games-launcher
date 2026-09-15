@@ -9,17 +9,14 @@ The approach is simple:
 3. When launched, the game name is passed as a command-line argument
 """
 
-import shutil
 import os
+import shutil
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
 
 
 class DummyGeneratorError(Exception):
     """Raised when dummy executable operations fail."""
-
-    pass
 
 
 class DummyGenerator:
@@ -28,7 +25,7 @@ class DummyGenerator:
     # Name of the pre-built template executable
     TEMPLATE_EXE_NAME = "DummyGame.exe"
 
-    def __init__(self, output_dir: Path, template_exe_path: Optional[Path] = None):
+    def __init__(self, output_dir: Path, template_exe_path: Path | None = None):
         """Initialize the dummy generator.
 
         Args:
@@ -50,7 +47,7 @@ class DummyGenerator:
 
         Search order:
         1. templates/dist/DummyGame.exe (normal development/installed location)
-        2. PyInstaller bundled location (_internal/templates/dist)
+        2. PyInstaller bundle location (sys._MEIPASS, onefile and onedir)
         3. DUMMYGAME_EXE environment variable
         4. Same directory as this script
         5. Output directory (in case it was placed there)
@@ -61,16 +58,16 @@ class DummyGenerator:
         if template_path.exists():
             return template_path
 
-        # Check PyInstaller _internal folder (when running as packaged executable)
+        # Check PyInstaller bundle location (covers both onefile and onedir:
+        # bundled data files land at the root of sys._MEIPASS in either mode)
         if getattr(sys, "frozen", False):
-            # When running from packaged directory, the exe is at dist/dcgl/dcgl.exe
-            # and _internal is at dist/dcgl/_internal/
-            exe_dir = Path(sys.executable).parent
-            pyinstaller_template = (
-                exe_dir / "_internal" / "templates" / "dist" / self.TEMPLATE_EXE_NAME
-            )
-            if pyinstaller_template.exists():
-                return pyinstaller_template
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                bundled_template = (
+                    Path(meipass) / "templates" / "dist" / self.TEMPLATE_EXE_NAME
+                )
+                if bundled_template.exists():
+                    return bundled_template
 
         # Check environment variable
         env_path = os.environ.get("DUMMYGAME_EXE")
@@ -102,7 +99,7 @@ class DummyGenerator:
 
     def ensure_dummy_for_game(
         self, game_id: int, process_name: str
-    ) -> Tuple[Path, str]:
+    ) -> tuple[Path, str]:
         """Ensure a dummy executable exists for a game.
 
         If the executable doesn't exist, copies the template and renames it.
@@ -146,7 +143,7 @@ class DummyGenerator:
         if not exe_path.exists():
             try:
                 shutil.copy2(self.template_exe_path, exe_path)
-            except Exception as e:
+            except OSError as e:
                 raise DummyGeneratorError(f"Failed to copy template: {e}")
 
         return exe_path, normalized_name

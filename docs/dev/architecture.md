@@ -79,7 +79,7 @@ Handles communication with Discord's applications API.
 
 **Key Features:**
 
-- Fetches 3000+ games from `discord.com/api/v10/applications/detectable`
+- Fetches 20,000+ games from `discord.com/api/v10/applications/detectable`
 - Caches game data locally (7-day refresh)
 - Downloads game icons from Discord CDN
 - Filters Windows executables
@@ -253,26 +253,34 @@ User clicks "Start"
 ┌─────────────────────┐
 │   GameManager       │
 │   start_game()      │
+│ (validates: in      │
+│  library, stopped,  │
+│  has executables;   │
+│  returns at once)   │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
-│  ProcessManager     │
-│  start_process()    │
-│  (passes game name  │
-│   as argument)      │
+│ DetectionWorker     │
+│ (QThread) tries     │
+│ each executable     │
+│ candidate, verifies │
+│ the PID, waits for  │
+│ Discord's scan      │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
 │   Dummy Process     │
 │ (DummyGame Window)  │
-│ Shows: "Minecraft"  │
+│ Shows: game name,   │
+│ "Game Started!",    │
+│ live runtime        │
 └─────────────────────┘
          │
          ▼
 Discord detects process name
-Shows "Playing Minecraft"
+Shows "Playing [Game]"
 ```
 
 ## Directory Structure
@@ -284,6 +292,7 @@ discord-games-launcher/
 │   ├── database.py    # SQLite operations
 │   ├── dummy_generator.py  # Copy-based dummy management
 │   ├── game_manager.py     # High-level coordinator
+│   ├── logger.py           # Centralized logging
 │   └── process_manager.py  # Process lifecycle
 │
 ├── ui/                 # PyQt6 user interface

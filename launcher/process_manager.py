@@ -4,20 +4,22 @@ Manages running dummy processes and tracks their PIDs.
 Handles process lifecycle, cleanup, and status checking.
 """
 
+import sqlite3
 import subprocess
 import sys
-import psutil
 import time
 from pathlib import Path
-from typing import Dict, Optional, List, Any
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from typing import Any
+
+import psutil
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
+
 from launcher.database import Database
+from launcher.dummy_generator import DummyGeneratorError
 
 
 class ProcessError(Exception):
     """Raised when process operation fails."""
-
-    pass
 
 
 class DetectionWorker(QObject):
@@ -31,7 +33,7 @@ class DetectionWorker(QObject):
         process_manager,
         game_id: int,
         game_name: str,
-        executables: List[Dict[str, Any]],
+        executables: list[dict[str, Any]],
     ):
         super().__init__()
         self.process_manager = process_manager
@@ -56,8 +58,8 @@ class DetectionWorker(QObject):
             )
 
             self.finished.emit(success, exe, message)
-        except Exception as e:
-            self.finished.emit(False, None, f"Error: {str(e)}")
+        except Exception as e:  # noqa: BLE001 - worker must always report completion
+            self.finished.emit(False, None, f"Error: {e!s}")
 
     def stop(self):
         """Stop the detection worker."""
@@ -70,7 +72,7 @@ class ProcessManager:
     def __init__(self, database: Database, logger=None):
         self.db = database
         self.logger = logger
-        self._local_pid_cache: Dict[int, int] = {}
+        self._local_pid_cache: dict[int, int] = {}
         self._refresh_cache()
 
     def _refresh_cache(self) -> None:
@@ -78,7 +80,7 @@ class ProcessManager:
         self._local_pid_cache = self.db.get_running_processes()
 
     def start_game_with_ui_updates(
-        self, game_id: int, game_name: str, executables: List[Dict[str, Any]]
+        self, game_id: int, game_name: str, executables: list[dict[str, Any]]
     ) -> tuple:
         """Start a game with UI progress updates via worker thread.
 
@@ -111,7 +113,7 @@ class ProcessManager:
         self,
         game_id: int,
         game_name: str,
-        executables: List[Dict[str, Any]],
+        executables: list[dict[str, Any]],
         progress_callback=None,
         should_stop_callback=None,
     ) -> tuple:
@@ -218,7 +220,13 @@ class ProcessManager:
                         )
                     self.stop_process(game_id)
 
-            except Exception as e:
+            except (
+                ProcessError,
+                DummyGeneratorError,
+                OSError,
+                sqlite3.Error,
+                psutil.Error,
+            ) as e:
                 error_msg = str(e)
                 if self.logger:
                     self.logger.detection_failed(game_name, exe_name, error_msg)
@@ -258,9 +266,15 @@ class ProcessManager:
                         self.logger.info(
                             f"Started fallback process for {game_name} (PID: {last_pid})"
                         )
-                except Exception as e:
+                except (
+                    ProcessError,
+                    DummyGeneratorError,
+                    OSError,
+                    psutil.Error,
+                    sqlite3.Error,
+                ) as e:
                     if self.logger:
-                        self.logger.error(f"Failed to start fallback process: {str(e)}")
+                        self.logger.error(f"Failed to start fallback process: {e!s}")
 
         return (
             False,
@@ -289,8 +303,9 @@ class ProcessManager:
         Returns:
             The process PID
         """
-        from launcher.dummy_generator import DummyGenerator
         from platformdirs import user_data_dir
+
+        from launcher.dummy_generator import DummyGenerator
 
         games_dir = (
             Path(user_data_dir("discord-games-launcher", appauthor=False)) / "games"
@@ -298,7 +313,7 @@ class ProcessManager:
         dummy_gen = DummyGenerator(games_dir)
 
         # Ensure dummy executable exists
-        exe_path, actual_name = dummy_gen.ensure_dummy_for_game(game_id, process_name)
+        exe_path, _actual_name = dummy_gen.ensure_dummy_for_game(game_id, process_name)
 
         # Start the process
         if not exe_path.exists():
@@ -449,8 +464,8 @@ class ProcessManager:
 
             return pid
 
-        except Exception as e:
-            raise ProcessError(f"Failed to start process: {e}")
+        except (OSError, sqlite3.Error, psutil.Error) as e:
+            raise ProcessError(f"Failed to start process: {e}") from e
 
     def stop_process(self, game_id: int) -> bool:
         """Stop a running dummy process.
@@ -471,7 +486,7 @@ class ProcessManager:
             if self._kill_process(pid):
                 # Update database
                 self.db.set_process_stopped(game_id)
-                del self._local_pid_cache[game_id]
+                self._local_pid_cache.pop(game_id, None)
 
                 if self.logger:
                     self.logger.process_stop(f"Game {game_id}", pid, "user_stop")
@@ -479,7 +494,7 @@ class ProcessManager:
                 return True
             return False
 
-        except Exception:
+        except (psutil.Error, OSError, sqlite3.Error):
             return False
 
     def _kill_process(self, pid: int) -> bool:
@@ -502,7 +517,7 @@ class ProcessManager:
                     pass
 
             # Wait for children to terminate
-            gone, alive = psutil.wait_procs(children, timeout=3)
+            _gone, alive = psutil.wait_procs(children, timeout=3)
 
             # Force kill any remaining children
             for child in alive:
@@ -527,7 +542,7 @@ class ProcessManager:
         except psutil.NoSuchProcess:
             # Process already dead
             return True
-        except Exception:
+        except (psutil.Error, OSError):
             return False
 
     def is_running(self, game_id: int) -> bool:
@@ -557,7 +572,7 @@ class ProcessManager:
         except psutil.NoSuchProcess:
             return False
 
-    def get_running_games(self) -> List[int]:
+    def get_running_games(self) -> list[int]:
         """Get list of game IDs with running processes.
 
         This performs cleanup of stale records.
@@ -567,7 +582,7 @@ class ProcessManager:
 
     def _cleanup_stale_records(self) -> None:
         """Remove database records for processes that are no longer running."""
-        stale_games: List[int] = []
+        stale_games: list[int] = []
 
         for game_id, pid in list(self._local_pid_cache.items()):
             if not self._pid_exists(pid):
@@ -589,7 +604,7 @@ class ProcessManager:
                 count += 1
         return count
 
-    def get_process_info(self, game_id: int) -> Optional[Dict]:
+    def get_process_info(self, game_id: int) -> dict | None:
         """Get information about a running process.
 
         Returns:

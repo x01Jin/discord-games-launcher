@@ -4,23 +4,22 @@ Tab for managing user's game library with proper list view.
 Shows added games with start/stop controls in a clean list format.
 """
 
+from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QAbstractItemView,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
-    QLabel,
-    QMessageBox,
     QMenu,
-    QAbstractItemView,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QFont
 
 from launcher.game_manager import GameManager
-
 
 # Dark theme colors (consistent with main window)
 DARK_BG = "#1e1e1e"
@@ -153,13 +152,18 @@ class LibraryTab(QWidget):
 
         # Add games to list
         for game_data in library:
-            item = self._create_library_item(game_data)
+            item, widget = self._create_library_item(game_data)
             self.library_list.addItem(item)
+            self.library_list.setItemWidget(item, widget)
 
         self.status_label.setText(f"{len(library)} game(s) in library")
 
-    def _create_library_item(self, game_data: dict) -> QListWidgetItem:
-        """Create a list item for a library game with PyQt6 widgets."""
+    def _create_library_item(self, game_data: dict) -> tuple[QListWidgetItem, QWidget]:
+        """Create a list item and its display widget for a library game.
+
+        Pure factory: builds the item and widget without touching the list.
+        The caller inserts them via addItem / setItemWidget.
+        """
         game_id = game_data["game_id"]
         name = game_data["name"]
         is_running = game_data.get("is_running", False)
@@ -210,11 +214,7 @@ class LibraryTab(QWidget):
         )
         layout.addWidget(status_label, 30)
 
-        # Add item to list and set widget
-        self.library_list.addItem(item)
-        self.library_list.setItemWidget(item, widget)
-
-        return item
+        return item, widget
 
     def _on_item_double_clicked(self, item: QListWidgetItem):
         """Handle double click on a library item - toggle start/stop."""
@@ -422,16 +422,15 @@ class LibraryTab(QWidget):
         if self.detection_worker is not None:
             self.detection_worker.stop()
 
-        if self.detection_thread is not None:
-            if self.detection_thread.isRunning():
-                # Request thread to quit gracefully
-                self.detection_thread.quit()
-                # Wait up to 2 seconds for thread to finish
-                # This is blocking but necessary on app close
-                if not self.detection_thread.wait(2000):
-                    # Force terminate if still running
-                    self.detection_thread.terminate()
-                    self.detection_thread.wait(500)
+        if self.detection_thread is not None and self.detection_thread.isRunning():
+            # Request thread to quit gracefully
+            self.detection_thread.quit()
+            # Wait up to 2 seconds for thread to finish
+            # This is blocking but necessary on app close
+            if not self.detection_thread.wait(2000):
+                # Force terminate if still running
+                self.detection_thread.terminate()
+                self.detection_thread.wait(500)
 
         # Only clear references after thread has stopped
         self.detection_worker = None

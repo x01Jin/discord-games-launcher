@@ -10,9 +10,9 @@ Usage:
     python build_dummy.py
 """
 
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
 
 
@@ -61,7 +61,7 @@ def build_dummy():
 
     print(f"\nRunning: {' '.join(cmd)}\n")
 
-    result = subprocess.run(cmd, capture_output=False)
+    result = subprocess.run(cmd, capture_output=False, check=False)
 
     if result.returncode != 0:
         print("\nERROR: PyInstaller failed!")
@@ -73,7 +73,7 @@ def build_dummy():
         print(f"\nERROR: Expected output not found: {exe_path}")
         return False
 
-    print(f"\n✓ Successfully built: {exe_path}")
+    print(f"\nSuccessfully built: {exe_path}")
     print(f"  Size: {exe_path.stat().st_size / 1024 / 1024:.1f} MB")
 
     # Cleanup build artifacts

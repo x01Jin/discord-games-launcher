@@ -84,7 +84,6 @@ You can run multiple games simultaneously:
 ### Finding Games
 
 - Use partial names: "mine" finds "Minecraft", "Minecraft Dungeons", etc.
-- Try aliases: Searching "wow" finds "World of Warcraft"
 - Browse all: Clear the search box to see all cached games
 
 ### Managing Your Library
@@ -148,7 +147,7 @@ Having issues? Check the [Troubleshooting Guide](./troubleshooting.md) for solut
 
 The launcher checks for stale cache automatically:
 
-- Cache older than 7 days triggers a sync prompt
+- Cache older than 7 days refreshes automatically when the Browse tab loads
 - Click "Sync Games" anytime for latest data
 - Game database updates as Discord adds new supported games
 

@@ -57,7 +57,7 @@ When you add a game:
 When you start a game:
 
 1. Launcher runs the dummy executable with game name as argument
-2. A small window opens showing "{Game Name} is running"
+2. A small window opens showing the game name, "Game Started!", and a live runtime counter
 3. Process stays active with the GUI window open
 4. Discord detects it within ~15 seconds
 5. Your status updates to "Playing [Game Name]"
@@ -135,7 +135,7 @@ Smart caching system for optimal performance.
 **Features:**
 
 - Automatic sync on first launch
-- Weekly auto-refresh (7-day TTL, configurable)
+- Weekly auto-refresh (7-day TTL)
 - Manual sync button
 - Persisted across sessions
 - Works offline with cached data
@@ -143,7 +143,7 @@ Smart caching system for optimal performance.
 **Cache Details:**
 
 - Stores in SQLite database (~5-10 MB)
-- ~5-10 seconds initial download (3000+ games)
+- ~5-10 seconds initial download (20,000+ games)
 - Background updates don't interrupt usage
 - Game icons cached locally
 
@@ -254,14 +254,14 @@ Crisp display on high-resolution monitors.
 - **Launcher Memory:** ~50-100 MB RAM
 - **Launcher CPU:** <1% when idle
 - **Dummy Memory:** ~10-20 MB RAM per game (GUI window)
-- **Dummy CPU:** Minimal (tkinter event loop)
+- **Dummy CPU:** Minimal (PyQt6 event loop)
 - **Storage:** ~50 MB for database, ~2 MB per dummy executable
 - **Network:** ~1 MB download on first sync
 
 ### Compatibility
 
 - **OS:** Windows 10/11 (64-bit)
-- **Python:** 3.13+
+- **Python:** 3.14.7+
 - **Discord:** Desktop app required (not web)
 - **Permissions:** User-level (no admin required)
 
@@ -275,7 +275,7 @@ Crisp display on high-resolution monitors.
 
 | Feature | Discord Games Launcher | Manual Method |
 | --------- | ------------------------ | --------------- |
-| Game Database | 3000+ games | Must find manually |
+| Game Database | 20,000+ games | Must find manually |
 | Search | Instant with tree view | N/A |
 | Library View | Clean list with rich formatting | Manual tracking |
 | GUI Windows | Yes (shows running status) | N/A |

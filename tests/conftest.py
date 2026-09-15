@@ -1,19 +1,19 @@
 """Pytest configuration and fixtures."""
 
-import pytest
+# Add project root to path
+import sys
 import tempfile
 from pathlib import Path
 
-# Add project root to path
-import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from launcher.database import Database
 from launcher.api import DiscordAPIClient
+from launcher.database import Database
 from launcher.dummy_generator import DummyGenerator
-from launcher.process_manager import ProcessManager
 from launcher.game_manager import GameManager
+from launcher.process_manager import ProcessManager
 
 
 @pytest.fixture

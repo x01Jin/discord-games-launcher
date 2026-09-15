@@ -3,13 +3,13 @@
 Handles all SQLite operations for caching Discord API data and user library.
 """
 
-import sqlite3
 import json
-from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
-from dataclasses import dataclass
+import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Optional
 
 
 @dataclass
@@ -18,10 +18,10 @@ class Game:
 
     id: int
     name: str
-    aliases: List[str]
-    executables: List[Dict[str, Any]]
-    icon_hash: Optional[str]
-    themes: List[str]
+    aliases: list[str]
+    executables: list[dict[str, Any]]
+    icon_hash: str | None
+    themes: list[str]
     is_published: bool
     cached_at: datetime
 
@@ -31,10 +31,10 @@ class LibraryGame:
     """Represents a game in the user's library."""
 
     game_id: int
-    executable_path: Optional[str]
+    executable_path: str | None
     process_name: str
     normalized_process_name: str
-    executables: List[Dict[str, Any]]
+    executables: list[dict[str, Any]]
     added_at: datetime
 
 
@@ -48,7 +48,7 @@ class ExecutableHistory:
     success_count: int
     failure_count: int
     last_attempt_at: datetime
-    last_success_at: Optional[datetime]
+    last_success_at: datetime | None
 
 
 class Database:
@@ -118,7 +118,7 @@ class Database:
 
             return True
 
-        except Exception:
+        except (sqlite3.Error, OSError, ValueError, TypeError):
             return False
 
     def _init_db(self) -> None:
@@ -214,14 +214,18 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_exec_history_game ON executable_history(game_id)
             """)
 
-    def get_last_sync(self) -> Optional[datetime]:
+    def get_last_sync(self) -> datetime | None:
         """Get timestamp of last API sync."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT value FROM cache_metadata WHERE key = 'last_sync'"
             ).fetchone()
             if row:
-                return datetime.fromisoformat(row[0])
+                last_sync = datetime.fromisoformat(row[0])
+                if last_sync.tzinfo is None:
+                    # Rows written before timezone-aware timestamps; treat as UTC.
+                    last_sync = last_sync.replace(tzinfo=timezone.utc)
+                return last_sync
             return None
 
     def set_last_sync(self, timestamp: datetime) -> None:
@@ -241,9 +245,9 @@ class Database:
         last_sync = self.get_last_sync()
         if not last_sync:
             return True
-        return datetime.now() - last_sync > timedelta(days=max_age_days)
+        return datetime.now(timezone.utc) - last_sync > timedelta(days=max_age_days)
 
-    def save_games(self, games: List[Dict[str, Any]]) -> None:
+    def save_games(self, games: list[dict[str, Any]]) -> None:
         """Save or update games from API to cache."""
         with self._connect() as conn:
             for game in games:
@@ -280,7 +284,7 @@ class Database:
                 return self._row_to_game(row)
             return None
 
-    def get_all_games(self, limit: Optional[int] = None) -> List["Game"]:
+    def get_all_games(self, limit: int | None = None) -> list["Game"]:
         """Get all cached games."""
         with self._connect() as conn:
             query = "SELECT * FROM games_cache ORDER BY name"
@@ -289,7 +293,7 @@ class Database:
             rows = conn.execute(query).fetchall()
             return [self._row_to_game(row) for row in rows]
 
-    def search_games(self, query: str, limit: int = 100) -> List["Game"]:
+    def search_games(self, query: str, limit: int = 100) -> list["Game"]:
         """Search games by name or alias."""
         with self._connect() as conn:
             rows = conn.execute(
@@ -320,7 +324,7 @@ class Database:
         executable_path: str,
         process_name: str,
         normalized_process_name: str,
-        executables: List[Dict[str, Any]],
+        executables: list[dict[str, Any]],
     ) -> None:
         """Add a game to user's library with all executable candidates."""
         with self._connect() as conn:
@@ -332,7 +336,13 @@ class Database:
                     process_name = excluded.process_name,
                     normalized_process_name = excluded.normalized_process_name,
                     executables = excluded.executables""",
-                (game_id, executable_path, process_name, normalized_process_name, json.dumps(executables)),
+                (
+                    game_id,
+                    executable_path,
+                    process_name,
+                    normalized_process_name,
+                    json.dumps(executables),
+                ),
             )
 
     def remove_from_library(self, game_id: int) -> None:
@@ -342,7 +352,7 @@ class Database:
             conn.execute("DELETE FROM executable_history WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM user_library WHERE game_id = ?", (game_id,))
 
-    def get_library(self) -> List[Dict[str, Any]]:
+    def get_library(self) -> list[dict[str, Any]]:
         """Get all games in user's library with full game info."""
         with self._connect() as conn:
             rows = conn.execute("""
@@ -397,7 +407,7 @@ class Database:
 
     def get_preferred_executable(
         self, game_id: int
-    ) -> Optional[Tuple[Dict[str, Any], int]]:
+    ) -> tuple[dict[str, Any], int] | None:
         """Get the best executable for a game based on history.
 
         Returns:
@@ -488,7 +498,7 @@ class Database:
         with self._connect() as conn:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
 
-    def get_running_processes(self) -> Dict[int, int]:
+    def get_running_processes(self) -> dict[int, int]:
         """Get all running processes as {game_id: pid}."""
         with self._connect() as conn:
             rows = conn.execute("SELECT game_id, pid FROM running_processes").fetchall()
@@ -508,7 +518,7 @@ class Database:
             conn.execute("DELETE FROM games_cache")
             conn.execute("DELETE FROM cache_metadata WHERE key = 'last_sync'")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """Get cache statistics."""
         with self._connect() as conn:
             games_count = conn.execute("SELECT COUNT(*) FROM games_cache").fetchone()[0]

@@ -4,22 +4,21 @@ High-level interface for managing game library operations.
 Coordinates between database, API, dummy generation, and process management.
 """
 
+import sqlite3
 from pathlib import Path
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from launcher.database import Game
 
+from launcher.api import DiscordAPIClient, DiscordAPIError
 from launcher.database import Database
-from launcher.api import DiscordAPIClient
-from launcher.dummy_generator import DummyGenerator
+from launcher.dummy_generator import DummyGenerator, DummyGeneratorError
 from launcher.process_manager import ProcessManager
 
 
 class GameManagerError(Exception):
     """Raised when game manager operation fails."""
-
-    pass
 
 
 class GameManager:
@@ -52,14 +51,14 @@ class GameManager:
             was_synced = self.api.sync_cache(force=force)
             stats = self.db.get_cache_stats()
             return was_synced, stats["cached_games"]
-        except Exception as e:
+        except (DiscordAPIError, sqlite3.Error, OSError) as e:
             raise GameManagerError(f"Failed to sync games: {e}")
 
-    def search_games(self, query: str, limit: int = 100) -> List["Game"]:
+    def search_games(self, query: str, limit: int = 100) -> list["Game"]:
         """Search cached games by name."""
         return self.db.search_games(query, limit)
 
-    def get_all_games(self, limit: Optional[int] = None) -> List["Game"]:
+    def get_all_games(self, limit: int | None = None) -> list["Game"]:
         """Get all cached games."""
         return self.db.get_all_games(limit)
 
@@ -114,19 +113,28 @@ class GameManager:
 
         try:
             # Copy dummy executable template (instant operation)
-            exe_path, actual_name = self.dummy_gen.ensure_dummy_for_game(
+            exe_path, _actual_name = self.dummy_gen.ensure_dummy_for_game(
                 game_id=game_id, process_name=process_name
             )
 
             # Add to library database with ALL executable candidates
-            self.db.add_to_library(game_id, str(exe_path), normalized_name, normalized_name, win_executables)
+            self.db.add_to_library(
+                game_id,
+                str(exe_path),
+                normalized_name,
+                normalized_name,
+                win_executables,
+            )
 
             if self.logger:
                 self.logger.game_add_library(game.name, game_id, len(win_executables))
 
-            return True, f"Added {game.name} to library ({len(win_executables)} executable variant(s))"
+            return (
+                True,
+                f"Added {game.name} to library ({len(win_executables)} executable variant(s))",
+            )
 
-        except Exception as e:
+        except (DummyGeneratorError, sqlite3.Error, OSError) as e:
             return False, f"Failed to add game: {e}"
 
     def remove_from_library(self, game_id: int) -> tuple:
@@ -153,11 +161,14 @@ class GameManager:
         if self.process_mgr.is_running(game_id):
             self.process_mgr.stop_process(game_id)
 
-        # Remove dummy executable
+        # Remove dummy executable (failure is non-fatal; files may be gone already)
         try:
             self.dummy_gen.remove_dummy(game_id, lib_game.process_name)
-        except Exception:
-            pass  # Continue even if removal fails
+        except OSError as e:
+            if self.logger:
+                self.logger.warning(
+                    f"Could not remove dummy files for game {game_id}: {e}"
+                )
 
         # Remove from library
         self.db.remove_from_library(game_id)
@@ -169,7 +180,7 @@ class GameManager:
 
         return True, "Game removed from library"
 
-    def get_library(self) -> List[Dict[str, Any]]:
+    def get_library(self) -> list[dict[str, Any]]:
         """Get all games in user's library with status info."""
         library = self.db.get_library()
 
@@ -215,7 +226,9 @@ class GameManager:
             return False, "No executable candidates stored for this game"
 
         if self.logger:
-            self.logger.game_start_request(game.name if game else f"Game {game_id}", game_id)
+            self.logger.game_start_request(
+                game.name if game else f"Game {game_id}", game_id
+            )
 
         return True, "Starting detection verification..."
 
@@ -236,7 +249,7 @@ class GameManager:
                 return True, "Game stopped"
             else:
                 return False, "Failed to stop game"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - report any stop failure to the UI
             return False, f"Error stopping game: {e}"
 
     def stop_all_games(self) -> int:
@@ -247,11 +260,11 @@ class GameManager:
         """
         return self.process_mgr.stop_all_processes()
 
-    def get_running_games(self) -> List[int]:
+    def get_running_games(self) -> list[int]:
         """Get list of running game IDs."""
         return self.process_mgr.get_running_games()
 
-    def get_icon_path(self, game_id: int, icon_hash: str) -> Optional[Path]:
+    def get_icon_path(self, game_id: int, icon_hash: str) -> Path | None:
         """Get or download game icon.
 
         Returns:
@@ -259,6 +272,6 @@ class GameManager:
         """
         return self.api.download_icon(game_id, icon_hash)
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """Get cache and library statistics."""
         return self.db.get_cache_stats()

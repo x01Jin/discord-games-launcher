@@ -4,7 +4,7 @@
 
 The Discord Games Launcher UI is built with PyQt6 and features a modern dark theme with proper list widgets for better organization and scalability.
 
-**Framework:** PyQt6>=6.9.0  
+**Framework:** PyQt6>=6.11.0  
 **Theme:** Dark mode with blue accent (#007acc)  
 **Components:** Main window with tabbed interface using QTreeWidget and QListWidget with custom widget items
 

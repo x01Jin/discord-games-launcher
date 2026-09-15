@@ -57,6 +57,7 @@ Download and install Discord from [discord.com](https://discord.com/download)
 │   └── icons\              # Downloaded game icons
 │       ├── 123_icon1_128.png
 │       └── 456_icon2_128.png
+├── logs\                   # Application logs (dcgl_YYYY-MM-DD.log, rotated at 10 MB)
 └── games\                  # Generated dummy executables
     ├── 123\               # Game ID directory
     │   └── game.exe       # Dummy executable

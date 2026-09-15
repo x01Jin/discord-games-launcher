@@ -6,8 +6,9 @@ __pycache__/
 build/
 dist/
 *.pyc
-
 dcgl.spec
-
 references/
 opencode.json
+.codegraph/
+information/
+.ignore

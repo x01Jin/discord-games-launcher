@@ -13,6 +13,7 @@ Technical documentation for developers working on or extending the launcher.
 - **[Database](./dev/database.md)** - SQLite schema, models, and database operations
 - **[UI](./dev/ui.md)** - PyQt6 UI components, theming, and interface design
 - **[Testing](./dev/testing.md)** - Test suite, running tests, and test coverage
+- **[Logging](./dev/logging.md)** - Logging system, log files, and rotation
 
 ### [User Documentation](./user/)
 
@@ -49,7 +50,7 @@ Discord Games Launcher is a Windows application that allows users to browse Disc
 
 ## Technology Stack
 
-- **Python 3.13+**
+- **Python 3.14.7+**
 - **PyQt6** - GUI framework
 - **SQLite** - Local database
 - **httpx** - HTTP client for Discord API
@@ -66,6 +67,7 @@ discord-games-launcher/
 │   ├── database.py    # SQLite database
 │   ├── dummy_generator.py  # Dummy exe generator
 │   ├── game_manager.py     # High-level game operations
+│   ├── logger.py           # Centralized logging
 │   └── process_manager.py  # Process lifecycle
 ├── ui/                # UI components
 │   ├── main_window.py # Main window

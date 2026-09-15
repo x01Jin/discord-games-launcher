@@ -4,12 +4,13 @@ Handles fetching and caching data from Discord's applications/detectable API.
 Uses httpx for modern HTTP handling with async support.
 """
 
-import httpx
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from launcher.database import Database
+from typing import Any
 
+import httpx
+
+from launcher.database import Database
 
 # Discord API endpoint for detectable applications
 DISCORD_API_URL = "https://discord.com/api/v10/applications/detectable"
@@ -18,8 +19,6 @@ DISCORD_CDN_URL = "https://cdn.discordapp.com/app-icons"
 
 class DiscordAPIError(Exception):
     """Raised when Discord API request fails."""
-
-    pass
 
 
 class DiscordAPIClient:
@@ -47,12 +46,12 @@ class DiscordAPIClient:
         try:
             games = self._fetch_all_games()
             self.db.save_games(games)
-            self.db.set_last_sync(datetime.now())
+            self.db.set_last_sync(datetime.now(timezone.utc))
             return True
         except DiscordAPIError as e:
             raise DiscordAPIError(f"Failed to sync cache: {e}")
 
-    def _fetch_all_games(self) -> List[Dict[str, Any]]:
+    def _fetch_all_games(self) -> list[dict[str, Any]]:
         """Fetch all detectable applications from Discord API."""
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -65,10 +64,11 @@ class DiscordAPIClient:
             raise DiscordAPIError(f"HTTP {e.response.status_code}: {e.response.text}")
         except httpx.RequestError as e:
             raise DiscordAPIError(f"Request failed: {e}")
-        except Exception as e:
+        # Translation boundary: any transport failure surfaces as DiscordAPIError.
+        except Exception as e:  # noqa: BLE001
             raise DiscordAPIError(f"Unexpected error: {e}")
 
-    async def _fetch_all_games_async(self) -> List[Dict[str, Any]]:
+    async def _fetch_all_games_async(self) -> list[dict[str, Any]]:
         """Async version of fetch_all_games."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
@@ -88,7 +88,7 @@ class DiscordAPIClient:
 
     def download_icon(
         self, game_id: int, icon_hash: str, size: int = 128
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Download and cache game icon.
 
         Returns:
@@ -112,7 +112,7 @@ class DiscordAPIClient:
 
     async def download_icon_async(
         self, game_id: int, icon_hash: str, size: int = 128
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Async version of download_icon."""
         icon_path = self.icons_dir / f"{game_id}_{icon_hash}_{size}.png"
 
@@ -132,8 +132,8 @@ class DiscordAPIClient:
 
     @staticmethod
     def get_best_win32_executables(
-        executables: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        executables: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Get all Windows executables sorted by smart scoring.
 
         Discord's executables array contains objects with:

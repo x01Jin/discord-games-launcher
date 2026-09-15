@@ -62,7 +62,7 @@ The launcher creates a process with the exact name Discord expects (e.g., `devil
 
     ```cmd
     python --version
-    # Should be 3.13 or higher
+    # Should be 3.14.7 or higher
     ```
 
 2. **Activate virtual environment**
@@ -88,7 +88,7 @@ The launcher creates a process with the exact name Discord expects (e.g., `devil
 **Error Messages:**
 
 - `ModuleNotFoundError`: Install missing package
-- `ImportError`: Check Python version (needs 3.13+)
+- `ImportError`: Check Python version (needs 3.14.7+)
 - `Permission denied`: Run as administrator or check antivirus
 
 ### Issue: "Add to Library" Fails
@@ -235,8 +235,8 @@ This shouldn't happen due to database constraints, but if it does:
 **Solutions:**
 
 1. **False positive**
-   - PyInstaller executables are commonly flagged
-   - The dummy executables are harmless (they only sleep)
+    - PyInstaller executables are commonly flagged
+    - The dummy executables are harmless (they run a PyQt6 event loop showing a small status window)
 
 2. **Add exceptions**
    - Add `%LOCALAPPDATA%\discord-games-launcher\` to exclusions
@@ -245,7 +245,7 @@ This shouldn't happen due to database constraints, but if it does:
 3. **Verify safety**
    - Check source code on GitHub
    - All code is open source and auditable
-   - Dummy template at `templates/dummy_template.py`
+    - Dummy template at `templates/dummy_game.py`
 
 **Note:** We can't prevent all antivirus false positives. This is a known limitation of PyInstaller.
 

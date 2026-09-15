@@ -7,14 +7,14 @@ Usage:
 
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from launcher.database import Database  # noqa: E402
+from launcher.database import Database
 
 
 def test_database_initialization():
@@ -294,7 +294,7 @@ def test_cache_sync():
         print("  Initial sync needed")
 
         # Set last sync
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         db.set_last_sync(now)
 
         # Should not need sync immediately
@@ -328,7 +328,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - runner must continue past failures
             print(f"  FAILED: {e}")
             import traceback
 

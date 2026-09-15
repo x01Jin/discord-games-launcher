@@ -14,18 +14,19 @@ and RENAMED for each game (matching the expected process name).
 """
 
 import sys
-from datetime import datetime
+from contextlib import suppress
+from datetime import datetime, timezone
 
 # Check if PyQt6 is available
 try:
-    from PyQt6.QtWidgets import (
-        QMainWindow,
-        QWidget,
-        QVBoxLayout,
-        QLabel,
-    )
     from PyQt6.QtCore import Qt, QTimer
     from PyQt6.QtGui import QFont
+    from PyQt6.QtWidgets import (
+        QLabel,
+        QMainWindow,
+        QVBoxLayout,
+        QWidget,
+    )
 
     HAS_GUI = True
 
@@ -35,7 +36,7 @@ try:
         def __init__(self, game_name: str):
             super().__init__()
             self.game_name = game_name
-            self.start_time = datetime.now()
+            self.start_time = datetime.now(timezone.utc)
             self._setup_ui()
             self._setup_timer()
 
@@ -45,8 +46,8 @@ try:
             self.setMinimumSize(480, 280)
             self.resize(480, 280)
 
-            # Apply dark title bar on Windows
-            try:
+            # Dark title bar is Windows-only; skip silently elsewhere.
+            with suppress(AttributeError, OSError):
                 import ctypes
 
                 hwnd = int(self.winId())
@@ -57,8 +58,6 @@ try:
                     ctypes.byref(ctypes.c_int(1)),
                     ctypes.sizeof(ctypes.c_int()),
                 )
-            except Exception:
-                pass  # Fallback on non-Windows or if API unavailable
 
             # Dark theme colors
             dark_bg = "#1e1e1e"
@@ -132,7 +131,7 @@ try:
 
         def _update_runtime(self):
             """Update runtime display."""
-            elapsed = datetime.now() - self.start_time
+            elapsed = datetime.now(timezone.utc) - self.start_time
             hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
             minutes, seconds = divmod(remainder, 60)
             self.runtime_label.setText(f"Runtime: {hours}:{minutes:02d}:{seconds:02d}")
