@@ -188,7 +188,7 @@ def test_sync_cache_logic():
                     {"os": "win32", "name": "test.exe", "is_launcher": False},
                     {"os": "win32", "name": "test_launcher.exe", "is_launcher": True},
                 ],
-                "icon": "icon123",
+                "icon_hash": "icon123",
                 "themes": ["action"],
                 "isPublished": True,
             },
@@ -199,7 +199,7 @@ def test_sync_cache_logic():
                 "executables": [
                     {"os": "win32", "name": "another.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },

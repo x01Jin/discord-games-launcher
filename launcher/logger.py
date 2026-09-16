@@ -84,32 +84,6 @@ class GameLauncherLogger:
         """Log critical message."""
         self.logger.critical(message)
 
-    # Game detection specific methods
-
-    def detection_start(self, game_name: str, game_id: int):
-        """Log start of game detection."""
-        self.info(f"Detection started for: {game_name} (ID: {game_id})")
-
-    def detection_success(self, game_name: str, exe_name: str, attempt: int):
-        """Log successful detection."""
-        self.info(f"Detection SUCCESS for {game_name}: {exe_name} (attempt {attempt})")
-
-    def detection_failed(self, game_name: str, exe_name: str, reason: str):
-        """Log failed detection attempt."""
-        self.warning(f"Detection FAILED for {game_name} with {exe_name}: {reason}")
-
-    def all_executables_failed(self, game_name: str, total_attempts: int):
-        """Log when all executables failed."""
-        self.error(
-            f"All executables FAILED for {game_name} after {total_attempts} attempts"
-        )
-
-    def retry_attempt(
-        self, game_name: str, exe_name: str, attempt_num: int, total: int
-    ):
-        """Log retry attempt."""
-        self.info(f"Retry {attempt_num}/{total} for {game_name}: trying {exe_name}")
-
     # Application lifecycle methods
 
     def app_start(self):

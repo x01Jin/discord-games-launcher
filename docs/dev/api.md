@@ -3,7 +3,7 @@
 ## Discord API Client
 
 **Module:** `launcher/api.py`
-**Class:** `DiscordAPIClient` (line 25)
+**Class:** `DiscordAPIClient`
 
 The API client handles all communication with Discord's applications API for fetching detectable games.
 
@@ -40,8 +40,6 @@ client = DiscordAPIClient(
 
 #### sync_cache()
 
-**Line:** 35
-
 Synchronizes the local cache with Discord API.
 
 ```python
@@ -69,8 +67,6 @@ except DiscordAPIError as e:
 
 #### _fetch_all_games()
 
-**Line:** 55
-
 Internal method to fetch all games from Discord API.
 
 ```python
@@ -84,8 +80,6 @@ def _fetch_all_games(self) -> List[Dict[str, Any]]
 **Rate Limiting:** The Discord API endpoint does not require authentication and has reasonable rate limits for this use case.
 
 #### get_icon_url()
-
-**Line:** 85
 
 Generates Discord CDN URL for a game icon.
 
@@ -110,8 +104,6 @@ url = client.get_icon_url(356869127241072640, "a0c9d2c4...", size=256)
 
 #### download_icon()
 
-**Line:** 89
-
 Downloads and caches a game icon locally.
 
 ```python
@@ -130,6 +122,8 @@ def download_icon(
 
 **Caching:** Icons are stored in `cache_dir/icons/{game_id}_{icon_hash}_{size}.png`
 
+**Note:** The frontend loads icons straight from the CDN (default size 64, see `frontend/src/shared/api-client/icons.ts`) and caches nothing locally; this backend cache (default size 128) exists for non-UI consumers and is pruned of uncached games during library repair.
+
 **Example:**
 
 ```python
@@ -139,8 +133,6 @@ if icon_path:
 ```
 
 #### get_best_win32_executables()
-
-**Line:** 146 (static method)
 
 Get all Windows executables sorted by smart scoring for intelligent selection.
 
@@ -193,8 +185,6 @@ Discord's detection is strict. A launcher executable may fail completely, while 
 
 #### normalize_process_name()
 
-**Line:** 181 (static method)
-
 Normalizes process names that may contain path separators. Returns only the filename for Discord detection.
 
 ```python
@@ -227,8 +217,6 @@ DiscordAPIClient.normalize_process_name("minecraft.exe")
 ## Exceptions
 
 ### DiscordAPIError
-
-**Line:** 19
 
 Raised when Discord API requests fail.
 
@@ -278,7 +266,7 @@ Discord API returns game objects with this structure:
       "os": "win32"
     }
   ],
-  "icon": "a0c9d2c4e6f8g0h2i4j6k8l0m2n4o6p8q0r2s4t6u8v0w2x4",
+  "icon_hash": "a0c9d2c4e6f8g0h2i4j6k8l0m2n4o6p8q0r2s4t6u8v0w2x4",
   "themes": ["action", "fps", "multiplayer"],
   "isPublished": true
 }
@@ -286,11 +274,11 @@ Discord API returns game objects with this structure:
 
 **Fields:**
 
-- `id` - Discord application ID (string, though treated as int internally)
+- `id` - Discord application ID (snowflake-scale integer; stored as INTEGER, serialized as a string on the bridge — see [Bridge](./bridge.md))
 - `name` - Display name of the game
 - `aliases` - Alternative names for the game
 - `executables` - List of executable configurations per platform
-- `icon` - Icon hash for CDN lookup
+- `icon_hash` - Icon hash for CDN lookup
 - `themes` - Game categories/tags
 - `isPublished` - Whether the game is published
 
@@ -332,13 +320,13 @@ client = DiscordAPIClient(db, cache_dir, timeout=30.0)
 try:
     # Sync cache
     was_synced = client.sync_cache(force=False)
-    
+
     # Get game info
     game = db.get_game(356869127241072640)
     if game and game.icon_hash:
         # Download icon
         icon_path = client.download_icon(game.id, game.icon_hash, size=128)
-        
+
     # Get all Windows executables sorted by score
     if game:
         exes = client.get_best_win32_executables(game.executables)
@@ -347,7 +335,7 @@ try:
             normalized = client.normalize_process_name(best_exe['name'])
             print(f"Best executable: {best_exe['name']}")
             print(f"Normalized name: {normalized}")
-            
+
 except DiscordAPIError as e:
     print(f"API error: {e}")
 ```

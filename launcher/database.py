@@ -87,7 +87,10 @@ class Database:
                 if not row:
                     return False
 
-                current_version = int(row[0])
+                try:
+                    current_version = int(str(row[0]).strip())
+                except (ValueError, TypeError):
+                    return False
                 if current_version != self.EXPECTED_SCHEMA_VERSION:
                     return False
 
@@ -121,11 +124,60 @@ class Database:
         except (sqlite3.Error, OSError, ValueError, TypeError):
             return False
 
-    def _init_db(self) -> None:
-        """Initialize database schema with validation and auto-recreate."""
-        schema_valid = self._validate_schema()
+    def _migrate_schema(self) -> bool:
+        """Upgrade an existing database toward the expected schema in place.
 
-        if not schema_valid:
+        Returns True when the database is fresh or was migrated (caller
+        proceeds to CREATE TABLEs); False when the on-disk state is
+        unrecognized, in which case the caller recreates as a last resort.
+        """
+        try:
+            with self._connect() as conn:
+                try:
+                    row = conn.execute(
+                        "SELECT value FROM cache_metadata WHERE key = 'schema_version'"
+                    ).fetchone()
+                except sqlite3.Error:
+                    row = None
+                current: int | None = None
+                if row is not None:
+                    try:
+                        current = int(str(row[0]).strip())
+                    except (ValueError, TypeError):
+                        current = None
+                if current is not None and current > self.EXPECTED_SCHEMA_VERSION:
+                    return False
+
+                # v1 -> v2: user_library gained executables columns.
+                try:
+                    cols = [
+                        r["name"]
+                        for r in conn.execute(
+                            "PRAGMA table_info(user_library)"
+                        ).fetchall()
+                    ]
+                except sqlite3.Error:
+                    cols = []
+                if cols:
+                    for column in ("executables", "normalized_process_name"):
+                        if column in cols:
+                            continue
+                        try:
+                            conn.execute(
+                                f"ALTER TABLE user_library ADD COLUMN {column} TEXT"
+                            )
+                        except sqlite3.OperationalError as e:
+                            # Lost a race or retried migration: the column
+                            # is there after all, anything else is fatal.
+                            if "duplicate column" not in str(e).lower():
+                                raise
+                return True
+        except (sqlite3.Error, OSError, ValueError, TypeError):
+            return False
+
+    def _init_db(self) -> None:
+        """Initialize database schema, migrating old versions in place."""
+        if not self._validate_schema() and not self._migrate_schema():
             if self.logger:
                 self.logger.database_recreate()
             if self.db_path.exists():
@@ -268,7 +320,7 @@ class Database:
                         game.get("name", ""),
                         json.dumps(game.get("aliases", [])),
                         json.dumps(game.get("executables", [])),
-                        game.get("icon"),
+                        game.get("icon_hash"),
                         json.dumps(game.get("themes", [])),
                         1 if game.get("isPublished", True) else 0,
                     ),
@@ -351,6 +403,18 @@ class Database:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM executable_history WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM user_library WHERE game_id = ?", (game_id,))
+
+    def get_library_ids(self) -> set[int]:
+        """Get IDs of all games in the user's library (no cache join)."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT game_id FROM user_library").fetchall()
+            return {row["game_id"] for row in rows}
+
+    def get_cached_game_ids(self) -> set[int]:
+        """Get IDs of all games currently in the cache."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT id FROM games_cache").fetchall()
+            return {row["id"] for row in rows}
 
     def get_library(self) -> list[dict[str, Any]]:
         """Get all games in user's library with full game info."""
@@ -532,9 +596,19 @@ class Database:
                 "SELECT COUNT(*) FROM executable_history"
             ).fetchone()[0]
 
+            # Count games with NO win32 executables
+            no_win_count = conn.execute(
+                """SELECT COUNT(*) FROM games_cache
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM json_each(executables)
+                       WHERE json_extract(value, '$.os') = 'win32'
+                   )"""
+            ).fetchone()[0]
+
             return {
                 "cached_games": games_count,
                 "library_games": library_count,
                 "running_processes": running_count,
                 "executable_history": history_count,
+                "games_no_win_exes": no_win_count,
             }

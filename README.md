@@ -1,6 +1,12 @@
+<div align="center">
+
 # Discord Games Launcher
 
+<img src="assets/dcgl.png" alt="Discord Games Launcher" width="256">
+
 A Windows application that creates dummy executables with GUI windows to trigger Discord's game detection. Browse Discord's supported games database, add them to your library, and launch dummy processes, making Discord show your "Playing" status.
+
+</div>
 
 ## What It Does
 

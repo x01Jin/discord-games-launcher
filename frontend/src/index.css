@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #14151c;
+  --color-card: #20222e;
+  --color-card-red: #38222a;
+  --color-peri: #8f93f5;
+  --color-peri-strong: #a5a8ff;
+  --color-muted: #9aa0b4;
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: #e8eaf2;
+  font-family: var(--font-sans);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Focus visibility for keyboard users */
+:where(button, a, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-peri-strong);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Card hover feedback */
+.game-card {
+  /* Skip off-screen cards during scroll (200-card grids stay smooth) */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 140px;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.game-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Truncation helper (titles truncate with full-text tooltip via title attr) */
+.truncate-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Subtle scrollbars for the game grids (only scrollers in the app) */
+.dcgl-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-gutter: stable;
+}
+.dcgl-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.dcgl-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dcgl-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+}
+.dcgl-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.dcgl-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+.dcgl-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .game-card:hover {
+    transform: none;
+  }
+}

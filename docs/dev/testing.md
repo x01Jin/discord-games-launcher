@@ -6,19 +6,23 @@ The Discord Games Launcher includes a comprehensive test suite using pytest.
 
 **Location:** `tests/`
 **Framework:** pytest>=9.1.1
-**Additional:** pytest-qt>=4.5.0, pytest-asyncio>=1.4.0
+**Additional:** pytest-asyncio>=1.4.0
 
 ## Test Structure
 
 ```structure
 tests/
-├── __init__.py
 ├── conftest.py              # Shared fixtures and configuration
 ├── README.md               # Test documentation (this file)
+├── test_api.py             # Discord API client tests
+├── test_bridge_ids.py      # Snowflake ID bridge serialization tests
 ├── test_database.py        # Database operation tests
-├── test_api.py             # API client tests
 ├── test_dummy_generator.py # Dummy executable tests
-└── test_integration.py     # End-to-end integration tests
+├── test_game_manager.py    # Game manager tests
+├── test_integration.py     # End-to-end integration tests
+├── test_migration.py       # Schema migration tests
+├── test_repair.py          # Library repair tests
+└── test_startup_cleanup.py # Startup cleanup tests
 ```
 
 ## Running Tests
@@ -26,22 +30,30 @@ tests/
 ### Run All Tests
 
 ```bash
-pytest tests/ -v
+pytest tests/ -q
+```
+
+On Windows with the project virtual environment:
+
+```cmd
+.venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
 ### Run Specific Test File
 
 ```bash
-pytest tests/test_database.py -v
-pytest tests/test_api.py -v
-pytest tests/test_dummy_generator.py -v
-pytest tests/test_integration.py -v
+pytest tests/test_database.py -q
+pytest tests/test_api.py -q
+pytest tests/test_dummy_generator.py -q
+pytest tests/test_integration.py -q
 ```
 
 ### Run with Coverage
 
+Coverage targets `launcher/` only (the React frontend in `frontend/src/` has no Python coverage):
+
 ```bash
-pytest tests/ -v --cov=launcher --cov=ui --cov-report=html
+pytest tests/ -q --cov=launcher --cov-report=html
 ```
 
 ### Run Directly with Python
@@ -61,202 +73,141 @@ Set to skip slow PyInstaller-based tests:
 ```bash
 # Windows
 set SKIP_PYINSTALLER_TESTS=True
-pytest tests/test_dummy_generator.py -v
+pytest tests/test_dummy_generator.py -q
 
 # Linux/macOS
 export SKIP_PYINSTALLER_TESTS=True
-pytest tests/test_dummy_generator.py -v
+pytest tests/test_dummy_generator.py -q
 ```
 
 ## Test Files
 
 ### test_database.py
 
-**Coverage:** Database operations, caching, library management
-
-**Key Tests:**
-
-- Database initialization and schema creation
-- Game caching (save, retrieve, search)
-- Library operations (add, remove, query)
-- Process tracking (PID storage, retrieval)
-- Cache sync tracking (last_sync, needs_sync)
-
-**Example:**
-
-```python
-def test_database_initialization(temp_db):
-    """Test database creates tables on init."""
-    stats = temp_db.get_cache_stats()
-    assert stats["cached_games"] == 0
-    assert stats["library_games"] == 0
-
-def test_save_and_retrieve_game(temp_db):
-    """Test saving and retrieving a game."""
-    game = {
-        "id": 123,
-        "name": "Test Game",
-        "aliases": ["Test", "TG"],
-        "executables": [{"os": "win32", "name": "test.exe"}],
-        "icon": "abc123",
-        "themes": ["action"],
-        "isPublished": True
-    }
-    temp_db.save_games([game])
-    
-    retrieved = temp_db.get_game(123)
-    assert retrieved.name == "Test Game"
-    assert retrieved.aliases == ["Test", "TG"]
-```
+**Coverage:** Database initialization, game caching, library operations, process tracking, executable history, cache sync tracking.
 
 ### test_api.py
 
-**Coverage:** Discord API client, HTTP operations, error handling
+**Coverage:** Discord API client initialization, executable scoring, process name normalization, icon URL generation, cache sync logic, error handling.
 
-**Key Tests:**
+### test_bridge_ids.py
 
-- API client initialization
-- Windows executable filtering
-- Process name normalization
-- Icon URL generation
-- Cache sync logic (with mocked responses)
-- Error handling (timeouts, HTTP errors)
-
-**Example:**
-
-```python
-def test_get_win32_executable():
-    """Test filtering Windows executables with smart scoring."""
-    executables = [
-        {"name": "_launcher.exe", "os": "win32", "is_launcher": True},
-        {"name": "_retail_/wow-64.exe", "os": "win32", "is_launcher": False},
-        {"name": "wow.exe", "os": "win32", "is_launcher": False},
-        {"name": "game.app", "os": "darwin", "is_launcher": False}
-    ]
-    
-    # Get all Windows executables sorted by score
-    win_exes = DiscordAPIClient.get_best_win32_executables(executables)
-    assert len(win_exes) == 3  # 3 Windows (not 4 total)
-    assert win_exes[0]["name"] == "wow.exe"  # Highest score (no launcher, no path, no underscore)
-    
-def test_normalize_process_name():
-    """Test process name normalization."""
-    assert DiscordAPIClient.normalize_process_name("path/game.exe") == "game.exe"
-    assert DiscordAPIClient.normalize_process_name("_retail_/wow-64.exe") == "wow-64.exe"
-    assert DiscordAPIClient.normalize_process_name("game.exe") == "game.exe"
-
-def test_icon_url_generation(api_client):
-    """Test icon URL generation."""
-    url = api_client.get_icon_url(12345, "icon_hash", size=128)
-    assert "cdn.discordapp.com" in url
-    assert "12345" in url
-    assert "icon_hash" in url
-    assert "size=128" in url
-```
+**Coverage:** Snowflake-scale game IDs crossing the JS bridge serialized as strings.
 
 ### test_dummy_generator.py
 
-**Coverage:** Dummy executable generation, PyInstaller integration
-
-**Key Tests:**
-
-- Generator initialization
-- Script template creation
-- Path calculations
-- Dummy removal
-- Template formatting
+**Coverage:** Copy-based dummy executable generation from the pre-built template.
 
 **Note:** Tests requiring PyInstaller are skipped if `SKIP_PYINSTALLER_TESTS=True`.
 
-**Example:**
+### test_game_manager.py
 
-```python
-def test_generator_initialization(temp_generator):
-    """Test generator creates output directory."""
-    assert temp_generator.output_dir.exists()
-
-def test_dummy_path_calculation(temp_generator):
-    """Test dummy path calculation."""
-    path = temp_generator.get_dummy_path(123, "game.exe")
-    assert path.name == "game.exe"
-    assert str(123) in str(path.parent)
-
-def test_script_template_creation(temp_generator):
-    """Test script template generation."""
-    script = temp_generator._create_dummy_script(
-        game_id=123,
-        game_name="Test Game",
-        process_name="test.exe"
-    )
-    assert script.exists()
-    content = script.read_text()
-    assert "Test Game" in content
-    assert "test.exe" in content
-```
+**Coverage:** High-level library management, game search and sync, process control.
 
 ### test_integration.py
 
-**Coverage:** End-to-end integration testing
+**Coverage:** Complete application stack working together in realistic workflows.
 
-**Key Tests:**
+### test_migration.py
 
-- Full application stack initialization
-- Game add → start → stop → remove flow
-- Multiple games running simultaneously
-- Error scenarios
+**Coverage:** Non-destructive schema migration without data loss.
 
-**Example:**
+### test_repair.py
 
-```python
-def test_full_game_lifecycle(integration_setup):
-    """Test complete game lifecycle."""
-    db, api, dummy_gen, process_mgr, game_mgr = integration_setup
-    
-    # 1. Sync games (mock API)
-    # 2. Add game to library
-    # 3. Start game
-    # 4. Verify running
-    # 5. Stop game
-    # 6. Remove from library
-```
+**Coverage:** Executable candidate refresh, library repair composition, generator ownership.
+
+### test_startup_cleanup.py
+
+**Coverage:** Startup reconciliation of stale runtime records, orphaned directories, missing executables, and orphaned icons.
 
 ## Fixtures (conftest.py)
 
-### temp_db
+### temp_dir
 
-Creates a temporary database for testing:
+Creates a temporary directory for test files:
 
 ```python
 @pytest.fixture
-def temp_db(tmp_path):
-    """Create a temporary database."""
-    db_path = tmp_path / "test.db"
-    return Database(db_path)
+def temp_dir():
+    """Create a temporary directory for test files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
 ```
 
-### temp_generator
+### database
 
-Creates a temporary dummy generator:
+Creates a test database in the temporary directory:
 
 ```python
 @pytest.fixture
-def temp_generator(tmp_path):
-    """Create a temporary dummy generator."""
-    output_dir = tmp_path / "games"
-    return DummyGenerator(output_dir)
+def database(temp_dir):
+    """Create a test database."""
+    db_path = temp_dir / "test.db"
+    return Database(db_path)
 ```
 
 ### api_client
 
-Creates an API client with mocked database:
+Creates a test API client backed by the test database:
 
 ```python
 @pytest.fixture
-def api_client(tmp_path):
-    """Create an API client for testing."""
-    db = Database(tmp_path / "test.db")
-    cache_dir = tmp_path / "cache"
-    return DiscordAPIClient(db, cache_dir)
+def api_client(database, temp_dir):
+    """Create a test API client."""
+    cache_dir = temp_dir / "cache"
+    return DiscordAPIClient(database, cache_dir)
+```
+
+### mock_template
+
+Creates a mock DummyGame.exe template file for testing:
+
+```python
+@pytest.fixture
+def mock_template(temp_dir):
+    """Create a mock DummyGame.exe template for testing."""
+    template_path = temp_dir / "DummyGame.exe"
+    template_path.write_bytes(b"MOCK_DUMMY_GAME_EXE_FOR_TESTING")
+    return template_path
+```
+
+### dummy_generator
+
+Creates a test dummy generator with the mock template:
+
+```python
+@pytest.fixture
+def dummy_generator(temp_dir, mock_template):
+    """Create a test dummy generator with mock template."""
+    games_dir = temp_dir / "games"
+    return DummyGenerator(games_dir, template_exe_path=mock_template)
+```
+
+### process_manager
+
+Creates a test process manager:
+
+```python
+@pytest.fixture
+def process_manager(database, dummy_generator):
+    """Create a test process manager."""
+    return ProcessManager(database, dummy_generator)
+```
+
+### game_manager
+
+Creates a test game manager with all components:
+
+```python
+@pytest.fixture
+def game_manager(database, api_client, dummy_generator, process_manager):
+    """Create a test game manager with all components."""
+    return GameManager(
+        database=database,
+        api_client=api_client,
+        dummy_generator=dummy_generator,
+        process_manager=process_manager,
+    )
 ```
 
 ## Test Data Helpers
@@ -273,7 +224,7 @@ def create_sample_game(game_id: int) -> Dict[str, Any]:
         "name": f"Test Game {game_id}",
         "aliases": [f"TG{game_id}"],
         "executables": [{"os": "win32", "name": f"game{game_id}.exe"}],
-        "icon": f"icon_{game_id}",
+        "icon_hash": f"icon_{game_id}",
         "themes": ["action"],
         "isPublished": True
     }
@@ -287,23 +238,23 @@ def create_sample_game(game_id: int) -> Dict[str, Any]:
 import json
 from unittest.mock import patch, MagicMock
 
-def test_api_sync_with_mock(temp_db, tmp_path):
+def test_api_sync_with_mock(database, temp_dir):
     """Test API sync with mocked response."""
     mock_games = [
         {"id": 1, "name": "Game 1", ...},
         {"id": 2, "name": "Game 2", ...}
     ]
-    
+
     with patch("httpx.Client.get") as mock_get:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_games
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
-        
-        api_client = DiscordAPIClient(temp_db, tmp_path / "cache")
+
+        api_client = DiscordAPIClient(database, temp_dir / "cache")
         api_client.sync_cache(force=True)
-        
-        stats = temp_db.get_cache_stats()
+
+        stats = database.get_cache_stats()
         assert stats["cached_games"] == 2
 ```
 
@@ -325,11 +276,11 @@ Use fixtures for automatic cleanup:
 
 ```python
 @pytest.fixture
-def temp_db(tmp_path):
-    db_path = tmp_path / "test.db"
+def database(temp_dir):
+    db_path = temp_dir / "test.db"
     db = Database(db_path)
     yield db
-    # Cleanup happens automatically when tmp_path is removed
+    # Cleanup happens automatically when temp_dir is removed
 ```
 
 ### 3. Test Error Cases
@@ -337,11 +288,11 @@ def temp_db(tmp_path):
 Always test failure scenarios:
 
 ```python
-def test_database_error_handling(temp_db):
+def test_database_error_handling(database):
     """Test handling of database errors."""
     # Test with invalid data
     with pytest.raises(Exception):
-        temp_db.save_games(None)
+        database.save_games(None)
 ```
 
 ### 4. Skip Slow Tests
@@ -355,9 +306,9 @@ import os
     os.environ.get("SKIP_PYINSTALLER_TESTS") == "True",
     reason="PyInstaller tests skipped"
 )
-def test_generate_dummy_executable(temp_generator):
+def test_generate_dummy_executable(dummy_generator):
     """Test actual dummy generation (slow)."""
-    result = temp_generator.generate_dummy(123, "Test", "test.exe")
+    result = dummy_generator.generate_dummy(123, "Test", "test.exe")
     assert result[0].exists()
 ```
 
@@ -374,24 +325,24 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.14'
-      
+          python-version: "3.14"
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install pytest pytest-cov
-      
+
       - name: Run tests (fast)
         run: |
           set SKIP_PYINSTALLER_TESTS=True
-          pytest tests/ -v --cov=launcher
-      
+          pytest tests/ -q --cov=launcher
+
       - name: Run full tests
-        run: pytest tests/ -v
+        run: pytest tests/ -q
 ```
 
 ## Debugging Tests
@@ -411,7 +362,7 @@ pytest tests/ -x
 ### Debug a Specific Test
 
 ```bash
-pytest tests/test_database.py::test_save_and_retrieve_game -v --pdb
+pytest tests/test_database.py::test_games_cache -v --pdb
 ```
 
 ### Show Local Variables on Failure
@@ -425,18 +376,16 @@ pytest tests/ --showlocals
 **Target Coverage:**
 
 - launcher/ modules: 80%+
-- ui/ modules: 60%+
 - Overall: 75%+
 
 **Exclusions:**
 
 - PyInstaller build artifacts
-- Auto-generated UI code
 - Debug print statements
 
 Generate coverage report:
 
 ```bash
-pytest tests/ --cov=launcher --cov=ui --cov-report=html
+pytest tests/ -q --cov=launcher --cov-report=html
 # Open htmlcov/index.html in browser
 ```

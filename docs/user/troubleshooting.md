@@ -1,366 +1,164 @@
 # Troubleshooting Guide
 
-## Common Issues and Solutions
+## Discord Status Not Showing
 
-### Issue: Discord Status Not Showing
+**Problem:** you started a game but Discord does not show "Playing".
 
-**Problem:** Started a game but Discord doesn't show "Playing" status.
+**Good to know:** the launcher cannot check what Discord sees. It opens a game window that Discord should notice — whether Discord picks it up depends on Discord's settings.
 
-**Important:** The launcher CANNOT verify Discord detection. It only creates a process that Discord should detect. Whether Discord actually detects it depends on Discord's settings and behavior.
+**Things to try, in order:**
 
-**Solutions:**
-
-1. **Check Discord is running**
+1. **Make sure Discord is running**
    - Discord must be open and logged in
-   - Use Discord desktop app (web version won't work)
-   - Try running Discord as Administrator
+   - Use the Discord desktop app (the website cannot show game activity)
+   - Try running Discord as administrator (right-click its icon → Run as administrator)
 
-2. **Check Discord settings (CRITICAL)**
-   - Discord Settings > Activity Privacy
-   - Ensure "Display current activity as a status message" is ON
-   - This is the most common reason for detection failure
+2. **Check one Discord setting (most common cause)**
+   - Open Discord Settings → Activity Privacy
+   - Turn **Display current activity as a status message** ON
 
-3. **Wait for Discord's scan cycle**
-   - Discord scans for processes every 15-30 seconds
-   - Wait at least 30-60 seconds after starting a game
-   - Status may not appear immediately
+3. **Wait a little**
+   - Discord looks for games roughly every 15-30 seconds
+   - Wait 30-60 seconds after starting a game
 
-4. **Verify process is running**
-   - Check launcher shows "Running" status
-   - Open Task Manager and look for the process
-   - Process name should match the game executable (e.g., `devilmaycry5.exe`)
+4. **Check the game is really running**
+   - The launcher should show it as Running
+   - In Task Manager, look for the game's process name (shown on its library card)
 
 5. **Restart Discord**
-   - Close Discord completely (exit from system tray)
-   - Reopen Discord
-   - Wait for it to fully load
-   - Check if status appears
+   - Close Discord fully (right-click its tray icon → Quit)
+   - Open it again, wait until it finishes loading, and check your status
 
 6. **Try a different game**
-   - Some games have better detection than others
-   - Popular games (Minecraft, VALORANT, League of Legends) usually work well
-   - Test with a known working game first
+   - Popular games (Minecraft, VALORANT, League of Legends) are usually noticed quickly
+   - Test with one of those first
 
-**Understanding the Detection Process:**
+**If it still does not show:**
 
-The launcher creates a process with the exact name Discord expects (e.g., `devilmaycry5.exe`). Discord independently scans running processes and matches them against its database. The launcher has no way to verify if Discord detected the game - it can only verify the process is running.
+- The game might not be one Discord recognizes
+- Your security software might be hiding processes from Discord
+- Discord might need to run as administrator
 
-**If Discord still doesn't detect:**
+## Launcher Won't Start
 
-- The game might not be in Discord's detectable games database
-- Discord might have bugs with specific games
-- Windows security software might be blocking Discord from seeing processes
-- Discord might need elevated permissions (run as Administrator)
+**Problem:** double-clicking `dcgl.exe` does nothing or shows an error.
 
-### Issue: Launcher Won't Start
+**Things to try:**
 
-**Problem:** Running `python main.py` fails or shows errors.
+1. **Restart your PC** and try again
+2. **Check your antivirus** — it may be blocking the app. Allow `dcgl.exe` and the folder `%LOCALAPPDATA%\discord-games-launcher\`
+3. **Re-download** the latest `dcgl.exe` from GitHub Releases — your copy may be damaged
+4. **Check Windows is up to date** — the app needs Windows 10/11 (64-bit)
 
-**Solutions:**
+## Cannot Add a Game to the Library
 
-1. **Check Python version**
+**Problem:** pressing "Add to Library" shows an error or nothing happens.
 
-    ```cmd
-    python --version
-    # Should be 3.14.7 or higher
-    ```
+**Things to try:**
 
-2. **Activate virtual environment**
+1. **The game may have no Windows version** — some games are Mac or Linux only, and those cannot be added. Try another game
+2. **Check disk space** — you need at least 50 MB free
+3. **Check your antivirus** — it may have removed the game's files. Allow the folder `%LOCALAPPDATA%\discord-games-launcher\`, then remove the game from your library and add it again
 
-   ```cmd
-   .venv\Scripts\activate
-   python main.py
-   ```
+## Game Won't Start
 
-3. **Reinstall dependencies**
+**Problem:** you try to start a game but it stays Stopped.
 
-   ```cmd
-   pip install -r requirements.txt --force-reinstall
-   ```
+**Things to try:**
 
-4. **Check for missing modules**
+1. **Press Stop All**, then try starting the game again
+2. **Re-add the game** — remove it from your library and add it back, which recreates its files
+3. **Check Task Manager** for a stuck copy of the game already running, and end it
+4. **Check your antivirus** — it may be deleting the game's files as soon as they are created
 
-   ```cmd
-   pip list
-   # Should show: PyQt6, httpx, platformdirs, pyinstaller, psutil
-   ```
+## Sync Catalogue Fails
 
-**Error Messages:**
+**Problem:** the **Sync catalogue** button fails or takes very long.
 
-- `ModuleNotFoundError`: Install missing package
-- `ImportError`: Check Python version (needs 3.14.7+)
-- `Permission denied`: Run as administrator or check antivirus
+**Things to try:**
 
-### Issue: "Add to Library" Fails
+1. **Check your internet connection**
+2. **Try again in 5-10 minutes** — Discord may be temporarily down
+3. **Keep using the app** — it works fine with the games it already saved; sync again later
+4. **Try another network** — some office or school networks block Discord (try your phone hotspot)
 
-**Problem:** Clicking "Add to Library" shows an error or doesn't work.
+## App Feels Slow or Heavy
 
-**Solutions:**
+Each running game uses about 10-20 MB of memory for its little window. If things feel heavy:
 
-1. **Check game has Windows executable**
-   - Some games are macOS/Linux only
-   - Game row shows available executables
-   - Look for "win32" in the list
+1. Stop games you are not showing — or press **Stop All**
+2. The launcher itself should use almost no CPU when idle
 
-2. **Check dummy template is available**
-   - The launcher uses a pre-built template for instant game addition
-   - Template must be in `templates/dist/DummyGame.exe`
-   - If template is missing, games cannot be added
+Normal usage looks like this:
 
-3. **Check disk space**
-   - Need at least 50 MB free
-   - Each dummy executable is ~2 MB
+- Launcher: about 50-100 MB of memory, almost no CPU
+- Each running game: about 10-20 MB of memory, almost no CPU
 
-4. **Check antivirus**
-   - Antivirus may flag the template executable as a false positive
-   - Add exception for `%LOCALAPPDATA%\discord-games-launcher\` and project directory
+## Same Game Twice in the Library
 
--- **Error: "No Windows executable found"** --
+This should not happen, but if it does: remove the extra copy from your library. If problems persist, do a **Full Reset** (below) and add your games again.
 
-- This game doesn't have a Windows version in Discord's database
-- Try a different game
-- Some indie games may not be supported
+## Antivirus Warnings
 
-### Issue: Games Not Starting
+Your antivirus may flag the launcher or its game windows. This is a false alarm — each game window only shows the game name and a timer, nothing harmful.
 
-**Problem:** Click "Start" but game shows as "Stopped".
-
-**Solutions:**
-
-1. **Check executable exists**
-   - May have been deleted by antivirus
-   - Remove and re-add the game
-   - Check path: `%LOCALAPPDATA%\discord-games-launcher\games\{game_id}\`
-
-2. **Check process isn't already running**
-   - Open Task Manager
-   - Look for existing process with same name
-   - Kill existing process if found
-
-3. **Try "Stop All" then restart**
-   - Click "Stop All" in library tab
-   - Try starting the game again
-
-4. **Regenerate executable**
-   - Remove game from library
-   - Add it back (generates fresh executable)
-   - Try starting again
-
-**Check Windows Event Viewer:**
-
-- If executable crashes repeatedly
-- Look for application errors
-- May indicate PyInstaller issues
-
-### Issue: Sync Fails or Times Out
-
-**Problem:** "Sync Games" button fails or takes too long.
-
-**Solutions:**
-
-1. **Check internet connection**
-
-   ```cmd
-   curl https://discord.com/api/v10/applications/detectable
-   # Should return JSON data
-   ```
-
-2. **Try again later**
-   - Discord API may be temporarily down
-   - Try again in 5-10 minutes
-
-3. **Use cached data**
-   - Launcher works with cached data
-   - You can still browse and add cached games
-   - Sync again later when connection is better
-
-4. **Check firewall/proxy**
-   - Some corporate networks block Discord API
-   - Try on different network (home/mobile hotspot)
-
-### Issue: High CPU/Memory Usage
-
-**Problem:** Launcher or dummy processes using too many resources.
-
-**Solutions:**
-
-1. **Check number of running games**
-   - Each dummy process uses ~1-2 MB RAM
-   - Stop games you're not actively displaying
-   - Use "Stop All" button
-
-2. **Launcher CPU usage**
-   - Should be near 0% when idle
-   - Periodic updates every 5 seconds
-   - Check if refresh timer is stuck
-
-3. **Game addition**
-   - Copying template is instant (low CPU usage)
-   - Should complete immediately
-   - No compilation needed
-
-**Normal Resource Usage:**
-
-- Launcher: ~50-100 MB RAM, <1% CPU
-- Each dummy: ~10-20 MB RAM, 0% CPU (sleeping)
-
-### Issue: Duplicate Games in Library
-
-**Problem:** Same game appears multiple times in library.
-
-**Solution:**
-This shouldn't happen due to database constraints, but if it does:
-
-1. **Remove duplicates**
-   - Click "Remove" on duplicate entries
-   - Each game ID should only appear once
-
-2. **Check database integrity**
-
-   ```cmd
-   # Advanced users only
-   sqlite3 %LOCALAPPDATA%\discord-games-launcher\launcher.db
-   .tables
-   SELECT * FROM user_library;
-   ```
-
-3. **Reset database (last resort)**
-   - Delete data directory (loses all data)
-   - Re-add games after restart
-
-### Issue: Antivirus Blocks Launcher
-
-**Problem:** Antivirus flags the launcher or dummy executables.
-
-**Solutions:**
-
-1. **False positive**
-    - PyInstaller executables are commonly flagged
-    - The dummy executables are harmless (they run a PyQt6 event loop showing a small status window)
-
-2. **Add exceptions**
-   - Add `%LOCALAPPDATA%\discord-games-launcher\` to exclusions
-   - Add launcher project directory to exclusions
-
-3. **Verify safety**
-   - Check source code on GitHub
-   - All code is open source and auditable
-    - Dummy template at `templates/dummy_game.py`
-
-**Note:** We can't prevent all antivirus false positives. This is a known limitation of PyInstaller.
+- Allow the folder `%LOCALAPPDATA%\discord-games-launcher\` in your antivirus settings
+- All of the app's code is open source, so anyone can inspect it
 
 ## Error Messages
 
 ### "Game not found in cache"
 
-**Cause:** Game ID doesn't exist in database
-
-**Fix:** Sync games or search for the game again
+Press **Sync catalogue** first to download the game list. If it still fails, press **Repair** in the My Library toolbar.
 
 ### "Game is already in library"
 
-**Cause:** Trying to add a game that's already added
+It is already there — check your **My Library** tab.
 
-**Fix:** Check your library tab, it's already there
+### "Game is not in library"
+
+Its saved info is out of date — press **Repair** in the My Library toolbar.
 
 ### "No Windows executable found"
 
-**Cause:** Game doesn't have Windows support in Discord's database
-
-**Fix:** Try a different game, some are macOS/Linux only
+That game has no Windows version in Discord's list. Try a different game.
 
 ### "Executable not found"
 
-**Cause:** Dummy executable was deleted or moved
-
-**Fix:** Remove game from library and re-add it
+Its files were deleted or moved. Press **Repair** in the My Library toolbar (it recreates missing files), or remove the game and add it again.
 
 ### "Failed to start game"
 
-**Cause:** Various (see specific error)
-
-**Fix:** Check process isn't running, regenerate executable, check antivirus
+Make sure the game is not already running, then re-add it and check your antivirus.
 
 ### "Sync failed"
 
-**Cause:** Network error or Discord API issue
+Check your internet, try again later — the app keeps working with its saved games meanwhile.
 
-**Fix:** Check internet, try again later, use cached data
-
-## Recovery Procedures
-
-### Reset Cache Only
-
-Removes cached games but keeps library:
-
-```python
-# Run in Python
-from pathlib import Path
-from platformdirs import user_data_dir
-import sqlite3
-
-db_path = Path(user_data_dir("discord-games-launcher", appauthor=False)) / "launcher.db"
-with sqlite3.connect(db_path) as conn:
-    conn.execute("DELETE FROM games_cache")
-    conn.execute("DELETE FROM cache_metadata")
-```
+## Starting Over
 
 ### Full Reset
 
-Complete reset (loses everything):
+Erases everything (your library included) and starts fresh:
 
 ```cmd
-# Delete data directory
 rmdir /s "%LOCALAPPDATA%\discord-games-launcher"
-
-# Restart launcher - will recreate everything
-python main.py
 ```
 
-### Repair Installation
-
-Reinstall without losing data:
-
-```cmd
-.venv\Scripts\activate
-pip install -r requirements.txt --force-reinstall
-python main.py
-```
+Then start the app again — it sets everything up like new.
 
 ## Getting More Help
 
-### Collect Information
+When asking for help, include:
 
-When reporting issues, include:
+1. **What went wrong** — the exact message or a screenshot
+2. **What you did** — the steps before it happened
+3. **Your setup** — Windows version and Discord app version
+4. **Log file** — from `%LOCALAPPDATA%\discord-games-launcher\logs\` (pick the file with today's date)
 
-1. **Error message** - Exact text or screenshot
-2. **Steps to reproduce** - What you did before error
-3. **Python version** - `python --version`
-4. **OS version** - Windows 10/11, build number
-5. **Discord version** - Desktop app version
-6. **Logs** - Application logs from:
-   - Run with verbose output: `python main.py 2>&1 | tee launcher.log`
+**Where to ask:**
 
-### Debug Mode
+1. **GitHub Issues** — file an issue describing the problem
+2. **Community Discord** — link in README
 
-Run with verbose output:
-
-```cmd
-python main.py 2>&1 | tee launcher.log
-```
-
-### Contact Support
-
-1. **GitHub Issues** - File an issue with bug report template
-2. **Discord Server** - Join community server (link in README)
-3. **Email** - Contact maintainers (if listed in README)
-
-### Check Documentation
-
-- [Installation Guide](./installation.md) - Setup issues
-- [Getting Started](./getting-started.md) - Usage questions
-- [Features](./features.md) - What the launcher can do
-
----
-
-**Still stuck?** Don't hesitate to ask for help! The community is here to assist.
+**Still stuck?** Don't hesitate to ask — the community is happy to help!

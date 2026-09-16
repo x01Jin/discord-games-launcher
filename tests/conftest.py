@@ -53,9 +53,9 @@ def dummy_generator(temp_dir, mock_template):
 
 
 @pytest.fixture
-def process_manager(database):
+def process_manager(database, dummy_generator):
     """Create a test process manager."""
-    return ProcessManager(database)
+    return ProcessManager(database, dummy_generator)
 
 
 @pytest.fixture

@@ -2,76 +2,75 @@
 
 ## Overview
 
-Discord Games Launcher follows a layered architecture with clear separation of concerns:
+Discord Games Launcher is a Python backend with a React frontend,
+glued by a pywebview bridge:
 
 ```flow
-UI Layer (PyQt6)
-├── MainWindow
-├── BrowserTab (QTreeWidget)
-└── LibraryTab (QListWidget)
-       │
-       ▼
+React Frontend (frontend/src)
+├── Catalogue module (browse, search, add)
+├── Library module (manage, repair)
+└── Shared shell (header, tabs, footer, toasts)
+        │  window.pywebview.api (string-ID JSON contract)
+        ▼
+Bridge (launcher/bridge.py)
+        │
+        ▼
 Game Manager (Coordinator)
-       │
-   ┌───┴───┐
-   ▼       ▼
+        │
+    ┌───┴───┐
+    ▼       ▼
 API Client    Database    Process Manager
-(Discord API) (SQLite)    (psutil)
+(Discord API) (SQLite)    (PID cache + psutil verification)
      │           │           │
      ▼           ▼           ▼
 HTTP (httpx)  Local Cache Dummy Generator
-Discord API   User Library (Copy-based template)
+Discord API   User Library (single shared instance)
 ```
 
 ## Components
 
-### 1. UI Layer
+### 1. Frontend
 
-**Location:** `ui/`
+**Location:** `frontend/src/` (built to `frontend-dist/`, served by pywebview)
 
-The user interface is built with PyQt6 and features a modern dark theme.
+React + Vite + Tailwind. Catalogue and library features live in
+self-contained modules (components, hooks, services); shared shell,
+API client, store, and hooks live in `shared/`. See [UI](./ui.md).
 
-**Files:**
+### 2. Bridge
 
-- `main_window.py` - Main application window with tabbed interface
-- `browser_tab.py` - Game browser using QTreeWidget with columns (Name, Executables, Status)
-- `library_tab.py` - Library management using QListWidget with status indicators
+**Location:** `launcher/bridge.py`
 
-**Key Responsibilities:**
+The only frontend-facing surface. Exposes catalogue, library, process,
+stats, sync, and repair methods over `window.pywebview.api`, and emits
+a `library_changed` event on state changes. Game IDs cross as strings;
+inputs are strictly validated. See [Bridge](./bridge.md).
 
-- Display game database in tree view with sorting/filtering
-- Display user library with status indicators
-- Handle user interactions (search, add, start, stop, remove)
-- Apply consistent dark theme styling
-- Support context menus for quick actions
-- Periodic status updates (every 5 seconds)
-
-**UI Features:**
-
-- **Browser Tab:** QTreeWidget with 3 columns (Game name + aliases, Executables, Status)
-- **Library Tab:** QListWidget showing game name, process name, and running status
-- **Context Menus:** Right-click for quick actions (Start/Stop/Remove)
-- **Double-click:** Toggle start/stop in library
-- **Multi-select:** Add multiple games at once from browser
-- **Instant Addition:** Games are added instantly (no compilation queue)
-
-### 2. Game Manager
+### 3. Game Manager
 
 **Location:** `launcher/game_manager.py`
 
-Central coordinator providing high-level interface for all game operations.
+Central coordinator providing the high-level interface for all game
+operations.
 
 **Key Methods:**
 
-- `sync_games()` - Sync with Discord API
+- `sync_games()` - Sync with Discord API, then refresh library candidates
 - `search_games()` - Search cached games
 - `add_to_library()` - Add game by copying dummy template (instant)
 - `remove_from_library()` - Remove game, stop process, cleanup files
-- `start_game()` - Launch dummy process with game name argument
-- `stop_game()` - Terminate process and all children
-- `stop_all_games()` - Stop all running processes
+- `start_game()` - Validate and launch the best stored executable at once (no detection step, no waiting)
+- `stop_game()` / `stop_all_games()` - Terminate processes
+- `startup_cleanup()` - Boot/on-demand reconciliation of files vs database
+- `refresh_library_candidates()` - Refresh stored executables from cache
+- `repair_library()` - Full cleanup plus candidate refresh
 
-### 3. API Client
+(Batch adds are handled by `Bridge.add_many()` in `launcher/bridge.py`, which loops over `GameManager.add_to_library()`.)
+
+Library repair and data-freshness mechanics are documented in
+[Library Maintenance](./library-maintenance.md).
+
+### 4. API Client
 
 **Location:** `launcher/api.py`
 
@@ -85,7 +84,7 @@ Handles communication with Discord's applications API.
 - Filters Windows executables
 - Normalizes process names (handles paths like `_retail_/wow.exe`)
 
-### 4. Database
+### 5. Database
 
 **Location:** `launcher/database.py`
 
@@ -94,15 +93,22 @@ SQLite database for local caching and user data persistence.
 **Tables:**
 
 - `games_cache` - Cached Discord API game data
-- `user_library` - User's game library
+- `user_library` - User's game library (executable candidates included)
+- `executable_history` - Detection attempt success/failure per executable
 - `running_processes` - Active process tracking
-- `cache_metadata` - Sync timestamps
+- `cache_metadata` - Sync timestamps and schema version
 
-### 5. Dummy Generator
+Opening an older database migrates it in place (new columns are added,
+rows preserved); only an unrecognized newer schema falls back to
+recreate. See [Database](./database.md).
+
+### 6. Dummy Generator
 
 **Location:** `launcher/dummy_generator.py`
 
-Manages dummy executables by copying a pre-built template. This approach is inspired by the reference project's simple and efficient design.
+Manages dummy executables by copying a pre-built template. Exactly one
+instance exists per process: it is constructed in `main.py` and shared
+by the game manager and the process manager (constructor injection).
 
 **How It Works:**
 
@@ -117,7 +123,7 @@ Discord's detection database stores executable names that may include relative f
 - For `devil may cry 5/devilmaycry5.exe`:
   - Creates folder: `games/<game_id>/devil may cry 5/`
   - Creates exe: `devilmaycry5.exe` inside that folder
-- Discord matches the running process by checking if its full path ends with the expected pattern
+- The on-disk layout mirrors the API names so the copied dummy keeps the expected relative path
 
 **Key Features:**
 
@@ -140,7 +146,7 @@ python templates/build_dummy.py
 
 This creates `templates/dist/DummyGame.exe` which is then copied for each game.
 
-### 6. Process Manager
+### 7. Process Manager
 
 **Location:** `launcher/process_manager.py`
 
@@ -151,28 +157,17 @@ Manages lifecycle of dummy game processes.
 - Starts processes with game name as argument
 - Tracks PIDs in database with verification
 - **Duplicate prevention:** Verifies existing processes before starting new ones
-- **Process verification:** Checks executable path to ensure correct game association
+- **Process verification:** Matches the executable path by exact path
+  segment, so game `22` never verifies against `.../222/...`
 - **Recursive termination:** Kills child processes before parent
 - Stale process detection and cleanup
 
-**Thread Management:**
+**Direct Start:**
 
-The Process Manager uses PyQt6's QThread with a worker object pattern for game detection:
-
-```python
-# Worker object pattern - proper cleanup sequence
-thread = QThread()
-worker = DetectionWorker(...)
-worker.moveToThread(thread)
-
-# Signal connections for safe cleanup:
-thread.started.connect(worker.run)      # Start worker when thread starts
-worker.finished.connect(thread.quit)    # Request thread quit when worker done
-thread.finished.connect(worker.deleteLater)  # Delete worker after thread stops
-thread.finished.connect(thread.deleteLater)  # Delete thread after it stops
-```
-
-**Critical:** Worker and thread deletion must be handled via `deleteLater()` connected to `thread.finished`, not `worker.finished`. This ensures the thread has actually stopped before Qt cleans up objects, preventing "QThread: Destroyed while thread is still running" crashes.
+Starting a game launches the best stored executable candidate at once
+and returns: no detection step, no waiting, no background threads.
+Discord picks up the running process on its own scan cycle. The single
+start outcome is recorded in `executable_history` for the stats count.
 
 **Process Launch:**
 
@@ -247,7 +242,10 @@ User clicks "Add to Library"
 ### Starting a Game
 
 ```flow
-User clicks "Start"
+User double-clicks a library game
+         │
+         ▼
+Bridge.start_game() (validates ID, rejects games already running)
          │
          ▼
 ┌─────────────────────┐
@@ -260,16 +258,9 @@ User clicks "Start"
 └─────────────────────┘
          │
          ▼
-┌─────────────────────┐
-│ DetectionWorker     │
-│ (QThread) tries     │
-│ each executable     │
-│ candidate, verifies │
-│ the PID, waits for  │
-│ Discord's scan      │
-└─────────────────────┘
-         │
-         ▼
+Game starts at once: the best stored executable is launched,
+the outcome is recorded, and the UI updates via a single
+`library_changed` event. No waiting, no retries.
 ┌─────────────────────┐
 │   Dummy Process     │
 │ (DummyGame Window)  │
@@ -289,16 +280,18 @@ Shows "Playing [Game]"
 discord-games-launcher/
 ├── launcher/           # Core business logic
 │   ├── api.py         # Discord API client
-│   ├── database.py    # SQLite operations
+│   ├── bridge.py      # pywebview frontend contract
+│   ├── database.py    # SQLite operations (+ migration)
 │   ├── dummy_generator.py  # Copy-based dummy management
-│   ├── game_manager.py     # High-level coordinator
+│   ├── game_manager.py     # High-level coordinator (+ repair)
 │   ├── logger.py           # Centralized logging
-│   └── process_manager.py  # Process lifecycle
+│   └── process_manager.py  # Process lifecycle + detection
 │
-├── ui/                 # PyQt6 user interface
-│   ├── main_window.py # Main window
-│   ├── browser_tab.py # Game browser
-│   └── library_tab.py # Library management
+├── frontend/           # React UI (Vite + Tailwind)
+│   └── src/
+│       ├── modules/   # catalogue, library
+│       └── shared/    # api-client, components, hooks, store
+├── frontend-dist/      # Built frontend served by pywebview
 │
 ├── templates/          # Dummy executable template
 │   ├── dummy_game.py      # Template source code
@@ -308,12 +301,17 @@ discord-games-launcher/
 │
 ├── tests/              # Test suite
 │   ├── test_api.py
+│   ├── test_bridge_ids.py
 │   ├── test_database.py
 │   ├── test_dummy_generator.py
-│   └── test_integration.py
+│   ├── test_game_manager.py
+│   ├── test_integration.py
+│   ├── test_migration.py
+│   ├── test_repair.py
+│   └── test_startup_cleanup.py
 │
 ├── docs/               # Documentation
-├── main.py            # Entry point
+├── main.py            # Entry point (pywebview window)
 └── requirements.txt   # Dependencies
 ```
 
@@ -342,6 +340,12 @@ The game name is passed to the dummy process at launch time, not embedded in the
 - The window title matches the game name
 - The user sees what game is "running"
 
+### String Game IDs on the Wire
+
+Discord IDs are snowflake-scale integers that JavaScript numbers cannot
+represent exactly, so the bridge serializes every game ID as a string
+and validates every inbound ID strictly. See [Bridge](./bridge.md).
+
 ### Process Tracking
 
 We track running processes in the database and verify them on each check:
@@ -349,3 +353,4 @@ We track running processes in the database and verify them on each check:
 - Prevents duplicate processes
 - Detects when processes exit unexpectedly
 - Cleans up stale records automatically
+- Path verification matches exact segments, immune to PID recycling

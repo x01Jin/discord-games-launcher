@@ -5,13 +5,11 @@
 The Discord Games Launcher uses SQLite for local data persistence. The database handles caching of Discord API data, user library management, and process tracking.
 
 **Module:** `launcher/database.py`
-**Class:** `Database` (line 39)
+**Class:** `Database`
 
 ## Data Models
 
 ### Game
-
-**Line:** 15
 
 Represents a Discord-supported game from the API.
 
@@ -41,8 +39,6 @@ class Game:
 
 ### LibraryGame
 
-**Line:** 29
-
 Represents a game in the user's library with full executable tracking.
 
 ```python
@@ -65,9 +61,9 @@ class LibraryGame:
 - `executables` - All Windows executable candidates for smart retry
 - `added_at` - When added to library
 
-### ExecutableHistory
+Both name columns store the filename only (e.g. `wow-64.exe`); the full API path (e.g. `_retail_/wow-64.exe`) is used only when copying the dummy file so the on-disk layout mirrors it.
 
-**Line:** 41
+### ExecutableHistory
 
 Tracks executable attempt success/failure for smart selection.
 
@@ -202,7 +198,7 @@ CREATE TABLE cache_metadata (
 **Used for:**
 
 - `last_sync` - ISO format timestamp of last API sync
-- `schema_version` - Expected database schema version (recreates the database on mismatch)
+- `schema_version` - Expected database schema version (older databases are migrated in place; only an unrecognized newer schema falls back to recreate)
 
 ## Database Class
 
@@ -224,8 +220,6 @@ db = Database(db_path: Path, logger=None)
 
 ### Connection Management
 
-**Line:** 47
-
 Uses context manager for safe connections:
 
 ```python
@@ -244,8 +238,6 @@ def _connect(self):
 
 #### get_last_sync()
 
-**Line:** 113
-
 ```python
 def get_last_sync(self) -> datetime | None
 ```
@@ -254,8 +246,6 @@ Returns timestamp of last API sync, or None if never synced. Timestamps are time
 
 #### set_last_sync()
 
-**Line:** 123
-
 ```python
 def set_last_sync(self, timestamp: datetime) -> None
 ```
@@ -263,8 +253,6 @@ def set_last_sync(self, timestamp: datetime) -> None
 Updates the last sync timestamp in metadata.
 
 #### needs_sync()
-
-**Line:** 135
 
 ```python
 def needs_sync(self, max_age_days: int = 7) -> bool
@@ -282,8 +270,6 @@ Checks if cache needs refreshing based on age.
 
 #### save_games()
 
-**Line:** 142
-
 ```python
 def save_games(self, games: List[Dict[str, Any]]) -> None
 ```
@@ -299,8 +285,6 @@ ON CONFLICT(id) DO UPDATE SET ...
 
 #### get_game()
 
-**Line:** 169
-
 ```python
 def get_game(self, game_id: int) -> Optional[Game]
 ```
@@ -309,8 +293,6 @@ Retrieves a single game by ID.
 
 #### get_all_games()
 
-**Line:** 179
-
 ```python
 def get_all_games(self, limit: Optional[int] = None) -> List[Game]
 ```
@@ -318,8 +300,6 @@ def get_all_games(self, limit: Optional[int] = None) -> List[Game]
 Returns all cached games ordered by name.
 
 #### search_games()
-
-**Line:** 188
 
 ```python
 def search_games(self, query: str, limit: int = 100) -> List[Game]
@@ -338,13 +318,11 @@ games = db.search_games("minecraft", limit=10)
 
 #### add_to_library()
 
-**Line:** 214
-
 ```python
 def add_to_library(
-    self, 
-    game_id: int, 
-    executable_path: str, 
+    self,
+    game_id: int,
+    executable_path: str,
     process_name: str,
     normalized_process_name: str,
     executables: List[Dict[str, Any]]
@@ -367,8 +345,6 @@ Adds a game to user's library with all executable candidates.
 
 #### remove_from_library()
 
-**Line:** 228
-
 ```python
 def remove_from_library(self, game_id: int) -> None
 ```
@@ -384,8 +360,6 @@ Removes a game's rows from the library and related tables.
 Stopping the process and deleting the dummy files happens in `GameManager.remove_from_library()` before this call.
 
 #### get_library()
-
-**Line:** 236
 
 ```python
 def get_library(self) -> List[Dict[str, Any]]
@@ -412,8 +386,6 @@ Returns all library games with full game info (joined with games_cache).
 
 #### is_in_library()
 
-**Line:** 262
-
 ```python
 def is_in_library(self, game_id: int) -> bool
 ```
@@ -421,8 +393,6 @@ def is_in_library(self, game_id: int) -> bool
 Quick check if game is in library.
 
 #### get_library_game()
-
-**Line:** 270
 
 ```python
 def get_library_game(self, game_id: int) -> Optional[LibraryGame]
@@ -434,8 +404,6 @@ Returns library entry for a specific game.
 
 #### set_process_running()
 
-**Line:** 285
-
 ```python
 def set_process_running(self, game_id: int, pid: int) -> None
 ```
@@ -443,8 +411,6 @@ def set_process_running(self, game_id: int, pid: int) -> None
 Records that a process is running for a game.
 
 #### set_process_stopped()
-
-**Line:** 297
 
 ```python
 def set_process_stopped(self, game_id: int) -> None
@@ -454,8 +420,6 @@ Removes process tracking when stopped.
 
 #### get_running_processes()
 
-**Line:** 302
-
 ```python
 def get_running_processes(self) -> Dict[int, int]
 ```
@@ -463,8 +427,6 @@ def get_running_processes(self) -> Dict[int, int]
 Returns all running processes as `{game_id: pid}`.
 
 #### is_process_running()
-
-**Line:** 308
 
 ```python
 def is_process_running(self, game_id: int) -> bool
@@ -476,8 +438,6 @@ Checks if a process is marked as running.
 
 #### clear_cache()
 
-**Line:** 316
-
 ```python
 def clear_cache(self) -> None
 ```
@@ -485,8 +445,6 @@ def clear_cache(self) -> None
 Clears all cached games and sync metadata. **Use with caution.**
 
 #### get_cache_stats()
-
-**Line:** 322
 
 ```python
 def get_cache_stats(self) -> Dict[str, int]
@@ -497,6 +455,7 @@ Returns cache statistics:
 ```python
 {
     "cached_games": int,       # Total games in cache
+    "games_no_win_exes": int,  # Cached games without a Windows executable
     "library_games": int,      # Games in user library
     "running_processes": int,  # Active dummy processes
     "executable_history": int  # Recorded detection attempts
@@ -558,7 +517,7 @@ def test_add_to_library(temp_db):
         "game.exe",
         [{"os": "win32", "name": "game.exe"}]
     )
-    
+
     assert temp_db.is_in_library(1)
     lib = temp_db.get_library()
     assert len(lib) == 1

@@ -47,15 +47,7 @@ def build_dummy():
         str(script_dir / "build"),
         "--specpath",
         str(script_dir),
-        # Include PyQt6 for GUI
-        "--hidden-import",
-        "PyQt6",
-        "--hidden-import",
-        "PyQt6.QtWidgets",
-        "--hidden-import",
-        "PyQt6.QtCore",
-        "--hidden-import",
-        "PyQt6.QtGui",
+        # tkinter is stdlib; PyInstaller's built-in hook collects it.
         str(template_path),
     ]
 

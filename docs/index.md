@@ -9,11 +9,14 @@ Welcome to the Discord Games Launcher documentation. This documentation is organ
 Technical documentation for developers working on or extending the launcher.
 
 - **[Architecture](./dev/architecture.md)** - System architecture, component overview, and data flow
-- **[API](./dev/api.md)** - Discord API client documentation and integration details  
+- **[API](./dev/api.md)** - Discord API client documentation and integration details
 - **[Database](./dev/database.md)** - SQLite schema, models, and database operations
-- **[UI](./dev/ui.md)** - PyQt6 UI components, theming, and interface design
+- **[UI](./dev/ui.md)** - React frontend, modules, theming, and interface design
+- **[Bridge](./dev/bridge.md)** - pywebview contract, ID rules, and backend events
+- **[Library Maintenance](./dev/library-maintenance.md)** - Repair, candidate refresh, and schema migration
 - **[Testing](./dev/testing.md)** - Test suite, running tests, and test coverage
 - **[Logging](./dev/logging.md)** - Logging system, log files, and rotation
+- **[Build](./dev/build.md)** - Packaging dcgl.exe, app icon pipeline, dummy template build
 
 ### [User Documentation](./user/)
 
@@ -51,7 +54,8 @@ Discord Games Launcher is a Windows application that allows users to browse Disc
 ## Technology Stack
 
 - **Python 3.14.7+**
-- **PyQt6** - GUI framework
+- **pywebview** - Native window shell
+- **React + Vite + Tailwind CSS** - Frontend
 - **SQLite** - Local database
 - **httpx** - HTTP client for Discord API
 - **Copy-based template system** - Instant dummy executable generation
@@ -64,15 +68,17 @@ discord-games-launcher/
 ├── docs/               # This documentation
 ├── launcher/           # Backend modules
 │   ├── api.py         # Discord API client
-│   ├── database.py    # SQLite database
-│   ├── dummy_generator.py  # Dummy exe generator
-│   ├── game_manager.py     # High-level game operations
+│   ├── bridge.py      # pywebview frontend contract
+│   ├── database.py    # SQLite database (+ migration)
+│   ├── dummy_generator.py  # Dummy exe generator (single instance)
+│   ├── game_manager.py     # High-level game operations (+ repair)
 │   ├── logger.py           # Centralized logging
-│   └── process_manager.py  # Process lifecycle
-├── ui/                # UI components
-│   ├── main_window.py # Main window
-│   ├── browser_tab.py # Game browser
-│   └── library_tab.py # Library manager
+│   └── process_manager.py  # Process lifecycle + detection
+├── frontend/          # React UI (Vite + Tailwind)
+│   └── src/
+│       ├── modules/   # catalogue, library
+│       └── shared/    # api-client, components, hooks, store
+├── frontend-dist/     # Built frontend served by pywebview
 ├── templates/         # PyInstaller templates
 ├── tests/            # Test suite
 └── main.py          # Entry point
@@ -80,4 +86,4 @@ discord-games-launcher/
 
 ---
 
-- *Last updated: 2025-02-04* -
+- _Last updated: 2026-09-16_ -

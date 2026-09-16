@@ -34,7 +34,7 @@ def test_game_manager_initialization():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games")
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
 
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
@@ -58,7 +58,7 @@ def test_sync_games():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games")
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         # Mock API response
@@ -70,7 +70,7 @@ def test_sync_games():
                 "executables": [
                     {"os": "win32", "name": "test.exe", "is_launcher": False},
                 ],
-                "icon": "icon123",
+                "icon_hash": "icon123",
                 "themes": ["action"],
                 "isPublished": True,
             },
@@ -81,7 +81,7 @@ def test_sync_games():
                 "executables": [
                     {"os": "win32", "name": "another.exe", "is_launcher": False},
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -123,7 +123,7 @@ def test_search_games():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games")
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         # Add test games to cache
@@ -135,7 +135,7 @@ def test_search_games():
                 "executables": [
                     {"os": "win32", "name": "test.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -146,7 +146,7 @@ def test_search_games():
                 "executables": [
                     {"os": "win32", "name": "another.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -157,7 +157,7 @@ def test_search_games():
                 "executables": [
                     {"os": "win32", "name": "test_other.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -199,7 +199,7 @@ def test_add_to_library():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         # Add test game to cache
@@ -211,7 +211,7 @@ def test_add_to_library():
                 {"os": "win32", "name": "test.exe", "is_launcher": False},
                 {"os": "win32", "name": "test_alt.exe", "is_launcher": False},
             ],
-            "icon": None,
+            "icon_hash": None,
             "themes": [],
             "isPublished": True,
         }
@@ -255,7 +255,7 @@ def test_add_duplicate_to_library():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         test_game = {
@@ -263,7 +263,7 @@ def test_add_duplicate_to_library():
             "name": "Test Game",
             "aliases": [],
             "executables": [{"os": "win32", "name": "test.exe", "is_launcher": False}],
-            "icon": None,
+            "icon_hash": None,
             "themes": [],
             "isPublished": True,
         }
@@ -295,7 +295,7 @@ def test_remove_from_library():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         test_game = {
@@ -303,7 +303,7 @@ def test_remove_from_library():
             "name": "Test Game",
             "aliases": [],
             "executables": [{"os": "win32", "name": "test.exe", "is_launcher": False}],
-            "icon": None,
+            "icon_hash": None,
             "themes": [],
             "isPublished": True,
         }
@@ -339,7 +339,7 @@ def test_get_library():
         db = Database(tmpdir / "test.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         # Add test games
@@ -351,7 +351,7 @@ def test_get_library():
                 "executables": [
                     {"os": "win32", "name": "test1.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -362,7 +362,7 @@ def test_get_library():
                 "executables": [
                     {"os": "win32", "name": "test2.exe", "is_launcher": False}
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -390,6 +390,120 @@ def test_get_library():
     print("  PASSED")
 
 
+def _seed_library_game(game_mgr, tmpdir, game_id=424242):
+    """Cache a game with a real template exe and add it to the library."""
+    template = tmpdir / "DummyGame.exe"
+    template.write_bytes(b"fake-exe")
+    game_mgr.db.save_games(
+        [
+            {
+                "id": game_id,
+                "name": "Startable Game",
+                "aliases": [],
+                "executables": [{"os": "win32", "name": "startme.exe"}],
+                "icon_hash": "hash123",
+                "themes": [],
+                "isPublished": True,
+            }
+        ]
+    )
+    exe = tmpdir / "games" / str(game_id) / "startme.exe"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_bytes(b"fake-exe")
+    game_mgr.db.add_to_library(
+        game_id,
+        str(exe),
+        "startme.exe",
+        "startme.exe",
+        [{"os": "win32", "name": "startme.exe"}],
+    )
+    return exe
+
+
+def test_start_game_direct():
+    """Start launches the best exe at once and records the outcome."""
+    print("Testing direct game start...")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        db = Database(tmpdir / "test.db")
+        api = DiscordAPIClient(db, tmpdir / "cache")
+        dummy_gen = DummyGenerator(tmpdir / "games")
+        process_mgr = ProcessManager(db, dummy_gen)
+        game_mgr = GameManager(db, api, dummy_gen, process_mgr)
+        _seed_library_game(game_mgr, tmpdir)
+
+        with patch.object(
+            process_mgr, "start_process", return_value=4242
+        ) as mock_start:
+            ok, message = game_mgr.start_game(424242)
+
+        assert ok is True, message
+        assert message == "Startable Game started"
+        mock_start.assert_called_once()
+        started_exe = mock_start.call_args[0][1]
+        assert started_exe.name == "startme.exe"
+        with db._connect() as conn:
+            row = conn.execute(
+                "SELECT success_count FROM executable_history WHERE game_id = ?"
+                " AND executable_name = ?",
+                (424242, "startme.exe"),
+            ).fetchone()
+        assert row is not None and row[0] >= 1
+
+        # Validation paths still fail closed.
+        assert game_mgr.start_game(999999)[0] is False
+        db.set_process_running(424242, 4242)
+        process_mgr._refresh_cache()
+        with (
+            patch.object(process_mgr, "_pid_exists", return_value=True),
+            patch.object(process_mgr, "_verify_game_process", return_value=True),
+        ):
+            assert game_mgr.start_game(424242) == (
+                False,
+                "Game is already running",
+            )
+
+    print("  PASSED")
+
+
+def test_start_game_records_failure():
+    """A failed launch returns an error and records the failed attempt."""
+    print("Testing failed game start...")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        db = Database(tmpdir / "test.db")
+        api = DiscordAPIClient(db, tmpdir / "cache")
+        dummy_gen = DummyGenerator(tmpdir / "games")
+        process_mgr = ProcessManager(db, dummy_gen)
+        game_mgr = GameManager(db, api, dummy_gen, process_mgr)
+        _seed_library_game(game_mgr, tmpdir)
+
+        from launcher.dummy_generator import DummyGeneratorError
+
+        with patch.object(
+            dummy_gen,
+            "ensure_dummy_for_game",
+            side_effect=DummyGeneratorError("no template"),
+        ):
+            ok, message = game_mgr.start_game(424242)
+
+        assert ok is False
+        assert "Failed to start game" in message
+        with db._connect() as conn:
+            row = conn.execute(
+                "SELECT failure_count FROM executable_history WHERE game_id = ?"
+                " AND executable_name = ?",
+                (424242, "startme.exe"),
+            ).fetchone()
+        assert row is not None and row[0] >= 1
+
+    print("  PASSED")
+
+
 def run_all_tests():
     """Run all GameManager tests."""
     print("\n" + "=" * 50)
@@ -404,6 +518,8 @@ def run_all_tests():
         test_add_duplicate_to_library,
         test_remove_from_library,
         test_get_library,
+        test_start_game_direct,
+        test_start_game_records_failure,
     ]
 
     failed = []

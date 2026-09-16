@@ -23,10 +23,10 @@ A new file is started each day (for example `dcgl_2026-09-15.log`). Each file ro
 
 Two outputs with different levels:
 
-| Output | Level | Destination |
-| ------ | ----- | ----------- |
-| File | DEBUG | `logs/dcgl_YYYY-MM-DD.log` |
-| Console | INFO | stdout |
+| Output  | Level | Destination                |
+| ------- | ----- | -------------------------- |
+| File    | DEBUG | `logs/dcgl_YYYY-MM-DD.log` |
+| Console | INFO  | stdout                     |
 
 **Format:** `%(asctime)s - %(levelname)s - %(message)s` with timestamps as `YYYY-MM-DD HH:MM:SS`.
 
@@ -41,7 +41,8 @@ logger = GameLauncherLogger()
 logger.app_start()
 
 database = Database(db_path, logger=logger)
-process_manager = ProcessManager(database, logger=logger)
+dummy_generator = DummyGenerator(games_dir)
+process_manager = ProcessManager(database, dummy_generator, logger=logger)
 ```
 
 On fatal errors the entry point records the traceback via `logger.critical`, and always runs process cleanup plus `logger.app_exit()` on shutdown.
@@ -55,14 +56,6 @@ Beyond the standard `debug` / `info` / `warning` / `error` / `critical` methods,
 - `app_start()` - Startup banner
 - `app_exit()` - Shutdown banner
 - `database_recreate()` - Warning when the schema check fails and the database is rebuilt
-
-### Game Detection
-
-- `detection_start(game_name, game_id)` - Detection begins
-- `detection_success(game_name, exe_name, attempt)` - An executable verified successfully
-- `detection_failed(game_name, exe_name, reason)` - One executable candidate failed
-- `all_executables_failed(game_name, total_attempts)` - Every candidate failed
-- `retry_attempt(game_name, exe_name, attempt_num, total)` - Moving to the next candidate
 
 ### Process Management
 

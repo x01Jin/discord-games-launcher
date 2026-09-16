@@ -2,341 +2,102 @@
 
 ## Overview
 
-Discord Games Launcher provides a complete solution for managing your Discord "Playing" status with support for 20,000+ games. Features proper list views, GUI windows for running games, and robust process management.
+Discord Games Launcher manages your Discord "Playing" status. Pick from 20,000+ games, keep your own library, and show any game as your status with one click.
 
-## Core Features
+## Game Catalogue
 
-### 1. Game Database Browser (QTreeWidget)
+Browse all games Discord can show as a status, in a simple card grid. Only games with a Windows version are listed.
 
-Browse and search Discord's official supported games database in an organized tree view.
+- **Search:** results filter instantly as you type, with a "Showing X of Y" counter
+- **Select several:** click cards to pick more than one, then add them all at once
+- **In Library marker:** see at a glance which games you already added
+- **Right-click:** quickly add a game without using the buttons
 
-**Features:**
+**How to use it:**
 
-- **Tree View Display:** Three columns showing Game Name, Executables, and Status
-- **Real-time Search:** Instant filtering as you type across 20,000+ games
-- **Multi-select Support:** Add multiple games at once with Ctrl+Click or Shift+Click
-- **Visual Indicators:** Green "In Library" status for games you've already added
-- **Detailed Information:** Shows game aliases and available Windows executables
+1. Open the **Catalogue** tab
+2. Type in the search box to filter
+3. Click cards to select one or more games
+4. Click the **Add N selected to library** button (or double-click a single card)
 
-**Usage:**
+## Your Game Library
 
-1. Go to "Browse Games" tab
-2. Type in the search box to filter results
-3. Select one or more games (Ctrl+Click for multiple)
-4. Click "Add Selected to Library"
-5. Right-click any game for quick add option
+Your personal collection lives in the **My Library** tab. Each card shows the game name and whether it is **Running** (green) or **Stopped** (gray).
 
-### 2. Personal Game Library (QListWidget)
+- **Double-click** a card to start or stop it (or press Enter/Space, or right-click and choose the action)
+- **Right-click** a card to start, stop, or remove it (removing asks you to confirm first)
+- **Toolbar buttons:** Refresh the view, Repair the library, or Stop all games at once
+- **Repair:** fixes library entries that misbehave, for example after files were deleted by antivirus. It warns you before removing anything permanently
+- Your library is saved, so it is still there after you restart the app
 
-Manage your game collection in a clean, scannable list view with rich formatting.
+**What happens when you add a game:** it is added instantly, ready to start.
 
-**Features:**
+**What happens when you start a game:** a small window opens showing the game name, "Game Started!", and a running timer. Discord notices it within about 15 seconds and your status becomes "Playing [Game Name]".
 
-- **Rich List Items:** HTML-formatted display showing game name, process name, and status
-- **Visual Status:** Green "Running" or gray "Stopped" indicators
-- **Quick Actions:** Double-click to toggle start/stop
-- **Context Menus:** Right-click for Start/Stop/Remove options
-- **Persistent Storage:** Library survives app restarts
-- **Stop All Button:** Quickly stop all running games
+## Showing Your Status on Discord
 
-**Interactions:**
+Each running game opens its own small window. You can run several at once, control each one separately, and stop everything with **Stop all**. Closing the app stops all running games.
 
-- **Double-click:** Toggle start/stop a game
-- **Right-click:** Open context menu with actions
-- **Visual Feedback:** Status updates every 5 seconds
+A few things to know:
 
-**How it works:**
+- Discord must be running (the desktop app, not the website)
+- Discord checks for games roughly every 15 seconds, so give it a moment
+- In Discord settings, **Display current activity as a status message** must be turned on
+- Some games are picked up faster than others
 
-When you add a game:
+## Game Pictures
 
-1. Finds the Windows executable name from Discord's database (with smart scoring for best match)
-2. Copies a pre-built dummy executable template
-3. Renames it to match Discord's expected process name
-4. Stores in your user data directory
+Cards show each game's artwork from Discord. If a game has no picture (or you are offline), you see the first letter of its name instead.
 
-When you start a game:
+## Dark Look
 
-1. Launcher runs the dummy executable with game name as argument
-2. A small window opens showing the game name, "Game Started!", and a live runtime counter
-3. Process stays active with the GUI window open
-4. Discord detects it within ~15 seconds
-5. Your status updates to "Playing [Game Name]"
+The whole app uses a comfortable dark theme with a soft purple accent. It follows your Windows display scaling, so it stays sharp on high-resolution screens.
 
-### 3. Discord Status Control with GUI Windows
-
-Show "Playing [Game]" in Discord with dummy processes that display GUI windows.
-
-**Features:**
-
-- **GUI Windows:** Each running game shows a small window with game name
-- **Start/Stop Control:** Individual control over each game
-- **Multiple Games:** Run multiple games simultaneously
-- **Proper Termination:** Recursive child process killing for complete cleanup
-- **Real-time Updates:** Status bar shows running count
-- **Instant Addition:** Copy-based template system
-
-**Discord Detection:**
-
-Discord detects running processes by their executable name. The launcher:
-
-- Creates processes with exact names Discord expects (e.g., `minecraft.exe`)
-- Handles path prefixes (e.g., `_retail_/wow-64.exe` → `wow-64.exe`)
-- GUI window keeps process active and alive
-- Discord scans every ~15 seconds for process changes
-
-### 4. Robust Process Management
-
-Advanced process lifecycle management with proper cleanup.
-
-**Features:**
-
-- **PID Tracking:** Tracks process IDs in database for persistence
-- **Recursive Termination:** Kills child processes before parent process
-- **Graceful Shutdown:** Attempts graceful termination before force kill
-- **Stale Detection:** Automatically cleans up dead process records
-- **Force Cleanup:** Stops all processes on app exit
-
-**Process Termination Process:**
-
-```list
-1. Find all child processes recursively
-2. Send terminate signal to all children
-3. Wait up to 3 seconds for children to exit
-4. Force kill any remaining children
-5. Send terminate signal to parent
-6. Wait up to 3 seconds for parent to exit
-7. Force kill parent if still running
-```
-
-**Benefits:**
-
-- No zombie processes left behind
-- Clean system state after stopping games
-- Handles PyInstaller child processes properly
-- Complete cleanup guaranteed
-
-### 5. Complete Cleanup on Removal
-
-Removing a game from library performs complete cleanup.
-
-**Cleanup Actions:**
-
-1. **Stop Process:** If running, stops with recursive termination
-2. **Remove Executable:** Deletes the copied .exe file
-3. **Remove Directory:** Removes game folder
-4. **Database Cleanup:** Removes library entry
-
-**Result:** Zero leftover files or processes.
-
-### 6. Automatic Caching
-
-Smart caching system for optimal performance.
-
-**Features:**
-
-- Automatic sync on first launch
-- Weekly auto-refresh (7-day TTL)
-- Manual sync button
-- Persisted across sessions
-- Works offline with cached data
-
-**Cache Details:**
-
-- Stores in SQLite database (~5-10 MB)
-- ~5-10 seconds initial download (20,000+ games)
-- Background updates don't interrupt usage
-- Game icons cached locally
-
-### 7. Dark Theme Interface
-
-Modern, eye-friendly dark interface.
-
-**Features:**
-
-- Visual Studio Code inspired theme
-- Consistent dark colors throughout all components
-- Blue accent color (#007acc)
-- Smooth hover effects on list items
-- Professional appearance
-- High DPI support
-
-**Color Palette:**
-
-- Background: #1e1e1e (dark gray)
-- Lists/Cards: #252526 (slightly lighter)
-- Accent: #007acc (blue)
-- Text: #cccccc (light gray)
-- Success: #4ec9b0 (green)
-- Error: #f44336 (red)
-
-### 8. Context Menus and Quick Actions
-
-Right-click context menus for efficient workflow.
-
-**Browser Tab Context Menu:**
-
-- Add to Library (if not already added)
-- Quick add without clicking main button
-
-**Library Tab Context Menu:**
-
-- Start Game (if stopped)
-- Stop Game (if running)
-- Remove from Library (with confirmation)
-
-**Styling:**
-
-Dark theme context menus matching the application style.
-
-## Advanced Features
-
-### Icon Caching
-
-Game icons downloaded and cached locally for offline use.
-
-**Features:**
-
-- Automatic download on demand
-- 128x128 default size
-- Local cache for offline use
-- PNG format
-
-**Location:** `%LOCALAPPDATA%\discord-games-launcher\cache\icons\`
-
-### Process Name Normalization
-
-Handles complex executable paths from Discord's database.
-
-**Examples:**
-
-- `_retail_/wow-64.exe` → `wow-64.exe`
-- `bin/win64/game.exe` → `game.exe`
-- `game.exe` → `game.exe` (no change)
-
-Ensures exact name matching for Discord detection.
-
-### Multi-Platform Code Support
-
-While designed for Windows, the codebase supports multi-platform.
-
-**Features:**
-
-- Cross-platform path handling (platformdirs)
-- OS detection for executables
-- Future macOS/Linux potential
-
-### Error Handling
-
-Comprehensive error handling throughout.
-
-**Features:**
-
-- Network error recovery with retry
-- Database error handling
-- Process management error recovery
-- User-friendly error messages
-- Graceful degradation
-
-### High DPI Support
-
-Crisp display on high-resolution monitors.
-
-**Features:**
-
-- Automatic DPI scaling enabled
-- Qt6 HiDPI support
-- Windows scaling compatibility
-
-## Technical Specifications
-
-### Performance
-
-- **Launcher Memory:** ~50-100 MB RAM
-- **Launcher CPU:** <1% when idle
-- **Dummy Memory:** ~10-20 MB RAM per game (GUI window)
-- **Dummy CPU:** Minimal (PyQt6 event loop)
-- **Storage:** ~50 MB for database, ~2 MB per dummy executable
-- **Network:** ~1 MB download on first sync
-
-### Compatibility
-
-- **OS:** Windows 10/11 (64-bit)
-- **Python:** 3.14.7+
-- **Discord:** Desktop app required (not web)
-- **Permissions:** User-level (no admin required)
-
-### Scalability
-
-- **Games:** 20,000+ in database
-- **Library:** Unlimited games (tested with 100+)
-- **Concurrent:** Multiple games can run simultaneously
-
-## Feature Comparison
-
-| Feature | Discord Games Launcher | Manual Method |
-| --------- | ------------------------ | --------------- |
-| Game Database | 20,000+ games | Must find manually |
-| Search | Instant with tree view | N/A |
-| Library View | Clean list with rich formatting | Manual tracking |
-| GUI Windows | Yes (shows running status) | N/A |
-| Start/Stop | One click or double-click | Task Manager |
-| Process Cleanup | Recursive termination | Manual killing |
-| Complete Cleanup | Yes (removes all files) | Manual deletion |
-| Multiple Games | Yes | Tedious |
-| Dark Theme | Yes with proper widgets | N/A |
-| Auto-sync | Weekly | Manual updates |
-| Status Persistence | Database tracking | N/A |
-
-## Tips for Best Experience
+## Tips for the Best Experience
 
 ### Organization
 
-- Keep 10-20 frequently played games in library
-- Remove games you don't use to keep list clean
-- Use search to quickly find games instead of scrolling
+- Keep 10-20 games you play most in your library
+- Remove games you no longer play to keep the list tidy
+- Search instead of scrolling when the list is long
 
-### Discord Integration
+### Discord
 
-- Keep Discord running while using launcher
-- Status may take 10-15 seconds to appear or disappear
-- Some games appear faster than others based on detection priority
-- Discord mobile app shows same status
+- Keep Discord running while using the launcher
+- Your status can take 10-15 seconds to appear or disappear
+- The same status shows in the Discord mobile app
 
-### Performance_
+### Performance
 
-- Each running game uses ~10-20 MB RAM (for GUI window)
-- Stop games you're not actively displaying
-- Use "Stop All" button for quick cleanup
-- Launcher itself uses minimal resources
+- Each running game uses about 10-20 MB of memory for its little window
+- Stop games you are not showing off
+- The launcher itself uses very little memory when idle
 
-### Maintenance
+### Upkeep
 
-- Sync games weekly for latest database updates
-- Clear unused games periodically
-- Check for launcher updates
-- Verify Discord has "Display currently running game" enabled
+- Press **Sync catalogue** now and then for the latest game list
+- If something looks wrong in your library, try the **Repair** button
+- Make sure Discord has "Display currently running game" enabled
 
 ## Limitations
 
-### Current Limitations
+1. **Windows only:** Windows 10/11
+2. **Discord desktop app required:** the website version cannot show game activity
+3. **Known games only:** it can only show games Discord already recognizes
+4. **Basic status only:** shows "Playing [Game]", not detailed activity info
+5. **Does not launch real games:** it only controls the status display
 
-1. **Windows Only:** Currently Windows 10/11 only
-2. **Discord Desktop:** Requires Discord desktop app (web version won't work)
-3. **Game Detection:** Only works with Discord-supported games
-4. **No Rich Presence:** Shows basic "Playing" status only (not detailed info)
-5. **No Game Launch:** Doesn't launch actual games
+**Workarounds:**
 
-### Workarounds
-
-- **Unsupported games:** Use similar game names
-- **Web Discord:** Use desktop app for status
-- **Rich Presence:** Use game's official Discord integration
+- **Unsupported game:** try a similar game name
+- **Web Discord:** switch to the desktop app
+- **Detailed status:** use the game's own Discord integration, if it has one
 
 ## Getting Help
 
-For feature requests or issues:
+Having trouble or want something new?
 
 1. Check [Troubleshooting](./troubleshooting.md)
 2. Search existing GitHub issues
-3. File a new issue with feature request template
-4. Join community Discord (link in README)
+3. File a new issue
+4. Join the community Discord (link in README)

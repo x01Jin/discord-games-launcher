@@ -1,14 +1,57 @@
+# --- Python ---
 .venv/
-.vscode/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 .ruff_cache/
-build/
-dist/
-*.pyc
-dcgl.spec
-references/
+.mypy_cache/
+.pyright/
+.tox/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+*.egg
+
+# --- PyInstaller / build outputs ---
+/build/
+/dist/
+/frontend-dist/
+templates/build/
+templates/dist/
+*.spec
+!dcgl.spec
+
+# --- Frontend (Vite + React) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# --- Runtime / local data ---
+*.db
+*.sqlite3
+*.log
+logs/
+.env
+.env.*
+
+# --- Project-private notes and tooling ---
+/information/
+/references/
 opencode.json
-.codegraph/
-information/
 .ignore
+.codegraph/
+.playwright-mcp/
+
+# --- Editors and OS ---
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp

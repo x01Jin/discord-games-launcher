@@ -54,7 +54,7 @@ def test_games_cache():
                 "name": "Test Game",
                 "aliases": ["Test", "TG"],
                 "executables": [{"os": "win32", "name": "test.exe"}],
-                "icon": "abc123",
+                "icon_hash": "abc123",
                 "themes": ["action"],
                 "isPublished": True,
             },
@@ -63,7 +63,7 @@ def test_games_cache():
                 "name": "Another Game",
                 "aliases": [],
                 "executables": [{"os": "win32", "name": "another.exe"}],
-                "icon": "def456",
+                "icon_hash": "def456",
                 "themes": ["rpg"],
                 "isPublished": True,
             },
@@ -82,6 +82,8 @@ def test_games_cache():
         assert game is not None, "Game not found"
         assert game.name == "Test Game", f"Wrong game name: {game.name}"
         assert game.id == 12345, f"Wrong game ID: {game.id}"
+        # Regression: the detectable API ships the hash as "icon_hash".
+        assert game.icon_hash == "abc123", f"Wrong icon hash: {game.icon_hash}"
         print(f"  Retrieved single game: {game.name}")
 
         # Test search
@@ -116,7 +118,7 @@ def test_library_operations():
                     {"os": "win32", "name": "test.exe", "is_launcher": False},
                     {"os": "win32", "name": "test_launcher.exe", "is_launcher": True},
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             }
@@ -190,7 +192,7 @@ def test_process_tracking():
                     "executables": [
                         {"os": "win32", "name": "test.exe", "is_launcher": False}
                     ],
-                    "icon": None,
+                    "icon_hash": None,
                     "themes": [],
                     "isPublished": True,
                 }
@@ -243,7 +245,7 @@ def test_executable_history_tracking():
                         {"os": "win32", "name": "test.exe", "is_launcher": False},
                         {"os": "win32", "name": "test_alt.exe", "is_launcher": False},
                     ],
-                    "icon": None,
+                    "icon_hash": None,
                     "themes": [],
                     "isPublished": True,
                 }

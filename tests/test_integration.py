@@ -42,7 +42,7 @@ def test_full_workflow():
         db = Database(tmpdir / "launcher.db")
         api_client = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api_client, dummy_gen, process_mgr)
 
         print("  All components initialized")
@@ -57,7 +57,7 @@ def test_full_workflow():
                     {"os": "win32", "name": "testgame.exe", "is_launcher": False},
                     {"os": "win32", "name": "launcher.exe", "is_launcher": True},
                 ],
-                "icon": "abc123",
+                "icon_hash": "abc123",
                 "themes": ["action"],
                 "isPublished": True,
             },
@@ -68,7 +68,7 @@ def test_full_workflow():
                 "executables": [
                     {"os": "win32", "name": "another.exe", "is_launcher": False},
                 ],
-                "icon": None,
+                "icon_hash": None,
                 "themes": [],
                 "isPublished": True,
             },
@@ -185,7 +185,7 @@ def test_cache_persistence():
             "executables": [
                 {"os": "win32", "name": "persistent.exe", "is_launcher": False}
             ],
-            "icon": None,
+            "icon_hash": None,
             "themes": [],
             "isPublished": True,
         }
@@ -206,7 +206,7 @@ def test_cache_persistence():
         db2 = Database(db_path)
         api2 = DiscordAPIClient(db2, tmpdir / "cache")
         dummy2 = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        proc2 = ProcessManager(db2)
+        proc2 = ProcessManager(db2, dummy2)
         mgr2 = GameManager(db2, api2, dummy2, proc2)
 
         # Verify data persisted
@@ -241,7 +241,7 @@ def test_smart_executable_selection():
         db = Database(tmpdir / "launcher.db")
         api = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
-        process_mgr = ProcessManager(db)
+        process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
         # Add game with multiple executables
@@ -259,7 +259,7 @@ def test_smart_executable_selection():
                 # Non-Windows (filtered out)
                 {"os": "darwin", "name": "game.app", "is_launcher": False},
             ],
-            "icon": None,
+            "icon_hash": None,
             "themes": [],
             "isPublished": True,
         }
