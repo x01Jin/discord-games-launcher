@@ -26,7 +26,7 @@ never raised.
 | `stop_all_games()`             | —              | `{stopped}`                                                                                                                                      |
 | `get_running()`                | —              | `{running}` — string ID list                                                                                                                     |
 | `get_stats()`                  | —              | `{cached_games, library_games, running_processes, executable_history, games_no_win_exes}` (error fallback returns only the first three as zeros) |
-| `sync_catalogue()`             | —              | `{synced, count, message}`                                                                                                                       |
+| `sync_catalogue()`             | —              | `{synced, count, skipped, message}` — message notes skipped records and one-time fallback-version transitions                                    |
 
 `list_games` / `search_games` / `get_library` include an `error` field
 when the backend call itself fails; the frontend renders it with a

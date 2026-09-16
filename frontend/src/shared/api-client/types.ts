@@ -55,6 +55,7 @@ export interface RunningResult {
 export interface SyncResult {
   synced: boolean;
   count: number;
+  skipped: number;
   message: string;
 }
 

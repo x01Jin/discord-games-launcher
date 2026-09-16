@@ -47,18 +47,53 @@ class GameManager:
             force: Force sync even if cache is fresh
 
         Returns:
-            Tuple of (was_synced, game_count)
+            Tuple of (was_synced, game_count, skipped_records)
         """
         try:
-            was_synced = self.api.sync_cache(force=force)
+            was_synced, count, skipped = self.api.sync_cache(force=force)
             if was_synced:
                 # Silent path: update blobs and materialize new exes, but
                 # never delete files without explicit repair consent.
                 self.refresh_library_candidates(drop_superseded=False)
-            stats = self.db.get_cache_stats()
-            return was_synced, stats["cached_games"]
+            else:
+                stats = self.db.get_cache_stats()
+                count = stats["cached_games"]
+            return was_synced, count, skipped
         except (DiscordAPIError, sqlite3.Error, OSError) as e:
             raise GameManagerError(f"Failed to sync games: {e}")
+
+    def note_api_version(self, version: str | None) -> str:
+        """Record the API version that served the last sync.
+
+        Returns a user-facing notice suffix, non-empty only on a
+        transition into or out of fallback (so the UI toasts once per
+        change, never on every sync).
+        """
+        # Local import so tests can patch the candidate list per case.
+        from launcher.api import API_VERSION_CANDIDATES
+
+        if not version:
+            return ""
+        newest = API_VERSION_CANDIDATES[0]
+        try:
+            previous = self.db.get_metadata_value("active_api_version")
+            self.db.set_metadata_value("active_api_version", version)
+        except (sqlite3.Error, OSError, ValueError):
+            previous = None
+        if previous == version:
+            return ""
+        if self.logger:
+            if version == newest:
+                self.logger.info(f"Discord API back on latest ({version})")
+            else:
+                self.logger.warning(
+                    f"Discord API {newest} unreachable, using fallback ({version})"
+                )
+        if version == newest and previous is not None:
+            return f" — back on latest API ({version})"
+        if version != newest:
+            return f" — using fallback API ({version})"
+        return ""
 
     def search_games(self, query: str, limit: int = 100) -> list["Game"]:
         """Search cached games by name."""

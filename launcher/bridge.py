@@ -118,19 +118,31 @@ class Bridge:
 
     def sync_catalogue(self) -> dict[str, Any]:
         try:
-            synced, count = self.game_manager.sync_games(force=True)
+            synced, count, skipped = self.game_manager.sync_games(force=True)
             self._emit({"type": "library_changed"})
+            notice = self.game_manager.note_api_version(
+                self.game_manager.api.last_fetch_version
+            )
+            if synced:
+                message = f"Synced {count:,} games from Discord"
+                if skipped:
+                    message += f" ({skipped:,} skipped)"
+                message += notice
+            else:
+                message = "Cache is up to date" + notice
             return {
                 "synced": synced,
                 "count": count,
-                "message": (
-                    f"Synced {count:,} games from Discord"
-                    if synced
-                    else "Cache is up to date"
-                ),
+                "skipped": skipped,
+                "message": message,
             }
         except (GameManagerError, sqlite3.Error, OSError, ValueError) as e:
-            return {"synced": False, "count": 0, "message": f"Sync failed: {e}"}
+            return {
+                "synced": False,
+                "count": 0,
+                "skipped": 0,
+                "message": f"Sync failed: {e}",
+            }
 
     # -- library ---------------------------------------------------------
     def add_to_library(self, game_id: int | str) -> dict[str, Any]:

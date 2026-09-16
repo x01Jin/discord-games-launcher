@@ -111,7 +111,7 @@ def initialize_components():
     logger.app_start()
 
     database = Database(db_path, logger=logger)
-    api_client = DiscordAPIClient(database, cache_dir)
+    api_client = DiscordAPIClient(database, cache_dir, logger=logger)
     dummy_generator = DummyGenerator(games_dir)
     process_manager = ProcessManager(database, dummy_generator, logger=logger)
     game_manager = GameManager(

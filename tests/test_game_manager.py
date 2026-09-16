@@ -99,10 +99,11 @@ def test_sync_games():
             mock_client_class.return_value = mock_client
 
             # Sync games
-            was_synced, count = game_mgr.sync_games(force=True)
+            was_synced, count, skipped = game_mgr.sync_games(force=True)
 
             assert was_synced is True, "Should perform sync"
             assert count == 2, f"Expected 2 games, got {count}"
+            assert skipped == 0, f"Expected 0 skipped, got {skipped}"
 
             # Verify games were cached
             all_games = game_mgr.get_all_games()

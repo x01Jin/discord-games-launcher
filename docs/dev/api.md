@@ -12,11 +12,19 @@ The API client handles all communication with Discord's applications API for fet
 ### Discord API
 
 ```python
-DISCORD_API_URL = "https://discord.com/api/v10/applications/detectable"
+DISCORD_API_BASE = "https://discord.com/api"
+STABLE_API_VERSION = "v10"
+API_VERSION_CANDIDATES = ("v10",)  # latest-first
 DISCORD_CDN_URL = "https://cdn.discordapp.com/app-icons"
 ```
 
 The `applications/detectable` endpoint returns a list of all games/applications that Discord can detect as "Playing" status.
+
+## Version Policy
+
+v10 is the latest stable REST version. Candidates are ordered latest-first: prepend a newer version when Discord ships one and syncs start trying it automatically, cascading down through older entries to the stable default. The last-working version is remembered (`last_working_api_version` in `cache_metadata`) and tried first next sync; other candidates are probed with a short 10-second timeout so a dead version fails fast.
+
+`sync_cache()` returns `(was_synced, game_count, skipped_records)`. Malformed records are skipped and counted — one bad record can never kill a 20,000-game sync. Payloads missing `executables` across most records trigger a drift warning in the logs (the endpoint is undocumented, so upstream shape changes are the main risk).
 
 ## Class: DiscordAPIClient
 
@@ -43,29 +51,29 @@ client = DiscordAPIClient(
 Synchronizes the local cache with Discord API.
 
 ```python
-def sync_cache(self, force: bool = False) -> bool
+def sync_cache(self, force: bool = False) -> tuple[bool, int, int]
 ```
 
 **Parameters:**
 
 - `force` - Force sync even if cache is fresh
 
-**Returns:** `True` if sync was performed, `False` if cache is up to date
+**Returns:** `(was_synced, game_count, skipped_records)` — `True` if sync was performed, `False` if cache is up to date; skipped counts malformed records that were dropped
 
 **Example:**
 
 ```python
 try:
-    was_synced = client.sync_cache(force=False)
+    was_synced, count, skipped = client.sync_cache(force=False)
     if was_synced:
-        print("Cache updated")
+        print(f"Cache updated ({count} games, {skipped} skipped)")
     else:
         print("Cache is current")
 except DiscordAPIError as e:
     print(f"Sync failed: {e}")
 ```
 
-#### _fetch_all_games()
+#### \_fetch_all_games()
 
 Internal method to fetch all games from Discord API.
 
@@ -165,7 +173,7 @@ def get_best_win32_executables(
 - Non-launcher: +1000 (CRITICAL - Discord ignores launchers!)
 - Shorter name: -10 per character (simpler is better)
 - No path separators: +50 (avoid "_retail_/bg3.exe")
-- No underscore prefix: +20 (avoid "_wow.exe")
+- No underscore prefix: +20 (avoid "\_wow.exe")
 
 **Example:**
 
@@ -262,7 +270,7 @@ Discord API returns game objects with this structure:
   "executables": [
     {
       "is_launcher": false,
-      "name": "minecraft.exe",
+      "name": "java.exe",
       "os": "win32"
     }
   ],
@@ -319,7 +327,7 @@ client = DiscordAPIClient(db, cache_dir, timeout=30.0)
 
 try:
     # Sync cache
-    was_synced = client.sync_cache(force=False)
+    was_synced, count, skipped = client.sync_cache(force=False)
 
     # Get game info
     game = db.get_game(356869127241072640)

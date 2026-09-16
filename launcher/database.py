@@ -299,12 +299,41 @@ class Database:
             return True
         return datetime.now(timezone.utc) - last_sync > timedelta(days=max_age_days)
 
-    def save_games(self, games: list[dict[str, Any]]) -> None:
-        """Save or update games from API to cache."""
+    def get_metadata_value(self, key: str) -> str | None:
+        """Get a raw cache_metadata value by key (None when absent)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM cache_metadata WHERE key = ?", (key,)
+            ).fetchone()
+            return row[0] if row else None
+
+    def set_metadata_value(self, key: str, value: str) -> None:
+        """Upsert a raw cache_metadata value."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO cache_metadata (key, value, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP""",
+                (key, value),
+            )
+
+    def save_games(self, games: list[dict[str, Any]]) -> int:
+        """Save or update games from API to cache.
+
+        Returns the number of malformed records skipped (defense in
+        depth: the API client sanitizes first, this never aborts).
+        """
+        skipped = 0
         with self._connect() as conn:
             for game in games:
-                conn.execute(
-                    """INSERT INTO games_cache
+                if not isinstance(game, dict) or game.get("id") is None:
+                    skipped += 1
+                    continue
+                try:
+                    conn.execute(
+                        """INSERT INTO games_cache
                         (id, name, aliases, executables, icon_hash, themes, is_published, cached_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                         ON CONFLICT(id) DO UPDATE SET
@@ -315,16 +344,19 @@ class Database:
                         themes = excluded.themes,
                         is_published = excluded.is_published,
                         cached_at = CURRENT_TIMESTAMP""",
-                    (
-                        game.get("id"),
-                        game.get("name", ""),
-                        json.dumps(game.get("aliases", [])),
-                        json.dumps(game.get("executables", [])),
-                        game.get("icon_hash"),
-                        json.dumps(game.get("themes", [])),
-                        1 if game.get("isPublished", True) else 0,
-                    ),
-                )
+                        (
+                            game.get("id"),
+                            game.get("name", ""),
+                            json.dumps(game.get("aliases", [])),
+                            json.dumps(game.get("executables", [])),
+                            game.get("icon_hash"),
+                            json.dumps(game.get("themes", [])),
+                            1 if game.get("isPublished", True) else 0,
+                        ),
+                    )
+                except (sqlite3.Error, TypeError, ValueError):
+                    skipped += 1
+        return skipped
 
     def get_game(self, game_id: int) -> Optional["Game"]:
         """Get a single game by ID."""

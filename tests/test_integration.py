@@ -86,9 +86,10 @@ def test_full_workflow():
             mock_client_class.return_value = mock_http_client
 
             # Step 1: Sync games from API
-            was_synced, count = game_mgr.sync_games(force=True)
+            was_synced, count, skipped = game_mgr.sync_games(force=True)
             assert was_synced is True, "Should perform sync"
             assert count == 2, f"Expected 2 games, got {count}"
+            assert skipped == 0, f"Expected 0 skipped, got {skipped}"
             print(f"  ✓ Synced {count} games from API")
 
             # Step 2: Verify cache was populated

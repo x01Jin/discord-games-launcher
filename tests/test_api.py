@@ -218,8 +218,10 @@ def test_sync_cache_logic():
             mock_client_class.return_value = mock_client
 
             # First sync should perform sync
-            result = client.sync_cache(force=True)
-            assert result is True, "Should return True when sync performed"
+            was_synced, count, skipped = client.sync_cache(force=True)
+            assert was_synced is True, "Should return True when sync performed"
+            assert count == 2, f"Expected count 2, got {count}"
+            assert skipped == 0, f"Expected 0 skipped, got {skipped}"
             print("  First sync performed successfully")
 
             # Check games were saved to database
@@ -240,8 +242,8 @@ def test_sync_cache_logic():
             print(f"  Game has {len(test_game.executables)} executables")
 
             # Second sync without force should skip (cache is fresh)
-            result = client.sync_cache(force=False)
-            assert result is False, "Should return False when cache is fresh"
+            was_synced, count, skipped = client.sync_cache(force=False)
+            assert was_synced is False, "Should return False when cache is fresh"
             print("  Correctly skipped sync for fresh cache")
 
     print("  PASSED")

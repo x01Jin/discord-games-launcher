@@ -78,7 +78,7 @@ Handles communication with Discord's applications API.
 
 **Key Features:**
 
-- Fetches 20,000+ games from `discord.com/api/v10/applications/detectable`
+- Fetches 20,000+ games from `discord.com/api/{version}/applications/detectable` (v10 stable; latest-first cascade with remembered last-working version — see [API](./api.md))
 - Caches game data locally (7-day refresh)
 - Downloads game icons from Discord CDN
 - Filters Windows executables
