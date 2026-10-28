@@ -1,57 +1,47 @@
-# Download & Setup Guide
+# Download and setup
 
-## What You Need
+## Requirements
 
-- **Computer:** Windows 10 or 11 (64-bit)
-- **Memory:** 4 GB or more (8 GB is nicer)
-- **Free space:** 500 MB or more
-- **Internet:** needed once at the start to download the game list
-- **Discord:** the Discord desktop app must be installed for your "Playing" status to show
+- Windows 10 or 11, 64-bit
+- 4 GB of memory (8 GB is comfortable)
+- 500 MB of free disk space
+- Internet at least once, for the game list
+- The Discord desktop app, for the status to appear
 
 ## Download
 
-1. Go to the [GitHub Releases page](../../releases)
-2. Download the latest `dcgl.exe`
-3. Save it anywhere you like (for example your Desktop)
+Get the latest `dcgl.exe` from the [releases page](https://github.com/x01Jin/discord-games-launcher/releases) and put it
+wherever you keep programs.
 
-That single file is the whole app — nothing to install.
+That one file is the whole app. There is no installer.
 
-## First Launch
+## First launch
 
-1. Double-click `dcgl.exe`
-2. On first run the app sets up its own storage folder and opens its dark-themed window
-3. Press **Sync catalogue** to download the game list (20,000+ games, takes about 5-10 seconds)
+Double-click `dcgl.exe`. It creates its storage folder under
+`%LOCALAPPDATA%\discord-games-launcher\` and opens.
 
-Your games and settings live in `%LOCALAPPDATA%\discord-games-launcher\` on your PC.
+Press **Sync catalogue** in the Catalogue toolbar if the game count is still
+zero. The download is about 20,000 games and takes a few seconds.
 
 ## Updating
 
-To update:
+Download the newer `dcgl.exe` and replace the old one. Your library and
+settings stay where they are.
 
-1. Download the latest `dcgl.exe` from GitHub Releases
-2. Replace your old `dcgl.exe` with the new one
-3. Your library and settings are kept
+## Uninstalling
 
-## Uninstallation
+Delete `dcgl.exe`, then remove the storage folder:
 
-To remove everything:
+```cmd
+rmdir /s "%LOCALAPPDATA%\discord-games-launcher"
+```
 
-1. Delete `dcgl.exe`
-2. Delete the app's storage folder by running this in Command Prompt:
+That deletes the library, the game list, and the logs. If you enabled the launch
+patch for quests, remove it in Settings first; it lives in your Discord
+shortcuts and startup entry, not in this folder.
 
-   ```cmd
-   rmdir /s "%LOCALAPPDATA%\discord-games-launcher"
-   ```
+## Next
 
-**Warning:** this deletes your library and settings!
-
-## Next Steps
-
-- Read the [Getting Started Guide](./getting-started.md)
-- Learn about [Features](./features.md)
-- Check [Troubleshooting](./troubleshooting.md) if something goes wrong
-
-## Getting Help
-
-- Check [Troubleshooting](./troubleshooting.md)
-- File an issue on GitHub
+- [Getting started](./getting-started.md)
+- [Features](./features.md)
+- [Troubleshooting](./troubleshooting.md)

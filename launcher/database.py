@@ -5,11 +5,21 @@ Handles all SQLite operations for caching Discord API data and user library.
 
 import json
 import sqlite3
+import time
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+# "This game has at least one Windows executable", evaluated by SQLite's JSON1
+# extension over the executables column. Pushing it into SQL is what makes a
+# catalogue page a page instead of a scan of every cached game.
+_WIN32_PREDICATE = (
+    "EXISTS (SELECT 1 FROM json_each(games_cache.executables) "
+    "WHERE json_extract(value, '$.os') = 'win32')"
+)
 
 
 @dataclass
@@ -56,9 +66,15 @@ class Database:
 
     EXPECTED_SCHEMA_VERSION = 2
 
+    # Counts are read by the footer every few seconds and by every catalogue
+    # page; recomputing four aggregates (one of them a 24k-row JSON scan) that
+    # often is pure waste.
+    _STATS_TTL_SECONDS = 3.0
+
     def __init__(self, db_path: Path, logger=None):
         self.db_path = db_path
         self.logger = logger
+        self._stats_cache: tuple[float, dict[str, int]] | None = None
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -356,6 +372,8 @@ class Database:
                     )
                 except (sqlite3.Error, TypeError, ValueError):
                     skipped += 1
+        if games:
+            self._invalidate_stats()
         return skipped
 
     def get_game(self, game_id: int) -> Optional["Game"]:
@@ -377,15 +395,95 @@ class Database:
             rows = conn.execute(query).fetchall()
             return [self._row_to_game(row) for row in rows]
 
-    def search_games(self, query: str, limit: int = 100) -> list["Game"]:
-        """Search games by name or alias."""
+    def get_games_page(
+        self, limit: int = 200, offset: int = 0, win32_only: bool = True
+    ) -> list["Game"]:
+        """One page of the catalogue, filtered and paginated in SQL.
+
+        The previous path loaded a window of rows, dropped the non-Windows
+        ones in Python, then sliced the survivors. That made page boundaries
+        depend on how many unplayable games happened to sit in the window.
+        """
+        where = f"WHERE {_WIN32_PREDICATE}" if win32_only else ""
         with self._connect() as conn:
             rows = conn.execute(
-                """SELECT * FROM games_cache
-                   WHERE name LIKE ?
-                   ORDER BY name
-                   LIMIT ?""",
-                (f"%{query}%", limit),
+                f"""SELECT * FROM games_cache {where}
+                    ORDER BY name
+                    LIMIT ? OFFSET ?""",
+                (max(1, int(limit)), max(0, int(offset))),
+            ).fetchall()
+            return [self._row_to_game(row) for row in rows]
+
+    def get_games(self, game_ids: Iterable[int]) -> dict[int, "Game"]:
+        """Look many games up at once, keyed by id.
+
+        Decorating a quest list goes through this instead of one connection
+        and one query per quest.
+        """
+        wanted = sorted({int(gid) for gid in game_ids})
+        found: dict[int, Game] = {}
+        if not wanted:
+            return found
+        with self._connect() as conn:
+            # SQLite's default host-parameter cap is 999; chunk to stay clear.
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start : start + 500]
+                placeholders = ",".join("?" * len(chunk))
+                rows = conn.execute(
+                    f"SELECT * FROM games_cache WHERE id IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for row in rows:
+                    game = self._row_to_game(row)
+                    found[game.id] = game
+        return found
+
+    def ensure_game_row(
+        self,
+        game_id: int,
+        name: str,
+        icon_hash: str | None,
+        executables: list[dict[str, Any]],
+    ) -> bool:
+        """Insert a cache row for an application the sync has not seen.
+
+        Quests can point at applications the catalogue sync has not delivered
+        yet. The library has a foreign key onto games_cache, so without a row
+        the game cannot be added. Insert-only: a later sync owns the row.
+        """
+        try:
+            payload = json.dumps(executables)
+        except (TypeError, ValueError):
+            return False
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """INSERT INTO games_cache
+                       (id, name, aliases, executables, icon_hash, themes, is_published, cached_at)
+                       VALUES (?, ?, '[]', ?, ?, '[]', 1, CURRENT_TIMESTAMP)
+                       ON CONFLICT(id) DO NOTHING""",
+                    (game_id, name, payload, icon_hash),
+                )
+        except (sqlite3.Error, TypeError, ValueError):
+            return False
+        self._invalidate_stats()
+        return True
+
+    def search_games(
+        self, query: str, limit: int = 100, win32_only: bool = True
+    ) -> list["Game"]:
+        """Search cached games by name."""
+        conditions = ["name LIKE ?"]
+        if win32_only:
+            conditions.append(_WIN32_PREDICATE)
+        where = " AND ".join(conditions)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""SELECT * FROM games_cache
+                    WHERE {where}
+                    ORDER BY name
+                    LIMIT ?""",
+                (f"%{query}%", max(1, int(limit))),
             ).fetchall()
             return [self._row_to_game(row) for row in rows]
 
@@ -428,6 +526,7 @@ class Database:
                     json.dumps(executables),
                 ),
             )
+        self._invalidate_stats()
 
     def remove_from_library(self, game_id: int) -> None:
         """Remove a game from user's library."""
@@ -435,6 +534,7 @@ class Database:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM executable_history WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM user_library WHERE game_id = ?", (game_id,))
+        self._invalidate_stats()
 
     def get_library_ids(self) -> set[int]:
         """Get IDs of all games in the user's library (no cache join)."""
@@ -588,11 +688,13 @@ class Database:
                     started_at = CURRENT_TIMESTAMP""",
                 (game_id, pid),
             )
+        self._invalidate_stats()
 
     def set_process_stopped(self, game_id: int) -> None:
         """Remove process tracking when stopped."""
         with self._connect() as conn:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
+        self._invalidate_stats()
 
     def get_running_processes(self) -> dict[int, int]:
         """Get all running processes as {game_id: pid}."""
@@ -613,9 +715,23 @@ class Database:
         with self._connect() as conn:
             conn.execute("DELETE FROM games_cache")
             conn.execute("DELETE FROM cache_metadata WHERE key = 'last_sync'")
+        self._invalidate_stats()
+
+    def _invalidate_stats(self) -> None:
+        self._stats_cache = None
 
     def get_cache_stats(self) -> dict[str, int]:
-        """Get cache statistics."""
+        """Get cache statistics, memoised for a few seconds."""
+        cached = self._stats_cache
+        if cached is not None:
+            stamp, value = cached
+            if time.monotonic() - stamp < self._STATS_TTL_SECONDS:
+                return dict(value)
+        stats = self._compute_stats()
+        self._stats_cache = (time.monotonic(), stats)
+        return dict(stats)
+
+    def _compute_stats(self) -> dict[str, int]:
         with self._connect() as conn:
             games_count = conn.execute("SELECT COUNT(*) FROM games_cache").fetchone()[0]
             library_count = conn.execute(

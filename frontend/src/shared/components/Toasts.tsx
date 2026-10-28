@@ -1,30 +1,56 @@
 import { useUiStore } from "../store/ui-store";
+import { AlertIcon, CheckIcon, InfoIcon } from "./icons";
 
-const KIND_STYLES: Record<string, string> = {
-  info: "bg-card text-white",
-  success: "bg-card text-white border-l-4 border-green-400",
-  error: "bg-card-red text-white border-l-4 border-red-400",
-};
+const TONE = {
+  info: { border: "border-l-accent", icon: <InfoIcon size={15} className="text-accent" /> },
+  success: {
+    border: "border-l-success",
+    icon: <CheckIcon size={15} className="text-success" />,
+  },
+  error: {
+    border: "border-l-danger",
+    icon: <AlertIcon size={15} className="text-danger" />,
+  },
+} as const;
 
+/** Bottom-right stack, matching where desktop apps put transient notices. */
 export function Toasts() {
-  const toasts = useUiStore((s) => s.toasts);
-  const dismiss = useUiStore((s) => s.dismissToast);
+  const toasts = useUiStore((state) => state.toasts);
+  const dismiss = useUiStore((state) => state.dismissToast);
 
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed bottom-16 left-1/2 z-50 flex w-full max-w-md -translate-x-1/2 flex-col items-center gap-2 px-4"
+      aria-relevant="additions"
+      className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[340px] flex-col gap-2"
     >
-      {toasts.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => dismiss(t.id)}
-          className={`pointer-events-auto w-full rounded-lg px-4 py-2.5 text-center text-sm shadow-lg ${KIND_STYLES[t.kind]}`}
-        >
-          {t.message}
-        </button>
-      ))}
+      {toasts.map((toast) => {
+        const tone = TONE[toast.kind] ?? TONE.info;
+        return (
+          <div
+            key={toast.id}
+            role="status"
+            style={{ animation: "dcgl-rise 140ms ease-out" }}
+            className={
+              "pointer-events-auto flex items-start gap-2 rounded-[6px] border border-line-strong border-l-2 bg-[#111214] px-3 py-2.5 shadow-2xl " +
+              tone.border
+            }
+          >
+            <span className="pt-px">{tone.icon}</span>
+            <p className="min-w-0 flex-1 text-[13px] leading-[18px] text-ink">
+              {toast.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => dismiss(toast.id)}
+              className="-mr-1 shrink-0 rounded px-1 text-[11px] text-subtle hover:text-ink"
+              aria-label="Dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

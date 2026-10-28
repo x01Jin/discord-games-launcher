@@ -39,9 +39,7 @@ logs/
 .env.*
 
 # --- Project-private notes and tooling ---
-/information/
-/references/
-opencode.json
+private/
 .ignore
 .codegraph/
 .playwright-mcp/

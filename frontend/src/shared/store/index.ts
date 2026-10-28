@@ -1,2 +1,2 @@
 export { useUiStore } from "./ui-store";
-export type { Tab, Toast, ToastKind } from "./ui-store";
+export type { Page, Toast, ToastKind } from "./ui-store";

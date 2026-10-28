@@ -1,13 +1,13 @@
-# Database Documentation
+# Database
 
 ## Overview
 
 The Discord Games Launcher uses SQLite for local data persistence. The database handles caching of Discord API data, user library management, and process tracking.
 
-**Module:** `launcher/database.py`
-**Class:** `Database`
+- Module: `launcher/database.py`
+- Class: `Database`
 
-## Data Models
+## Data models
 
 ### Game
 
@@ -26,7 +26,7 @@ class Game:
     cached_at: datetime
 ```
 
-**Fields:**
+Fields:
 
 - `id` - Discord application ID
 - `name` - Display name
@@ -52,7 +52,7 @@ class LibraryGame:
     added_at: datetime
 ```
 
-**Fields:**
+Fields:
 
 - `game_id` - Reference to games_cache.id
 - `executable_path` - Path to generated dummy executable
@@ -79,7 +79,7 @@ class ExecutableHistory:
     last_success_at: datetime | None
 ```
 
-**Fields:**
+Fields:
 
 - `id` - Primary key (auto-increment)
 - `game_id` - Reference to the game
@@ -89,7 +89,7 @@ class ExecutableHistory:
 - `last_attempt_at` - Last time tried
 - `last_success_at` - Last successful attempt timestamp
 
-## Database Schema
+## Database schema
 
 ### games_cache
 
@@ -108,7 +108,7 @@ CREATE TABLE games_cache (
 );
 ```
 
-**Indexes:**
+Indexes:
 
 ```sql
 CREATE INDEX idx_games_name ON games_cache(name);
@@ -131,7 +131,7 @@ CREATE TABLE user_library (
 );
 ```
 
-**New Columns:**
+New Columns:
 
 - `normalized_process_name` - Normalized name for Discord detection (e.g., "wow-64.exe" from "_retail_/wow-64.exe")
 - `executables` - JSON array of all available Windows executable options for this game
@@ -154,13 +154,13 @@ CREATE TABLE executable_history (
 );
 ```
 
-**Purpose:**
+Purpose:
 
 - Tracks which executables have worked vs failed
 - Used for intelligent retry when a game fails to detect
 - Allows system to try alternative executables if primary fails
 
-**Example:**
+Example:
 
 If World of Warcraft has multiple executables:
 
@@ -195,12 +195,12 @@ CREATE TABLE cache_metadata (
 );
 ```
 
-**Used for:**
+Used for:
 
 - `last_sync` - ISO format timestamp of last API sync
 - `schema_version` - Expected database schema version (older databases are migrated in place; only an unrecognized newer schema falls back to recreate)
 
-## Database Class
+## Database class
 
 ### Initialization
 
@@ -208,17 +208,17 @@ CREATE TABLE cache_metadata (
 db = Database(db_path: Path, logger=None)
 ```
 
-**Parameters:**
+Parameters:
 
 - `db_path` - Path to SQLite database file
 - `logger` - Optional `GameLauncherLogger` for database operation logging
 
-**Auto-creates:**
+Auto-creates:
 
 - Parent directories if needed
 - All tables and indexes on first run
 
-### Connection Management
+### Connection management
 
 Uses context manager for safe connections:
 
@@ -234,7 +234,7 @@ def _connect(self):
         conn.close()
 ```
 
-### Cache Operations
+### Cache operations
 
 #### get_last_sync()
 
@@ -260,13 +260,57 @@ def needs_sync(self, max_age_days: int = 7) -> bool
 
 Checks if cache needs refreshing based on age.
 
-**Parameters:**
+Parameters:
 
 - `max_age_days` - Maximum age before refresh needed (default: 7)
 
-**Returns:** `True` if sync needed, `False` if cache is fresh
+Returns: `True` if sync needed, `False` if cache is fresh
 
-### Game Operations
+#### get_games_page()
+
+```python
+def get_games_page(self, limit: int = 200, offset: int = 0, win32_only: bool = True) -> list[Game]
+```
+
+One catalogue page, filtered and paginated in SQL. "Has a Windows
+executable" is evaluated by SQLite's JSON1 extension over the `executables`
+column, so page boundaries no longer depend on how many unplayable games
+happen to sit in a fetch window.
+
+#### get_games()
+
+```python
+def get_games(self, game_ids: Iterable[int]) -> dict[int, Game]
+```
+
+Bulk lookup by id, chunked to stay under SQLite's host-parameter cap. The
+quest service uses this to resolve every quest application in one query
+instead of one connection per quest.
+
+#### ensure_game_row()
+
+```python
+def ensure_game_row(self, game_id: int, name: str, icon_hash: str | None, executables: list[dict[str, Any]]) -> bool
+```
+
+Inserts a cache row for an application the catalogue sync has not delivered
+yet, so the `user_library` foreign key holds. Insert-only:
+`ON CONFLICT DO NOTHING` leaves an existing row alone, and the next sync owns
+the row from then on.
+
+#### get_cache_stats()
+
+```python
+def get_cache_stats(self) -> dict[str, int]
+```
+
+Counts are memoised for three seconds (`_STATS_TTL_SECONDS`) and the memo is
+cleared by every write that can change a count: `save_games`,
+`clear_cache`, `ensure_game_row`, `add_to_library`, `remove_from_library`,
+`set_process_running`, and `set_process_stopped`. The JSON scan over 24,000
+rows was otherwise re-run for the footer and for every catalogue page.
+
+### Game operations
 
 #### save_games()
 
@@ -276,7 +320,7 @@ def save_games(self, games: List[Dict[str, Any]]) -> None
 
 Saves or updates games from API to cache.
 
-**Uses UPSERT:**
+Uses UPSERT:
 
 ```sql
 INSERT INTO games_cache (...) VALUES (...)
@@ -307,14 +351,14 @@ def search_games(self, query: str, limit: int = 100) -> List[Game]
 
 Searches games by name using SQL LIKE.
 
-**Example:**
+Example:
 
 ```python
 games = db.search_games("minecraft", limit=10)
 # Returns games where name LIKE '%minecraft%'
 ```
 
-### Library Operations
+### Library operations
 
 #### add_to_library()
 
@@ -331,7 +375,7 @@ def add_to_library(
 
 Adds a game to user's library with all executable candidates.
 
-**Parameters:**
+Parameters:
 
 - `game_id` - Discord game ID
 - `executable_path` - Path to the copied dummy executable
@@ -341,7 +385,7 @@ Adds a game to user's library with all executable candidates.
 
 **Uses UPSERT** to handle re-adding existing games.
 
-**Note:** All executable candidates are stored for smart retry logic. If the primary executable fails to detect, the system can try alternatives.
+Note: All executable candidates are stored for smart retry logic. If the primary executable fails to detect, the system can try alternatives.
 
 #### remove_from_library()
 
@@ -351,7 +395,7 @@ def remove_from_library(self, game_id: int) -> None
 
 Removes a game's rows from the library and related tables.
 
-**Deletes:**
+Deletes:
 
 - Library entry from `user_library`
 - Running-process record from `running_processes`
@@ -367,7 +411,7 @@ def get_library(self) -> List[Dict[str, Any]]
 
 Returns all library games with full game info (joined with games_cache).
 
-**Returns:**
+Returns:
 
 ```python
 [
@@ -400,7 +444,7 @@ def get_library_game(self, game_id: int) -> Optional[LibraryGame]
 
 Returns library entry for a specific game.
 
-### Process Tracking
+### Process tracking
 
 #### set_process_running()
 
@@ -434,7 +478,7 @@ def is_process_running(self, game_id: int) -> bool
 
 Checks if a process is marked as running.
 
-### Utility Methods
+### Utility methods
 
 #### clear_cache()
 
@@ -478,7 +522,7 @@ json.loads(row["executables"] or "[]")
 json.loads(row["themes"] or "[]")
 ```
 
-## Data Directory
+## Data directory
 
 Default location using `platformdirs`:
 
@@ -487,7 +531,7 @@ from platformdirs import user_data_dir
 app_data_dir = Path(user_data_dir("discord-games-launcher", appauthor=False))
 ```
 
-**Platform paths:**
+Platform paths:
 
 - Windows: `%LOCALAPPDATA%\discord-games-launcher\launcher.db`
 - Linux: `~/.local/share/discord-games-launcher/launcher.db`
@@ -495,7 +539,7 @@ app_data_dir = Path(user_data_dir("discord-games-launcher", appauthor=False))
 
 ## Testing
 
-See `tests/test_database.py` for comprehensive tests:
+`tests/test_database.py` covers:
 
 - Database initialization
 - CRUD operations
@@ -504,7 +548,7 @@ See `tests/test_database.py` for comprehensive tests:
 - Cache sync logic
 - Search functionality
 
-**Example test:**
+Example test:
 
 ```python
 def test_add_to_library(temp_db):
@@ -524,9 +568,9 @@ def test_add_to_library(temp_db):
     assert lib[0]["game_id"] == 1
 ```
 
-## Usage Examples
+## Usage examples
 
-### Basic Operations
+### Basic operations
 
 ```python
 from pathlib import Path
@@ -562,7 +606,7 @@ stats = db.get_cache_stats()
 print(f"Cached: {stats['cached_games']}, Library: {stats['library_games']}")
 ```
 
-### Cache Management
+### Cache management
 
 ```python
 from datetime import datetime

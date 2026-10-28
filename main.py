@@ -22,10 +22,12 @@ from screeninfo import get_monitors
 from launcher.api import DiscordAPIClient
 from launcher.bridge import Bridge
 from launcher.database import Database
+from launcher.discord_native import DiscordNative
 from launcher.dummy_generator import DummyGenerator
 from launcher.game_manager import GameManager
 from launcher.logger import GameLauncherLogger
 from launcher.process_manager import ProcessManager
+from launcher.quests import QuestService
 
 APP_TITLE = "Discord Games Launcher"
 APP_VERSION = "3.0.0"
@@ -128,7 +130,13 @@ def initialize_components():
     except Exception as e:  # noqa: BLE001 - repair must never block startup
         print(f"Library repair skipped: {e}")
 
-    return game_manager, logger
+    quest_service = QuestService(
+        game_manager,
+        native=DiscordNative(logger=logger),
+        logger=logger,
+    )
+
+    return game_manager, quest_service, logger
 
 
 def _calculate_window_geometry() -> tuple[int, int, int, int]:
@@ -162,8 +170,8 @@ def main():
 
     try:
         print("Initializing components...")
-        game_manager, logger = initialize_components()
-        bridge = Bridge(game_manager)
+        game_manager, quest_service, logger = initialize_components()
+        bridge = Bridge(game_manager, quest_service=quest_service)
 
         url = _resolve_frontend_url()
         print(f"Frontend: {url}")

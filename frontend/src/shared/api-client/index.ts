@@ -1,17 +1,27 @@
 export { bridge } from "./bridge";
-export { getIconUrl } from "./icons";
+export { getIconUrl, getQuestAssetUrl } from "./icons";
 export type {
   AddManyResult,
   CatalogueGame,
   DcglEventDetail,
+  DiscordStatus,
   LibraryGame,
   LibraryResult,
   ListGamesResult,
   MutResult,
   PywebviewApi,
+  QuestAction,
+  QuestGame,
+  QuestKind,
+  QuestReward,
+  QuestState,
+  QuestsResult,
   RepairResult,
   RunningResult,
   SearchGamesResult,
+  SilentLauncher,
+  SilentModeResult,
+  SilentModeStatus,
   StatsResult,
   StopAllResult,
   SyncResult,

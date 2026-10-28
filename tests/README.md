@@ -1,6 +1,6 @@
 # Test Suite for Discord Games Launcher
 
-This directory contains comprehensive tests for the Discord Games Launcher.
+Tests for the Discord Games Launcher. Most need no network access.
 
 ## Running Tests
 
@@ -29,9 +29,14 @@ python tests/test_dummy_generator.py
 ## Test Files
 
 - **test_database.py** - Tests for SQLite database operations, caching, library management, and process tracking
+- **test_database_queries.py** - Catalogue paging and filtering, bulk game lookup, synthetic cache rows, stats memoisation
 - **test_api.py** - Tests for Discord API client, including mocked API calls
 - **test_dummy_generator.py** - Tests for dummy executable generation (PyInstaller integration)
 - **test_integration.py** - End-to-end integration tests (creates full stack)
+- **test_discord_native.py** - Discord install discovery, DevTools target selection, websocket framing, a full Runtime.evaluate round trip against a fake peer, quest payload parsing
+- **test_discord_setup.py** - Launch-argument rewriting (injection, replacement, restoration), shortcut discovery, Run key round trips, idempotence
+- **test_quests.py** - Quest decoration, executable resolution, states and ordering, cache behaviour, start and stop
+- **test_bridge_quests.py** - Quest methods on the bridge, error wrapping, event push
 
 ## Environment Variables
 

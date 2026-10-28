@@ -1,32 +1,29 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19, TypeScript, Vite and Tailwind 4. The built output goes to
+`../frontend-dist`, which pywebview serves as `index.html`.
 
-Currently, two official plugins are available:
+## Commands
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```cmd
+npm install
+npm run dev     # Vite dev server against a browser, no pywebview
+npm run build   # writes ../frontend-dist, restart the app to pick it up
+npx tsc -b
+npx oxlint src
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The app only loads `frontend-dist`, so a source edit without `npm run build`
+shows the old UI. Python and Vite do not share a dev server, so live reload is
+only available in the browser.
+
+## Layout
+
+- `src/app` renders the shell and picks the page.
+- `src/modules/*` holds a page per area: quests, catalogue, library, settings.
+- `src/shared` holds the API client, components, hooks, store and formatters.
+
+The bridge in `shared/api-client` waits for `window.pywebview.api` to expose the
+method it needs, because pywebview injects an empty object first. Every call
+returns `{ ok, ... }`; failures arrive as `error` strings rather than thrown
+errors.

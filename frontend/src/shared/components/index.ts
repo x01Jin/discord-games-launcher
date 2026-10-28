@@ -1,9 +1,10 @@
-export { ContextMenu } from "./ContextMenu";
-export type { MenuItem } from "./ContextMenu";
-export { Footer } from "./Footer";
-export { GameIcon } from "./GameIcon";
-export { Header } from "./Header";
-export { SearchBar } from "./SearchBar";
-export { StatsModal } from "./StatsModal";
-export { Tabs } from "./Tabs";
+export { Dialog } from "./Dialog";
+export { GameArt } from "./GameArt";
+export { Menu } from "./Menu";
+export type { MenuItem } from "./Menu";
+export { PageHeader, Toolbar } from "./PageHeader";
+export { SearchField } from "./SearchField";
+export { Sidebar } from "./Sidebar";
 export { Toasts } from "./Toasts";
+export * from "./icons";
+export * from "./primitives";

@@ -1,4 +1,4 @@
-# Library Maintenance
+# Library maintenance
 
 ## Overview
 
@@ -9,7 +9,7 @@ mechanisms keep them converged: boot repair, candidate refresh, and
 schema migration. All of them are best-effort (log and count, never
 raise) and never touch live processes.
 
-## On-Disk Layout
+## On-disk layout
 
 ```structure
 %LOCALAPPDATA%\discord-games-launcher\
@@ -22,7 +22,7 @@ raise) and never touch live processes.
 A library entry is healthy when its row exists, its `executable_path`
 file exists, and its stored executable candidates match the cache.
 
-## Boot and On-Demand Repair
+## Boot and on-demand repair
 
 `GameManager.repair_library()` runs the full pass and returns summary
 counts. It runs automatically at startup (with runtime reset) and on
@@ -49,7 +49,7 @@ Steps, in order:
    a no-op.
 5. **Icon prune.** Icons for games no longer cached are deleted.
 
-## Candidate Refresh
+## Candidate refresh
 
 `refresh_library_candidates()` reconciles stored executables with
 Discord's current data:
@@ -63,17 +63,17 @@ Discord's current data:
 
 Refresh runs after every successful catalogue sync and inside repair,
 with one policy difference: the silent sync path updates rows and
-materializes new files but never deletes — file deletion happens on
+materializes new files but never deletes. File deletion happens on
 explicit repair only.
 
-## Schema Migration
+## Schema migration
 
 Opening an older database upgrades it in place: missing columns are
 added with `ALTER TABLE` and rows are preserved. Migrated rows with
 empty candidate blobs converge on the next refresh. Only an
 unrecognized newer schema falls back to recreating the database.
 
-## Running-Game Guards
+## Running-game guards
 
 Live processes are detected through PID verification (exact path
 segments, immune to PID recycling). Dangling purges, candidate

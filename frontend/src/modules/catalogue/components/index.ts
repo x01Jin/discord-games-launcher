@@ -1,2 +1,2 @@
 export { CataloguePage } from "./CataloguePage";
-export { GameCard } from "./GameCard";
+export { CatalogueRow } from "./CatalogueRow";

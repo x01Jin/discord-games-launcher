@@ -1,136 +1,200 @@
-import { useEffect } from "react";
-import { useAddGames, useCatalogueGames } from "../hooks/useCatalogue";
-import type { CatalogueGame } from "../../../shared/api-client";
-import { SearchBar } from "../../../shared/components";
-import { useDebouncedValue } from "../../../shared/hooks";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
+import { SearchField } from "../../../shared/components/SearchField";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Skeleton,
+} from "../../../shared/components/primitives";
+import { CatalogueIcon, PlusIcon, RefreshIcon } from "../../../shared/components/icons";
+import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
+import { useVirtualRows } from "../../../shared/hooks/useVirtualRows";
+import { formatCount } from "../../../shared/lib/format";
 import { useUiStore } from "../../../shared/store/ui-store";
-import { GameCard } from "./GameCard";
+import {
+  flattenedGames,
+  useAddGames,
+  useCatalogueGames,
+} from "../hooks/useCatalogue";
+import { CatalogueRow } from "./CatalogueRow";
 
-function focusCard(
-  container: HTMLElement | null,
-  id: string,
-  dir: 1 | -1,
-): void {
-  if (!container) return;
-  const cards = [...container.querySelectorAll<HTMLElement>("[data-card-id]")];
-  const i = cards.findIndex((c) => c.dataset.cardId === id);
-  const next = cards[i + dir];
-  next?.focus();
-}
+const ROW_HEIGHT = 48;
 
 export function CataloguePage() {
-  const search = useUiStore((s) => s.search);
-  const setSearch = useUiStore((s) => s.setSearch);
-  const setCatalogueCounts = useUiStore((s) => s.setCatalogueCounts);
-  const selected = useUiStore((s) => s.selected);
-  const toggleSelected = useUiStore((s) => s.toggleSelected);
-  const debounced = useDebouncedValue(search, 250);
+  const search = useUiStore((state) => state.search);
+  const setSearch = useUiStore((state) => state.setSearch);
+  const selected = useUiStore((state) => state.selected);
+  const toggleSelected = useUiStore((state) => state.toggleSelected);
+  const clearSelected = useUiStore((state) => state.clearSelected);
+  const debounced = useDebouncedValue(search, 220);
 
-  const { data, isLoading, isError, refetch } = useCatalogueGames(debounced);
+  const query = useCatalogueGames(debounced);
   const addGames = useAddGames();
 
-  const games: CatalogueGame[] = data?.games ?? [];
-  const total: number = data?.total ?? 0;
-  const backendError: string | undefined = data?.error;
+  const games = useMemo(() => flattenedGames(query.data), [query.data]);
+  const total = query.data?.pages[0]?.total ?? 0;
+  const backendError = query.data?.pages.find((page) => page.error)?.error;
+  const filtered = debounced.trim().length > 0;
 
+  const { scroller, start, end, offsetTop, totalHeight } = useVirtualRows(
+    games.length,
+    ROW_HEIGHT,
+  );
+
+  // Fetch the next page when the window approaches the end of what is loaded.
+  const requested = useRef(0);
   useEffect(() => {
-    setCatalogueCounts(total, games.length);
-  }, [total, games.length, setCatalogueCounts]);
+    if (!query.hasNextPage || query.isFetchingNextPage) return;
+    if (end < games.length - 8) return;
+    if (requested.current === games.length) return;
+    requested.current = games.length;
+    void query.fetchNextPage();
+  }, [end, games.length, query]);
 
-  return (
-    <section
-      aria-label="Game catalogue"
-      className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col"
-    >
-      <div className="shrink-0 bg-ink pt-4">
-        <SearchBar value={search} onChange={setSearch} />
-      </div>
+  const focusRow = useCallback((index: number) => {
+    const node = document.querySelector<HTMLElement>(
+      '[data-row-index="' + index + '"]',
+    );
+    if (!node) return;
+    node.focus();
+    node.scrollIntoView({ block: "nearest" });
+  }, []);
 
-      <div className="dcgl-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-        {isLoading && (
-          <p className="mt-10 text-center text-sm text-muted">Loading games…</p>
-        )}
-
-        {(isError || backendError) && (
-          <div className="mt-10 px-4 text-center">
-            <p className="text-sm text-white">
-              {backendError ??
-                "Could not load the catalogue. Check the backend connection."}
-            </p>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="mt-3 rounded-full bg-peri px-4 py-1.5 text-xs font-semibold text-ink hover:bg-peri-strong"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {!isLoading && !isError && !backendError && games.length === 0 && (
-          <div className="mt-10 px-4 text-center">
-            {debounced ? (
-              <>
-                <p className="text-sm text-white">
-                  No games match “{debounced}”.
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Try a different search, or sync the catalogue to refresh the
-                  cache.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-white">Catalogue is empty.</p>
-                <p className="mt-1 text-xs text-muted">
-                  Press Sync catalogue to fetch games from Discord.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-
-        <div
-          className="mt-4 grid gap-4 pb-8"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-          }}
-        >
-          {games.map((g) => (
-            <GameCard
-              key={g.id}
-              game={g}
-              selected={selected.includes(g.id)}
-              onToggle={() => toggleSelected(g.id)}
-              onAddOne={() => addGames.mutate([g.id])}
-              onFocusNext={(dir) =>
-                focusCard(
-                  document.querySelector(
-                    'section[aria-label="Game catalogue"]',
-                  ),
-                  g.id,
-                  dir,
-                )
-              }
-            />
+  const body = (() => {
+    if (query.isLoading) {
+      return (
+        <div className="space-y-2 px-5 py-4">
+          {Array.from({ length: 8 }, (_, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <Skeleton className="size-[30px]" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
           ))}
         </div>
-      </div>
-
-      {selected.length > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4">
-          <button
-            type="button"
-            onClick={() => addGames.mutate(selected)}
-            disabled={addGames.isPending}
-            className="pointer-events-auto rounded-full bg-peri px-6 py-2.5 text-sm font-semibold uppercase text-ink shadow-xl hover:bg-peri-strong disabled:opacity-60"
+      );
+    }
+    if (query.isError || backendError) {
+      return (
+        <EmptyState
+          icon={<CatalogueIcon size={28} />}
+          title="The catalogue did not load"
+          description={backendError ?? "The backend did not answer. Try again."}
+          action={
+            <Button icon={<RefreshIcon size={13} />} onClick={() => void query.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      );
+    }
+    if (games.length === 0) {
+      return (
+        <EmptyState
+          icon={<CatalogueIcon size={28} />}
+          title={filtered ? "No games match that search" : "The catalogue is empty"}
+          description={
+            filtered
+              ? "Try fewer words, or part of the executable name."
+              : "Sync the catalogue to pull Discord's detectable games database."
+          }
+          action={
+            filtered ? (
+              <Button onClick={() => setSearch("")}>Clear search</Button>
+            ) : (
+              <Button icon={<RefreshIcon size={13} />} onClick={() => void query.refetch()}>
+                Reload
+              </Button>
+            )
+          }
+        />
+      );
+    }
+    return (
+      <div ref={scroller} className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        <div style={{ height: totalHeight, position: "relative" }}>
+          <div
+            style={{
+              transform: "translateY(" + offsetTop + "px)",
+              position: "absolute",
+              inset: "0 0 auto 0",
+            }}
           >
-            {addGames.isPending
-              ? "Adding…"
-              : `Add ${selected.length} selected to library`}
-          </button>
+            {games.slice(start, end).map((game, offset) => {
+              const index = start + offset;
+              return (
+                <CatalogueRow
+                  key={game.id}
+                  game={game}
+                  index={index}
+                  rowHeight={ROW_HEIGHT}
+                  selected={selected.includes(game.id)}
+                  onToggle={() => toggleSelected(game.id)}
+                  onAdd={() => addGames.mutate([game.id])}
+                  onFocusRow={focusRow}
+                />
+              );
+            })}
+          </div>
         </div>
-      )}
+        {query.isFetchingNextPage ? (
+          <p className="py-3 text-center text-[12px] text-subtle">Loading more…</p>
+        ) : null}
+      </div>
+    );
+  })();
+
+  return (
+    <section aria-label="Game catalogue" className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title="Catalogue"
+        subtitle={
+          filtered
+            ? formatCount(games.length) + " matches"
+            : formatCount(total) + " games Discord can detect"
+        }
+        actions={
+          <IconButton label="Reload catalogue" onClick={() => void query.refetch()}>
+            <RefreshIcon size={15} />
+          </IconButton>
+        }
+      />
+
+      <Toolbar>
+        <div className="max-w-[420px] flex-1">
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by game or executable"
+          />
+        </div>
+        <div className="flex-1" />
+        {selected.length > 0 ? (
+          <>
+            <span className="text-[12px] text-muted">
+              {selected.length} selected
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              busy={addGames.isPending}
+              icon={<PlusIcon size={12} />}
+              onClick={() => addGames.mutate(selected)}
+            >
+              Add {selected.length === 1 ? "game" : "games"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelected}>
+              Clear
+            </Button>
+          </>
+        ) : (
+          <span className="text-[12px] text-subtle">
+            Select rows to add several at once
+          </span>
+        )}
+      </Toolbar>
+
+      {body}
     </section>
   );
 }

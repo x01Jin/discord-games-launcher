@@ -1,0 +1,264 @@
+import { useState, type ReactNode } from "react";
+import type { SilentLauncher } from "../../../shared/api-client";
+import { Dialog } from "../../../shared/components/Dialog";
+import { PageHeader } from "../../../shared/components/PageHeader";
+import {
+  Button,
+  Chip,
+  StatusDot,
+} from "../../../shared/components/primitives";
+import {
+  RefreshIcon,
+  TrashIcon,
+  WrenchIcon,
+} from "../../../shared/components/icons";
+import {
+  useDisableSilentMode,
+  useEnableSilentMode,
+  useQuestStatus,
+  useQuests,
+  useSilentMode,
+} from "../../../shared/hooks/useQuests";
+
+function Panel({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="rounded-[8px] border border-line bg-raised/50">
+      <div className="flex items-start justify-between gap-4 px-4 pt-3.5">
+        <div className="min-w-0">
+          <h2 className="text-[13px] font-semibold text-ink">{title}</h2>
+          {description ? (
+            <p className="mt-1 max-w-[480px] text-[12px] leading-[18px] text-subtle">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-2 pt-0.5">{actions}</div>
+        ) : null}
+      </div>
+      {children ? <div className="px-4 pb-3.5 pt-2">{children}</div> : null}
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
+      <span className="shrink-0 text-[12px] text-subtle">{label}</span>
+      <span className="min-w-0 truncate text-right text-[12px] text-muted">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function LauncherRow({ launcher }: { launcher: SilentLauncher }) {
+  return (
+    <li className="rounded-[6px] border border-line bg-base/40 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[12px] font-medium text-ink">{launcher.kind}</span>
+        <Chip tone={launcher.patched ? "success" : "neutral"}>
+          {launcher.patched ? "Patched" : "Original"}
+        </Chip>
+      </div>
+      <p className="mt-1 truncate text-[11px] text-faint" title={launcher.location}>
+        {launcher.location}
+      </p>
+      <code className="mt-1 block whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-subtle">
+        {launcher.arguments}
+      </code>
+    </li>
+  );
+}
+
+/** Settings: what the app changes on this machine, and how to undo it. */
+export function SettingsPage() {
+  const silent = useSilentMode();
+  const status = useQuestStatus();
+  const { refetch: refetchQuests, isFetching: questsFetching } = useQuests();
+  const enable = useEnableSilentMode();
+  const disable = useDisableSilentMode();
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
+
+  const state = silent.data;
+  const launchers = state?.launchers ?? [];
+  const patched = state?.patched ?? launchers.filter((item) => item.patched).length;
+  const total = state?.total ?? launchers.length;
+  const allPatched = total > 0 && patched === total;
+
+  const clientLine =
+    status?.installed === false
+      ? "Not installed"
+      : status
+        ? `${status.channel ?? "Discord"} ${status.version ?? ""}`.trim()
+        : "Checking…";
+
+  const endpointLine = !status
+    ? "Checking…"
+    : status.connected
+      ? `Port ${status.debug_port}`
+      : status.running
+        ? "Running without it"
+        : "Discord is closed";
+
+  const stateTone = allPatched ? "success" : patched === 0 ? "neutral" : "warning";
+  const stateLabel = allPatched
+    ? `On for ${patched} of ${total} launch entries`
+    : patched === 0
+      ? "Off. Discord starts normally."
+      : `On for ${patched} of ${total} launch entries`;
+
+  return (
+    <section aria-label="Settings" className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title="Settings"
+        subtitle="What this app changes on this machine, and how to undo it."
+        actions={
+          <Button
+            size="sm"
+            variant="ghost"
+            busy={questsFetching}
+            icon={<RefreshIcon size={13} />}
+            onClick={() => {
+              void silent.refetch();
+              void refetchQuests();
+            }}
+          >
+            Refresh
+          </Button>
+        }
+      />
+
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[680px] flex-col gap-3 px-5 py-5">
+          <Panel
+            title="Discord client"
+            description="Quests are read from the running client over a loopback endpoint, so the request stays on this machine."
+          >
+            <Row label="Client">{clientLine}</Row>
+            <Row label="Endpoint">{endpointLine}</Row>
+          </Panel>
+
+          <Panel
+            title="Launch patch"
+            description={
+              <>
+                Adds{" "}
+                <code className="font-mono text-[11px] text-muted">
+                  --remote-debugging-port={state?.port ?? 9223}
+                </code>{" "}
+                to every entry Windows starts Discord from. The endpoint only
+                exists on loopback, and the switch takes effect the next time
+                Discord starts.
+              </>
+            }
+            actions={
+              <>
+                {patched > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<TrashIcon size={12} />}
+                    onClick={() => setConfirmRemoval(true)}
+                    title="Restore the original command line of every Discord launch entry"
+                  >
+                    Remove patch
+                  </Button>
+                ) : null}
+                {!allPatched ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<WrenchIcon size={12} />}
+                    busy={enable.isPending}
+                    onClick={() => enable.mutate()}
+                  >
+                    Turn on
+                  </Button>
+                ) : null}
+              </>
+            }
+          >
+            <div className="flex items-center gap-2 rounded-[6px] border border-line bg-base/40 px-3 py-2">
+              <StatusDot tone={stateTone} />
+              <span className="text-[12px] text-muted">{stateLabel}</span>
+            </div>
+
+            {state?.error ? (
+              <p className="mt-2 text-[12px] leading-[18px] text-[#ff8f8f]">
+                {state.error}
+              </p>
+            ) : null}
+
+            {launchers.length > 0 ? (
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {launchers.map((launcher) => (
+                  <LauncherRow
+                    key={launcher.kind + launcher.location}
+                    launcher={launcher}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[12px] leading-[18px] text-subtle">
+                No Discord shortcut, startup entry or Run value was found, so
+                there is nothing to patch.
+              </p>
+            )}
+
+            <p className="mt-2.5 text-[11px] leading-4 text-faint">
+              Removing the patch restores the exact command lines these entries
+              had before. A Discord that is already open keeps the endpoint it
+              started with until it is closed.
+            </p>
+          </Panel>
+        </div>
+      </div>
+
+      <Dialog
+        open={confirmRemoval}
+        title="Remove the launch patch?"
+        danger
+        onClose={() => setConfirmRemoval(false)}
+        description={
+          <>
+            {patched === 1
+              ? "One launch entry goes back"
+              : `${patched} launch entries go back`}{" "}
+            to the command line it had before. Discord starts normally again, and
+            this page can no longer read quests.
+            <br />
+            A Discord that is already open keeps the endpoint until it is closed.
+          </>
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmRemoval(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              busy={disable.isPending}
+              onClick={() => {
+                setConfirmRemoval(false);
+                disable.mutate();
+              }}
+            >
+              Remove patch
+            </Button>
+          </>
+        }
+      />
+    </section>
+  );
+}

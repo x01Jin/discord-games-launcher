@@ -1,164 +1,160 @@
-# Troubleshooting Guide
+# Troubleshooting
 
-## Discord Status Not Showing
+## Discord does not show a playing status
 
-**Problem:** you started a game but Discord does not show "Playing".
+The launcher cannot see what Discord does with the process. It starts a dummy
+executable with the name Discord compares against; whether the status appears
+depends on Discord.
 
-**Good to know:** the launcher cannot check what Discord sees. It opens a game window that Discord should notice — whether Discord picks it up depends on Discord's settings.
+Check these, in order:
 
-**Things to try, in order:**
+1. Discord is open and signed in, as the desktop app. The web client cannot
+   show game activity.
+2. Discord settings, Activity Privacy, **Display current activity as a status
+   message** is on. This is the most common cause.
+3. The library row says **Running**, and Task Manager shows the process name the
+   row lists.
+4. Give Discord one scan cycle, 15 to 30 seconds, and up to a minute on a busy
+   machine.
+5. Restart Discord from its tray icon, wait for it to load, and look again.
+6. Try a well-known game such as Minecraft or VALORANT. Obscure titles take
+   longer to be noticed.
 
-1. **Make sure Discord is running**
-   - Discord must be open and logged in
-   - Use the Discord desktop app (the website cannot show game activity)
-   - Try running Discord as administrator (right-click its icon → Run as administrator)
+If none of that works, the game may not be in Discord's database, your security
+software may be hiding the process, or Discord itself may need to run as
+administrator.
 
-2. **Check one Discord setting (most common cause)**
-   - Open Discord Settings → Activity Privacy
-   - Turn **Display current activity as a status message** ON
+## Quests are not listed
 
-3. **Wait a little**
-   - Discord looks for games roughly every 15-30 seconds
-   - Wait 30-60 seconds after starting a game
+The Quests page says Discord is not running, or that it cannot read the client.
 
-4. **Check the game is really running**
-   - The launcher should show it as Running
-   - In Task Manager, look for the game's process name (shown on its library card)
+1. Start Discord and sign in. The list comes from your own client, so it has to
+   be open.
+2. Read the reason on the panel. "Not installed" means Discord is missing for
+   this Windows account. "Running, no endpoint" means Discord is open but was
+   started in a way that does not expose the local endpoint.
+3. If the panel offers **Set up and restart Discord**, press it. It adds the
+   endpoint switch to your Discord shortcuts and startup entry, then restarts
+   Discord once. You stay signed in. Anything running inside Discord, a call
+   included, ends with the restart.
+4. Open Discord's own Quests page. If Discord lists nothing there, the launcher
+   has nothing to show either.
+5. Press **Check again** after Discord finishes loading.
 
-5. **Restart Discord**
-   - Close Discord fully (right-click its tray icon → Quit)
-   - Open it again, wait until it finishes loading, and check your status
+To undo the setup, use **Turn silent connection off** on the Quests panel, or
+**Remove patch** in Settings. Both restore the original command lines and leave
+nothing behind.
 
-6. **Try a different game**
-   - Popular games (Minecraft, VALORANT, League of Legends) are usually noticed quickly
-   - Test with one of those first
+Watch quests need the video played in Discord, and phone quests only count in
+the mobile app. Those are listed but cannot be finished here.
 
-**If it still does not show:**
+## A quest says "Accept first"
 
-- The game might not be one Discord recognizes
-- Your security software might be hiding processes from Discord
-- Discord might need to run as administrator
+Press **Accept first**. It opens Discord's quest page; accept the quest there and
+come back. The row becomes **Run** within about 20 seconds.
 
-## Launcher Won't Start
+The same applies to a game you started from the Library. Discord only counts
+progress for accepted quests.
 
-**Problem:** double-clicking `dcgl.exe` does nothing or shows an error.
+## Run does not change the quest
 
-**Things to try:**
+- **Done** or **Expired**: nothing to run. The quest is finished or past its end
+  date.
+- **Unsupported**: Discord did not include the game this quest belongs to.
+- Nothing happens at all: check Activity Privacy in Discord (see the first
+  section) and allow 15 to 30 seconds.
 
-1. **Restart your PC** and try again
-2. **Check your antivirus** — it may be blocking the app. Allow `dcgl.exe` and the folder `%LOCALAPPDATA%\discord-games-launcher\`
-3. **Re-download** the latest `dcgl.exe` from GitHub Releases — your copy may be damaged
-4. **Check Windows is up to date** — the app needs Windows 10/11 (64-bit)
+Progress only counts while the process runs. Stopping the game stops the
+progress.
 
-## Cannot Add a Game to the Library
+## The launcher does not start
 
-**Problem:** pressing "Add to Library" shows an error or nothing happens.
+1. Restart the PC and try again.
+2. Allow `dcgl.exe` and `%LOCALAPPDATA%\discord-games-launcher\` in your
+   antivirus.
+3. Download `dcgl.exe` again from GitHub Releases. The copy may be damaged.
+4. Confirm Windows 10 or 11, 64-bit.
 
-**Things to try:**
+## A game cannot be added
 
-1. **The game may have no Windows version** — some games are Mac or Linux only, and those cannot be added. Try another game
-2. **Check disk space** — you need at least 50 MB free
-3. **Check your antivirus** — it may have removed the game's files. Allow the folder `%LOCALAPPDATA%\discord-games-launcher\`, then remove the game from your library and add it again
+- The game may have no Windows build. Mac and Linux only titles cannot be added.
+- Discord's list may not have arrived yet. Press **Sync catalogue**.
+- Antivirus may have removed the game's files. Allow the launcher folder, remove
+  the game, and add it again.
 
-## Game Won't Start
+## A game stays Stopped
 
-**Problem:** you try to start a game but it stays Stopped.
+1. Press **Stop all**, then Start again.
+2. Remove the game and add it back. That recreates its files.
+3. Look in Task Manager for a leftover process with the same name and end it.
+4. Antivirus may be deleting the executable right after it is copied.
 
-**Things to try:**
+## Catalogue sync fails
 
-1. **Press Stop All**, then try starting the game again
-2. **Re-add the game** — remove it from your library and add it back, which recreates its files
-3. **Check Task Manager** for a stuck copy of the game already running, and end it
-4. **Check your antivirus** — it may be deleting the game's files as soon as they are created
+1. Check the connection.
+2. Try again later. Discord's endpoint is sometimes slow or down.
+3. Keep using the app. It works with the games it already saved.
+4. Some school and office networks block Discord. Try another network.
 
-## Sync Catalogue Fails
+## The app feels heavy
 
-**Problem:** the **Sync catalogue** button fails or takes very long.
+Each running game holds a small window, roughly 10 to 20 MB. The launcher itself
+sits near 50 to 100 MB and almost no CPU when idle.
 
-**Things to try:**
+Press **Stop all** for games you are not showing.
 
-1. **Check your internet connection**
-2. **Try again in 5-10 minutes** — Discord may be temporarily down
-3. **Keep using the app** — it works fine with the games it already saved; sync again later
-4. **Try another network** — some office or school networks block Discord (try your phone hotspot)
+## Antivirus flags the app
 
-## App Feels Slow or Heavy
+Each game window shows a name and a timer. That is all it does. Allow
+`%LOCALAPPDATA%\discord-games-launcher\` in your antivirus. The source is
+public, so the build can be checked.
 
-Each running game uses about 10-20 MB of memory for its little window. If things feel heavy:
+## The same game appears twice
 
-1. Stop games you are not showing — or press **Stop All**
-2. The launcher itself should use almost no CPU when idle
+Remove the extra copy from the Library. If it comes back, do a full reset (below)
+and add the game again.
 
-Normal usage looks like this:
+## Error messages
 
-- Launcher: about 50-100 MB of memory, almost no CPU
-- Each running game: about 10-20 MB of memory, almost no CPU
+`Game not found in cache`
+: Press **Sync catalogue**, then try again. If it still fails, press **Repair**
+  in the Library.
 
-## Same Game Twice in the Library
+`Game is already in library`
+: The game is in the Library already.
 
-This should not happen, but if it does: remove the extra copy from your library. If problems persist, do a **Full Reset** (below) and add your games again.
+`Game is not in library`
+: The saved entry is out of date. Press **Repair** in the Library.
 
-## Antivirus Warnings
+`No Windows executable found`
+: Discord's list has no Windows build for this game.
 
-Your antivirus may flag the launcher or its game windows. This is a false alarm — each game window only shows the game name and a timer, nothing harmful.
+`Executable not found`
+: The files were deleted or moved. Press **Repair**, or remove and re-add the
+  game.
 
-- Allow the folder `%LOCALAPPDATA%\discord-games-launcher\` in your antivirus settings
-- All of the app's code is open source, so anyone can inspect it
+`Failed to start game`
+: Check that no copy is already running, re-add the game, and check your
+  antivirus.
 
-## Error Messages
+`Sync failed`
+: Check the connection and try again later. Saved games keep working.
 
-### "Game not found in cache"
+## Full reset
 
-Press **Sync catalogue** first to download the game list. If it still fails, press **Repair** in the My Library toolbar.
-
-### "Game is already in library"
-
-It is already there — check your **My Library** tab.
-
-### "Game is not in library"
-
-Its saved info is out of date — press **Repair** in the My Library toolbar.
-
-### "No Windows executable found"
-
-That game has no Windows version in Discord's list. Try a different game.
-
-### "Executable not found"
-
-Its files were deleted or moved. Press **Repair** in the My Library toolbar (it recreates missing files), or remove the game and add it again.
-
-### "Failed to start game"
-
-Make sure the game is not already running, then re-add it and check your antivirus.
-
-### "Sync failed"
-
-Check your internet, try again later — the app keeps working with its saved games meanwhile.
-
-## Starting Over
-
-### Full Reset
-
-Erases everything (your library included) and starts fresh:
+This erases the library, the game list, and the logs:
 
 ```cmd
 rmdir /s "%LOCALAPPDATA%\discord-games-launcher"
 ```
 
-Then start the app again — it sets everything up like new.
+Start the app again and it rebuilds everything. The launch patch, if it was
+enabled, is written to your Discord shortcuts and the startup entry, so remove
+it in Settings first if you want a clean slate.
 
-## Getting More Help
+## Asking for help
 
-When asking for help, include:
-
-1. **What went wrong** — the exact message or a screenshot
-2. **What you did** — the steps before it happened
-3. **Your setup** — Windows version and Discord app version
-4. **Log file** — from `%LOCALAPPDATA%\discord-games-launcher\logs\` (pick the file with today's date)
-
-**Where to ask:**
-
-1. **GitHub Issues** — file an issue describing the problem
-2. **Community Discord** — link in README
-
-**Still stuck?** Don't hesitate to ask — the community is happy to help!
+Include the message you saw, the steps that led to it, your Windows version, the
+Discord version, and the log from
+`%LOCALAPPDATA%\discord-games-launcher\logs\` for today's date. Open an issue
+on the project page.

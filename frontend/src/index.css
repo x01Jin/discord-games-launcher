@@ -1,89 +1,176 @@
 @import "tailwindcss";
 
+/*
+ * Discord's own dark palette. The app sits next to the Discord client, so it
+ * borrows its greys instead of inventing a theme: the window reads as part of
+ * the ecosystem rather than as a themed web page.
+ */
 @theme {
-  --color-ink: #14151c;
-  --color-card: #20222e;
-  --color-card-red: #38222a;
-  --color-peri: #8f93f5;
-  --color-peri-strong: #a5a8ff;
-  --color-muted: #9aa0b4;
-  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --color-base: #1e1f22; /* sidebars, deepest surface */
+  --color-canvas: #313338; /* main content */
+  --color-raised: #2b2d31; /* panels, inputs, menus */
+  --color-hover: #35373c; /* row hover */
+  --color-active: #404249; /* selected row / pressed control */
+  --color-line: rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.12);
+
+  --color-ink: #f2f3f5; /* primary text */
+  --color-muted: #b5bac1; /* secondary text */
+  --color-subtle: #949ba4; /* tertiary text, icons */
+  --color-faint: #6d6f78; /* disabled text */
+
+  --color-accent: #5865f2;
+  --color-accent-hover: #4752c4;
+  --color-accent-press: #3c45a5;
+  --color-success: #23a55a;
+  --color-warning: #f0b232;
+  --color-danger: #da373c;
+  --color-danger-hover: #a12828;
+
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --radius-control: 4px;
+  --radius-panel: 8px;
 }
 
-html,
-body {
-  background: var(--color-ink);
-  color: #e8eaf2;
-  font-family: var(--font-sans);
+@layer base {
+  /* Tailwind v4 defaults borders to currentColor; every rule here wants the
+     hairline, so make it the default and override per element when needed. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--color-base);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.35;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  :where(button, a, input, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
 }
 
-html,
-body,
-#root {
-  height: 100%;
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-gutter: stable;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.13);
+    border-radius: 8px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+  }
+
+  &::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-#root {
-  min-height: 100vh;
-}
-
-/* Focus visibility for keyboard users */
-:where(button, a, input, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-peri-strong);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-/* Card hover feedback */
-.game-card {
-  /* Skip off-screen cards during scroll (200-card grids stay smooth) */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 140px;
-  transition:
-    transform 120ms ease,
-    border-color 120ms ease,
-    background 120ms ease;
-}
-.game-card:hover {
-  transform: translateY(-2px);
-}
-
-/* Truncation helper (titles truncate with full-text tooltip via title attr) */
-.truncate-title {
+@utility truncate-1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Subtle scrollbars for the game grids (only scrollers in the app) */
-.dcgl-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-  scrollbar-gutter: stable;
+/* Rows can be thousands of entries long in the catalogue; letting the engine
+   skip layout for the off-screen ones keeps scrolling smooth without a
+   virtualisation dependency. */
+@utility row-skip {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
 }
-.dcgl-scroll::-webkit-scrollbar {
-  width: 8px;
+
+@keyframes dcgl-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.dcgl-scroll::-webkit-scrollbar-track {
-  background: transparent;
+
+@keyframes dcgl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.dcgl-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+
+@keyframes dcgl-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
-.dcgl-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-.dcgl-scroll::-webkit-scrollbar-button {
-  display: none;
-}
-.dcgl-scroll::-webkit-scrollbar-corner {
-  background: transparent;
+
+@keyframes dcgl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -91,10 +178,8 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-  .game-card:hover {
-    transform: none;
   }
 }

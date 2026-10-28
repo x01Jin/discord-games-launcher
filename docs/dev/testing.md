@@ -1,14 +1,13 @@
-# Testing Documentation
+# Testing
 
 ## Overview
 
-The Discord Games Launcher includes a comprehensive test suite using pytest.
+The suite runs on pytest and needs no network access for most files.
 
-**Location:** `tests/`
-**Framework:** pytest>=9.1.1
-**Additional:** pytest-asyncio>=1.4.0
+- Tests live in `tests/`
+- pytest>=9.1.1 and pytest-asyncio>=1.4.0
 
-## Test Structure
+## Test structure
 
 ```structure
 tests/
@@ -16,18 +15,23 @@ tests/
 ├── README.md               # Test documentation (this file)
 ├── test_api.py             # Discord API client tests
 ├── test_bridge_ids.py      # Snowflake ID bridge serialization tests
+├── test_bridge_quests.py   # Quest methods on the bridge
 ├── test_database.py        # Database operation tests
+├── test_database_queries.py # Catalogue paging, bulk lookup, stats memo
+├── test_discord_native.py  # Client discovery, CDP session, quest payload
+├── test_discord_setup.py   # Launch-argument rewriting, shortcut and Run key round trips
 ├── test_dummy_generator.py # Dummy executable tests
 ├── test_game_manager.py    # Game manager tests
 ├── test_integration.py     # End-to-end integration tests
 ├── test_migration.py       # Schema migration tests
+├── test_quests.py          # Quest decoration, resolution, start/stop
 ├── test_repair.py          # Library repair tests
 └── test_startup_cleanup.py # Startup cleanup tests
 ```
 
-## Running Tests
+## Running tests
 
-### Run All Tests
+### All tests
 
 ```bash
 pytest tests/ -q
@@ -39,7 +43,7 @@ On Windows with the project virtual environment:
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-### Run Specific Test File
+### One test file
 
 ```bash
 pytest tests/test_database.py -q
@@ -48,7 +52,7 @@ pytest tests/test_dummy_generator.py -q
 pytest tests/test_integration.py -q
 ```
 
-### Run with Coverage
+### With coverage
 
 Coverage targets `launcher/` only (the React frontend in `frontend/src/` has no Python coverage):
 
@@ -56,7 +60,7 @@ Coverage targets `launcher/` only (the React frontend in `frontend/src/` has no 
 pytest tests/ -q --cov=launcher --cov-report=html
 ```
 
-### Run Directly with Python
+### Directly with Python
 
 ```bash
 python tests/test_database.py
@@ -64,7 +68,7 @@ python tests/test_api.py
 python tests/test_dummy_generator.py
 ```
 
-## Environment Variables
+## Environment variables
 
 ### SKIP_PYINSTALLER_TESTS
 
@@ -80,45 +84,45 @@ export SKIP_PYINSTALLER_TESTS=True
 pytest tests/test_dummy_generator.py -q
 ```
 
-## Test Files
+## Test files
 
 ### test_database.py
 
-**Coverage:** Database initialization, game caching, library operations, process tracking, executable history, cache sync tracking.
+Coverage: Database initialization, game caching, library operations, process tracking, executable history, cache sync tracking.
 
 ### test_api.py
 
-**Coverage:** Discord API client initialization, executable scoring, process name normalization, icon URL generation, cache sync logic, error handling.
+Coverage: Discord API client initialization, executable scoring, process name normalization, icon URL generation, cache sync logic, error handling.
 
 ### test_bridge_ids.py
 
-**Coverage:** Snowflake-scale game IDs crossing the JS bridge serialized as strings.
+Coverage: Snowflake-scale game IDs crossing the JS bridge serialized as strings.
 
 ### test_dummy_generator.py
 
-**Coverage:** Copy-based dummy executable generation from the pre-built template.
+Coverage: Copy-based dummy executable generation from the pre-built template.
 
-**Note:** Tests requiring PyInstaller are skipped if `SKIP_PYINSTALLER_TESTS=True`.
+Note: Tests requiring PyInstaller are skipped if `SKIP_PYINSTALLER_TESTS=True`.
 
 ### test_game_manager.py
 
-**Coverage:** High-level library management, game search and sync, process control.
+Coverage: High-level library management, game search and sync, process control.
 
 ### test_integration.py
 
-**Coverage:** Complete application stack working together in realistic workflows.
+Coverage: Complete application stack working together in realistic workflows.
 
 ### test_migration.py
 
-**Coverage:** Non-destructive schema migration without data loss.
+Coverage: Non-destructive schema migration without data loss.
 
 ### test_repair.py
 
-**Coverage:** Executable candidate refresh, library repair composition, generator ownership.
+Coverage: Executable candidate refresh, library repair composition, generator ownership.
 
 ### test_startup_cleanup.py
 
-**Coverage:** Startup reconciliation of stale runtime records, orphaned directories, missing executables, and orphaned icons.
+Coverage: Startup reconciliation of stale runtime records, orphaned directories, missing executables, and orphaned icons.
 
 ## Fixtures (conftest.py)
 
@@ -210,7 +214,7 @@ def game_manager(database, api_client, dummy_generator, process_manager):
     )
 ```
 
-## Test Data Helpers
+## Test data helpers
 
 ### create_sample_game()
 
@@ -232,7 +236,7 @@ def create_sample_game(game_id: int) -> Dict[str, Any]:
 
 ## Mocking
 
-### Mocking API Responses
+### Mocking API responses
 
 ```python
 import json
@@ -258,9 +262,9 @@ def test_api_sync_with_mock(database, temp_dir):
         assert stats["cached_games"] == 2
 ```
 
-## Best Practices
+## Best practices
 
-### 1. Use Temporary Paths
+### 1. Use temporary paths
 
 Always use `tmp_path` fixture for file operations:
 
@@ -270,7 +274,7 @@ def test_something(tmp_path):
     db = Database(db_path)
 ```
 
-### 2. Clean Up Resources
+### 2. Clean up resources
 
 Use fixtures for automatic cleanup:
 
@@ -283,7 +287,7 @@ def database(temp_dir):
     # Cleanup happens automatically when temp_dir is removed
 ```
 
-### 3. Test Error Cases
+### 3. Test error cases
 
 Always test failure scenarios:
 
@@ -295,7 +299,7 @@ def test_database_error_handling(database):
         database.save_games(None)
 ```
 
-### 4. Skip Slow Tests
+### 4. Skip slow tests
 
 Use environment variables for optional slow tests:
 
@@ -312,7 +316,7 @@ def test_generate_dummy_executable(dummy_generator):
     assert result[0].exists()
 ```
 
-## Continuous Integration
+## Continuous integration
 
 Example GitHub Actions workflow:
 
@@ -345,40 +349,40 @@ jobs:
         run: pytest tests/ -q
 ```
 
-## Debugging Tests
+## Debugging tests
 
-### Verbose Output
+### Verbose output
 
 ```bash
 pytest tests/test_database.py -v -s
 ```
 
-### Stop on First Failure
+### Stop on first failure
 
 ```bash
 pytest tests/ -x
 ```
 
-### Debug a Specific Test
+### Debug a specific test
 
 ```bash
 pytest tests/test_database.py::test_games_cache -v --pdb
 ```
 
-### Show Local Variables on Failure
+### Show local variables on failure
 
 ```bash
 pytest tests/ --showlocals
 ```
 
-## Coverage Goals
+## Coverage goals
 
-**Target Coverage:**
+Target Coverage:
 
 - launcher/ modules: 80%+
 - Overall: 75%+
 
-**Exclusions:**
+Exclusions:
 
 - PyInstaller build artifacts
 - Debug print statements

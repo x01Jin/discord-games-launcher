@@ -229,7 +229,7 @@ class DiscordAPIClient:
         if total and missing.get("executables", 0) > total // 2:
             self.logger.warning(
                 f"Discord API {version}: {missing['executables']}/{total} records "
-                "lack executables — upstream schema may have changed"
+                "lack executables; the upstream schema may have changed"
             )
 
     async def _fetch_all_games_async(self) -> list[dict[str, Any]]:

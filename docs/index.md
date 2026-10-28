@@ -1,89 +1,58 @@
-# Discord Games Launcher Documentation
+# Documentation
 
-Welcome to the Discord Games Launcher documentation. This documentation is organized into two main sections:
+Discord Games Launcher is a Windows app that runs a dummy process under a name
+Discord compares against, which makes Discord show that game as playing. It
+also reads the quest list from the running Discord client and starts the game a
+quest asks for.
 
-## Documentation Sections
+## Start here
 
-### [Developer Documentation](./dev/)
+- [Installation](./user/installation.md) and [Getting started](./user/getting-started.md)
+- [Features](./user/features.md), [Troubleshooting](./user/troubleshooting.md)
 
-Technical documentation for developers working on or extending the launcher.
+## Developer docs
 
-- **[Architecture](./dev/architecture.md)** - System architecture, component overview, and data flow
-- **[API](./dev/api.md)** - Discord API client documentation and integration details
-- **[Database](./dev/database.md)** - SQLite schema, models, and database operations
-- **[UI](./dev/ui.md)** - React frontend, modules, theming, and interface design
-- **[Bridge](./dev/bridge.md)** - pywebview contract, ID rules, and backend events
-- **[Library Maintenance](./dev/library-maintenance.md)** - Repair, candidate refresh, and schema migration
-- **[Testing](./dev/testing.md)** - Test suite, running tests, and test coverage
-- **[Logging](./dev/logging.md)** - Logging system, log files, and rotation
-- **[Build](./dev/build.md)** - Packaging dcgl.exe, app icon pipeline, dummy template build
+- [Architecture](./dev/architecture.md): how the pieces fit, request flow, events
+- [Quests](./dev/quests.md): reading the running client, mapping quests to executables, silent setup
+- [API](./dev/api.md): the Discord catalogue client
+- [Database](./dev/database.md): schema, migrations, queries
+- [UI](./dev/ui.md): pages, components, theme, performance rules
+- [Bridge](./dev/bridge.md): the pywebview contract
+- [Library maintenance](./dev/library-maintenance.md): repair, candidate refresh, schema migration
+- [Testing](./dev/testing.md): how to run the suite and what it covers
+- [Logging](./dev/logging.md): log files and rotation
+- [Build](./dev/build.md): packaging `dcgl.exe`
 
-### [User Documentation](./user/)
+## Stack
 
-End-user documentation for installing and using the launcher.
+Python 3.14 and pywebview for the window, React 19 with Vite and Tailwind 4 for
+the interface, SQLite for storage, httpx for the catalogue, psutil for process
+control, and a small hand-written CDP client for reading Discord.
 
-- **[Installation](./user/installation.md)** - System requirements and installation guide
-- **[Getting Started](./user/getting-started.md)** - Quick start guide and first steps
-- **[Features](./user/features.md)** - Complete feature documentation
-- **[Troubleshooting](./user/troubleshooting.md)** - Common issues and solutions
-
-## Quick Links
-
-**For Users:**
-
-- New users: Start with [Installation](./user/installation.md) → [Getting Started](./user/getting-started.md)
-- Having issues? Check [Troubleshooting](./user/troubleshooting.md)
-
-**For Developers:**
-
-- Understanding the system: [Architecture](./dev/architecture.md)
-- Making changes: [Testing](./dev/testing.md)
-- API integration: [API](./dev/api.md)
-
-## Overview
-
-Discord Games Launcher is a Windows application that allows users to browse Discord's supported games database and create dummy processes that trigger Discord's "Playing [Game]" status display. It provides:
-
-- Browse 20,000+ Discord-supported games
-- Search and filter game database
-- Add games to personal library
-- Copy pre-built dummy executable templates for Discord detection
-- Run multiple games simultaneously
-- Dark theme interface
-
-## Technology Stack
-
-- **Python 3.14.7+**
-- **pywebview** - Native window shell
-- **React + Vite + Tailwind CSS** - Frontend
-- **SQLite** - Local database
-- **httpx** - HTTP client for Discord API
-- **Copy-based template system** - Instant dummy executable generation
-- **psutil** - Process management
-
-## Project Structure
+## Layout
 
 ```structure
 discord-games-launcher/
 ├── docs/               # This documentation
 ├── launcher/           # Backend modules
-│   ├── api.py         # Discord API client
+│   ├── api.py         # Discord catalogue client
 │   ├── bridge.py      # pywebview frontend contract
-│   ├── database.py    # SQLite database (+ migration)
-│   ├── dummy_generator.py  # Dummy exe generator (single instance)
-│   ├── game_manager.py     # High-level game operations (+ repair)
-│   ├── logger.py           # Centralized logging
-│   └── process_manager.py  # Process lifecycle + detection
-├── frontend/          # React UI (Vite + Tailwind)
+│   ├── database.py    # SQLite storage and migrations
+│   ├── discord_native.py   # Running Discord client access (CDP)
+│   ├── discord_setup.py    # Endpoint flag in Discord's launch entries
+│   ├── dummy_generator.py  # Dummy executable generation
+│   ├── game_manager.py     # Game operations and repair
+│   ├── logger.py           # Logging setup
+│   ├── process_manager.py  # Process lifecycle and detection
+│   └── quests.py           # Quest list, executable mapping, run and stop
+├── frontend/          # React UI
 │   └── src/
-│       ├── modules/   # catalogue, library
-│       └── shared/    # api-client, components, hooks, store
-├── frontend-dist/     # Built frontend served by pywebview
+│       ├── modules/   # quests, catalogue, library, settings
+│       └── shared/    # api-client, components, hooks, store, lib
+├── frontend-dist/     # Built frontend, served by pywebview
 ├── templates/         # PyInstaller templates
-├── tests/            # Test suite
-└── main.py          # Entry point
+├── tests/             # Test suite
+└── main.py            # Entry point
 ```
 
----
-
-- _Last updated: 2026-09-16_ -
+_Last updated: 2026-10-29_

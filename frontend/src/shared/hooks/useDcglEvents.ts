@@ -2,27 +2,25 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { DcglEventDetail } from "../api-client";
 
-function isDcglDetail(v: unknown): v is DcglEventDetail {
-  if (typeof v !== "object" || v === null) return false;
-  return (v as { type?: unknown }).type === "library_changed";
+function isDcglDetail(value: unknown): value is DcglEventDetail {
+  if (typeof value !== "object" || value === null) return false;
+  return (value as { type?: unknown }).type === "library_changed";
 }
 
 /**
- * Subscribes to backend async events pushed via
- * `window.dispatchEvent(new CustomEvent('dcgl', {detail}))`
- * and invalidates the matching React Query caches.
+ * Backend pushes arrive as a CustomEvent dispatched from Python. Anything that
+ * changes library or quest state invalidates the matching caches, so nothing
+ * on screen waits for its next poll.
  */
 export function useDcglEvents(): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!isDcglDetail(detail)) return;
-      void queryClient.invalidateQueries({ queryKey: ["library"] });
-      void queryClient.invalidateQueries({ queryKey: ["catalogue"] });
-      void queryClient.invalidateQueries({ queryKey: ["stats"] });
-      void queryClient.invalidateQueries({ queryKey: ["running"] });
+    const handler = (event: Event) => {
+      if (!isDcglDetail((event as CustomEvent).detail)) return;
+      for (const key of ["library", "catalogue", "stats", "quests"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     };
     window.addEventListener("dcgl", handler);
     return () => window.removeEventListener("dcgl", handler);

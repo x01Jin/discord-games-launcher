@@ -5,18 +5,22 @@ methods on ``window.pywebview.api``. State changes push through
 ``dcgl`` CustomEvents.
 """
 
+import os
 import sqlite3
 from collections.abc import Callable
 from typing import Any
 
+from launcher import discord_setup
+from launcher.discord_native import DiscordNativeError
 from launcher.game_manager import GameManager, GameManagerError
 
 
 class Bridge:
     """JS API for the webview frontend. All returns must be JSON-serializable."""
 
-    def __init__(self, game_manager: GameManager):
+    def __init__(self, game_manager: GameManager, quest_service=None):
         self.game_manager = game_manager
+        self.quest_service = quest_service
         self.push: Callable[[dict[str, Any]], None] | None = None
 
     # -- internal helpers ------------------------------------------------
@@ -78,19 +82,17 @@ class Bridge:
         except (TypeError, ValueError):
             limit, offset = 200, 0
         try:
-            games = self.game_manager.get_all_games(limit=limit + offset)[offset:]
-            # Filter: only games with at least one win32 executable
-            playable = [
-                g for g in games if any(e.get("os") == "win32" for e in g.executables)
-            ]
+            # Filtering and pagination both happen in SQL; the catalogue only
+            # ever holds Windows-playable games.
+            games = self.game_manager.get_games_page(limit=limit, offset=offset)
             # Raw IDs (not the cache-JOINed view): dangling rows must still
             # read as in-library so add/remove stay consistent.
             library_ids = self.game_manager.db.get_library_ids()
             return {
                 "games": [
-                    self._serialize_game(g, g.id in library_ids) for g in playable
+                    self._serialize_game(g, g.id in library_ids) for g in games
                 ],
-                "total": self.game_manager.get_cache_stats()["cached_games"],
+                "total": self.game_manager.count_playable_games(),
             }
         except (GameManagerError, sqlite3.Error, OSError, ValueError) as e:
             return {"games": [], "total": 0, "error": str(e)}
@@ -101,16 +103,11 @@ class Bridge:
         except (TypeError, ValueError):
             limit = 50
         try:
-            # Fetch extra to account for non-Win games being filtered out
-            games = self.game_manager.search_games(str(query), limit=limit * 3)
-            playable = [
-                g for g in games if any(e.get("os") == "win32" for e in g.executables)
-            ]
+            games = self.game_manager.search_games(str(query), limit=limit)
             library_ids = self.game_manager.db.get_library_ids()
             return {
                 "games": [
-                    self._serialize_game(g, g.id in library_ids)
-                    for g in playable[:limit]
+                    self._serialize_game(g, g.id in library_ids) for g in games
                 ]
             }
         except (GameManagerError, sqlite3.Error, OSError, ValueError) as e:
@@ -260,6 +257,139 @@ class Bridge:
         stopped = self.game_manager.stop_all_games()
         self._emit({"type": "library_changed"})
         return {"stopped": stopped}
+
+    # -- quests ----------------------------------------------------------
+    # Everything below reads the running Discord client, never the REST API.
+    def discord_status(self) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {
+                "installed": False,
+                "running": False,
+                "connected": False,
+                "hint": "Quest support is unavailable in this build.",
+            }
+        try:
+            return self.quest_service.status()
+        except (DiscordNativeError, OSError, ValueError) as e:
+            return {
+                "installed": False,
+                "running": False,
+                "connected": False,
+                "hint": str(e),
+            }
+
+    def get_quests(self, force: bool = False) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {
+                "connected": False,
+                "quests": [],
+                "error": "Quest support is unavailable in this build.",
+            }
+        try:
+            return self.quest_service.list_quests(force=bool(force))
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"connected": False, "quests": [], "error": str(e)}
+
+    def connect_discord(self) -> dict[str, Any]:
+        """Enable quest reading, restarting Discord only if it is already open."""
+        if self.quest_service is None:
+            return {
+                "ok": False,
+                "message": "Quest support is unavailable in this build.",
+            }
+        try:
+            ok, message = self.quest_service.native.connect()
+        except (DiscordNativeError, OSError) as e:
+            return {"ok": False, "message": str(e)}
+        if ok:
+            self.quest_service.invalidate()
+        return {"ok": ok, "message": message}
+
+    def open_quest_in_discord(self, quest_id: str = "") -> dict[str, Any]:
+        """Bring Discord's quest page forward so a quest can be accepted."""
+        if not isinstance(quest_id, str):
+            quest_id = ""
+        try:
+            os.startfile("discord://-/quest-home")
+        except (OSError, AttributeError) as e:
+            return {"ok": False, "message": f"Could not open Discord: {e}"}
+        return {"ok": True, "message": "Opened Discord on the quest page"}
+
+    def start_discord(self) -> dict[str, Any]:
+        """Launch Discord with quest reading enabled; never restarts it."""
+        if self.quest_service is None:
+            return {
+                "ok": False,
+                "message": "Quest support is unavailable in this build.",
+            }
+        try:
+            ok, message = self.quest_service.native.start()
+        except (DiscordNativeError, OSError) as e:
+            return {"ok": False, "message": str(e)}
+        if ok:
+            self.quest_service.invalidate()
+        return {"ok": ok, "message": message}
+
+    # -- silent connection -------------------------------------------------
+    # One-time change to the Windows launch entries, so every Discord start
+    # carries the debug switch and quest reads never need a restart again.
+    def silent_mode_status(self) -> dict[str, Any]:
+        try:
+            return discord_setup.summary()
+        except (OSError, ValueError) as e:
+            return {"enabled": False, "wanted": False, "launchers": [], "error": str(e)}
+
+    def enable_silent_mode(self) -> dict[str, Any]:
+        try:
+            result = discord_setup.enable()
+        except (OSError, ValueError) as e:
+            return {"ok": False, "message": str(e), "updated": [], "failed": []}
+        if self.quest_service is not None:
+            self.quest_service.invalidate()
+        return result
+
+    def disable_silent_mode(self) -> dict[str, Any]:
+        try:
+            result = discord_setup.disable()
+        except (OSError, ValueError) as e:
+            return {"ok": False, "message": str(e), "restored": [], "failed": []}
+        if result.get("ok"):
+            return {**result, "message": "Silent connection is off. Discord starts normally again."}
+        return {
+            **result,
+            "message": "Some launch entries could not be restored: "
+            + "; ".join(result.get("failed") or []),
+        }
+
+    def start_quest(self, quest_id: str) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {
+                "ok": False,
+                "message": "Quest support is unavailable in this build.",
+            }
+        if not isinstance(quest_id, str) or not quest_id.strip():
+            return {"ok": False, "message": "Invalid quest id"}
+        try:
+            ok, message = self.quest_service.start_quest(quest_id.strip())
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"ok": False, "message": f"Failed to start quest: {e}"}
+        self._emit({"type": "library_changed"})
+        return {"ok": ok, "message": message}
+
+    def stop_quest(self, quest_id: str) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {
+                "ok": False,
+                "message": "Quest support is unavailable in this build.",
+            }
+        if not isinstance(quest_id, str) or not quest_id.strip():
+            return {"ok": False, "message": "Invalid quest id"}
+        try:
+            ok, message = self.quest_service.stop_quest(quest_id.strip())
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"ok": False, "message": f"Failed to stop quest: {e}"}
+        self._emit({"type": "library_changed"})
+        return {"ok": ok, "message": message}
 
     # -- stats -----------------------------------------------------------
     def get_stats(self) -> dict[str, int]:

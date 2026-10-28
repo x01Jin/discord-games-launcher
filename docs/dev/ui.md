@@ -1,132 +1,169 @@
-# UI Documentation
+# UI
 
 ## Overview
 
-The Discord Games Launcher frontend is a React single-page application
-rendered inside a pywebview native window. All backend access goes through
-the typed `window.pywebview.api` bridge (`launcher/bridge.py`); the
-contract is documented in [Bridge](./bridge.md).
+The frontend is a React single-page app rendered inside a pywebview native
+window. All backend access goes through the typed `window.pywebview.api`
+bridge (`launcher/bridge.py`); the contract is
+documented in [Bridge](./bridge.md).
 
-**Stack:** React + Vite + Tailwind CSS
-**Theme:** Dark mode with periwinkle accent
-**State:** React Query (server state) + Zustand (UI state)
+- Stack: React 19, Vite, Tailwind CSS 4
+- Theme: Discord's dark palette with a single accent
+- State: React Query for server state, Zustand for UI state
 
-## File Structure
+## Layout
 
-```structure
-frontend/src/
-├── App.tsx                        # Shell: fixed chrome + scroll views
-├── main.tsx                       # React Query + store providers
-├── index.css                      # Theme tokens, card/scrollbar styling
-├── modules/
-│   ├── catalogue/                 # Browse + search + add
-│   │   ├── components/            # CataloguePage, GameCard
-│   │   ├── hooks/                 # useCatalogue (queries + add mutations)
-│   │   └── services/              # catalogue-service
-│   └── library/                   # Library management + repair
-│       ├── components/            # LibraryPage, LibraryCard
-│       ├── hooks/                 # useLibrary (queries + mutations)
-│       └── services/              # library-service
-└── shared/
-    ├── api-client/                # bridge proxy + TypeScript types
-    ├── components/                # Header, Tabs, SearchBar, Footer,
-    │                              # StatsModal, Toasts, ContextMenu
-    ├── hooks/                     # useDcglEvents, useDebouncedValue
-    └── store/                     # ui-store (Zustand)
-```
-
-## Theme
-
-Tokens in `index.css` (`@theme`):
-
-```css
---color-ink: #14151c; /* App background */
---color-card: #20222e; /* Cards, toolbar buttons */
---color-peri: #8f93f5; /* Primary accent */
---color-peri-strong: #a5a8ff; /* Accent hover */
---color-muted: #9aa0b4; /* Secondary text */
-```
-
-Helpers: `.game-card` (hover lift, off-screen skip for large grids),
-`.truncate-title` (ellipsis with full-text `title` tooltip), `.dcgl-scroll`
-(thin overlay-style scrollbar with stable gutter).
-
-## Shell Layout (`App.tsx`)
-
-Fixed chrome with a single scroll region per view:
+Fixed two-column shell. The left rail is the only persistent chrome; each page
+owns its own header, toolbar, and scroll region.
 
 ```structure
 App
-├── Header (logo, "Sync catalogue", "Stats")
-├── Tabs ("Catalogue" / "My library")
-├── main (flex-1, no scrolling of its own)
-│   └── CataloguePage | LibraryPage (own .dcgl-scroll grid wrapper)
-├── Footer (in-flow status bar: cache / no-win / library / running)
-├── StatsModal
-└── Toasts
+├── Sidebar (228px, bg-base)
+│   ├── brand
+│   ├── nav: Quests / Catalogue / Library  (counts)
+│   ├── Settings  (pinned above the client state)
+│   └── client state: Discord connection, running fakes
+├── main (bg-canvas)
+│   ├── PageHeader    (title, subtitle, actions)
+│   ├── Toolbar       (search, filters, selection actions)
+│   └── scroll region (rows)
+└── Toasts (bottom right)
 ```
 
-The footer stats refetch every 5 seconds. `StatsModal` shows the same four
-counts on demand and closes on Escape.
+The last visited page is remembered in `localStorage` (`dcgl.page`).
 
-## Catalogue Tab
+## Theme
 
-**Components:** `CataloguePage`, `GameCard`, `SearchBar`
+Tokens live in `frontend/src/index.css` under `@theme`:
 
-- `SearchBar` is fixed above the grid with a debounced (250 ms) query and
-  a "Showing X of Y games in catalogue" counter.
-- Only games with at least one Windows executable are listed. Each card
-  shows artwork (Discord CDN, initial-letter fallback), the name, the
-  first 3 executable variants (`+N more` tooltip for the rest), and an
-  "In library" marker when applicable.
-- **Select:** single click toggles selection (ring highlight); games already in the library are dimmed, skip selection, and offer only an "Already in library" menu entry.
-- **Add:** double-click adds one game; the floating "Add N selected"
-  pill adds the whole selection; right-click opens Add to library.
-- Backend failures render the backend's error message with a retry
-  button instead of an empty grid.
+| Token            | Value                   | Use                           |
+| ---------------- | ----------------------- | ----------------------------- |
+| `--color-base`   | `#1e1f22`               | Sidebar, inputs               |
+| `--color-canvas` | `#313338`               | Main content                  |
+| `--color-raised` | `#2b2d31`               | Panels, dialogs               |
+| `--color-hover`  | `#35373c`               | Row hover                     |
+| `--color-active` | `#404249`               | Selected nav, pressed control |
+| `--color-line`   | rgba(255,255,255,.06)   | Hairline borders              |
+| `--color-ink`    | `#f2f3f5`               | Primary text                  |
+| `--color-muted`  | `#b5bac1`               | Secondary text                |
+| `--color-subtle` | `#949ba4`               | Tertiary text, icons          |
+| `--color-accent` | `#5865f2`               | Primary action, focus, select |
 
-## Library Tab
+Utilities: `scroll-thin` (8 px overlay scrollbar with a stable gutter),
+`truncate-1`, `row-skip` (`content-visibility: auto` for long lists).
 
-**Components:** `LibraryPage`, `LibraryCard`
+The palette, the 4 px control radius, and the 34-56 px row heights are
+Discord's. The app sits next to the client, so borrowing its greys reads as
+part of the ecosystem rather than as a themed web page.
 
-Toolbar: library count plus **Refresh**, **Repair**, and **Stop all**
-buttons. The **Repair** button opens a confirmation dialog that warns
-file deletion is permanent and cannot be undone; confirming runs the
-backend repair (see [Library Maintenance](./library-maintenance.md)) and
-toasts the summary.
+## Shared components
 
-Cards show artwork, a running/stopped dot, game name, and process name:
+| Component        | Role                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| `primitives.tsx` | Button, IconButton, Chip, StatusDot, ProgressBar, Switch, Skeleton, EmptyState        |
+| `PageHeader.tsx` | `PageHeader` and `Toolbar`                                                           |
+| `SearchField.tsx`| Search input with icon, clear button, Escape                                          |
+| `GameArt.tsx`    | Art tile: quest artwork, then app icon, then initials                                 |
+| `Dialog.tsx`     | Modal with Escape, backdrop, focus handoff                                            |
+| `Menu.tsx`       | Cursor-anchored menu that flips at the viewport edges                                 |
+| `Sidebar.tsx`    | Navigation and live client state                                                      |
+| `Toasts.tsx`     | Bottom-right stack, three at a time                                                   |
+| `icons.tsx`      | Inline SVG set; no icon package                                                       |
 
-- **Toggle start/stop:** double-click, Enter/Space, or the context-menu
-  action.
-- **Remove:** context-menu action with a confirmation dialog. The game
-  is stopped first, then its files and database rows are deleted.
-- Card statuses refresh via the backend `library_changed` event after every mutation; only the footer/stats counts poll (every 5 seconds).
+## Quests
 
-## Data Layer
+The default view. It reads the quest list from the running Discord client (see
+[Quests](./quests.md)).
 
-Each module pairs a thin service (bridge calls) with React Query hooks:
+- Header: counts of open, running, and finished quests; Refresh.
+- Toolbar: All / Play / Watch filter, a "Show finished" switch, and a
+  "Set up silent start" button while the launch argument is not installed.
+  The count shows how many rows are visible, plus the total only when the
+  filter hides some.
+- Rows: art (video thumbnail for watch quests), quest name, kind label,
+  game and process name, reward chip, time left (amber inside 24 h), progress
+  bar once enrolled, and one action chosen by the backend: Run, Stop, Accept
+  first, Watch, Phone, Done, or Unsupported.
+- Accept first: shown for a play quest Discord has not been accepted yet.
+  It opens Discord's quest page; the row turns into Run once the client reports
+  the quest as enrolled.
+- Disconnected: one panel that states the situation, shows what the client
+  reported, and offers the single useful action. With silent mode off it lists
+  the three steps of the setup; with the setup done but the client still
+  started before it, the panel says one restart finishes it. The copy is short
+  because the panel sits in a ~530 px column.
+
+## Catalogue
+
+- Header: playable game count and reload.
+- Toolbar: search (220 ms debounce), selection summary, add actions.
+- Rows: select checkbox, art, name, up to two executable chips plus a
+  count, and an Add button. In-library rows are dimmed and not selectable.
+- Paging: `useInfiniteQuery` with 200 games per page; the next page loads
+  when the window approaches the end of what is already loaded.
+- Windowing: `useVirtualRows` mounts only the visible rows at a fixed
+  48 px height, so the list stays fast as it grows.
+- Keyboard: Tab reaches rows, Arrow Up/Down moves between them, Space
+  toggles, Enter adds.
+
+## Library
+
+- Header: game count, running count, Refresh, Repair, Stop all.
+- Rows: art, name, running state, process name, Start/Stop, and a menu
+  with Start/Stop and Remove.
+- The Repair button opens a confirmation dialog that says the deletion is permanent
+  (see [Library Maintenance](./library-maintenance.md)).
+- Rows refresh from the backend `library_changed` event; there is no polling
+  beyond a 20 s stats refresh.
+
+## Settings
+
+Two panels, no state of their own beyond one dialog flag.
+
+- Discord client: the channel and version from `status()`, and where the
+  loopback endpoint is: `Port 9222` when connected, "Running without it" when
+  the client is up but was started before the switch, or "Discord is closed".
+- Launch patch: the flag in mono, a status pill (`On for 4 of 4 launch
+  entries`, `Off. Discord starts normally.`, amber when partial), one card per
+  entry with its kind, a Patched/Original chip, the location, and the command
+  line it will run. **Remove patch** opens a danger dialog that names how many
+  entries go back; **Turn on** appears while any entry is unpatched.
+- Removal and re-application use the same two bridge calls as the Quests panel
+  (`disable_silent_mode` / `enable_silent_mode`), so the page only reflects
+  state. Both mutations invalidate `["silent-mode"]` and `["quests"]`, which is
+  what flips the cards, the sidebar dot, and the Quests toolbar button.
+- A footnote says the removal restores the exact original command lines and that
+  an already-open Discord keeps its endpoint until it is closed, because the
+  patch only takes effect on the next start.
+
+## Data layer
 
 ```structure
-catalogue-service / library-service   # bridge.<method>() calls
-useCatalogue / useLibrary             # useQuery + useMutation wrappers
-ui-store (Zustand)                    # tab, search, selected ids,
-                                      # stats modal, toasts, counts
+modules/<feature>/services   # bridge calls
+modules/<feature>/hooks      # useQuery / useMutation / useInfiniteQuery
+shared/hooks/useQuests       # quest list + client status, shared with the sidebar
+shared/hooks/useStats        # backend counts for the rail
+shared/store/ui-store        # page, search, selection, show-finished, toasts
 ```
 
-`useDcglEvents` subscribes to the backend `library_changed` event
-and invalidates the matching query keys, so library changes propagate
-without polling. Start/stop/add/remove/repair results arrive as direct
-return values and surface as a single toast each.
+`useQuests` is deliberately shared: the sidebar reads the same query key, so
+the connection line and the page never disagree and the client is probed once.
 
-Game IDs are strings on the wire (see [Bridge](./bridge.md): ID
-Contract). Selection state, React keys, and mutation arguments all use
-the string form; never coerce IDs through `Number`.
+## Performance notes
 
-## Accessibility and Keyboard Support
+- Catalogue filtering and paging happen in SQL; the frontend never receives
+  more than one page at a time.
+- Off-screen rows use `content-visibility: auto` on top of windowing.
+- Icons are lazy and fade in over their initials, so a slow CDN never leaves
+  an empty box.
+- Queries are invalidated by backend events instead of polling.
+- `prefers-reduced-motion` disables animation and smooth scrolling.
 
-- Tabs use `role=tab` with `aria-selected`; cards use `role=checkbox`
-  (`aria-checked`) in the catalogue and `role=button` in the library.
-- Catalogue cards support arrow-key navigation between cards.
-- All dialogs trap the Escape key to close and label themselves with
-  `aria-label`. Focus-visible outlines use the accent color.
+## Accessibility
+
+- Nav items expose `aria-current`; dialogs use `role="dialog"` with
+  `aria-modal` and move focus to the panel.
+- Rows are real buttons or checkboxes, reachable by Tab, with visible
+  `:focus-visible` rings in the accent colour.
+- Progress bars carry `aria-valuenow` and an accessible label.
+- Toasts use `aria-live="polite"`.

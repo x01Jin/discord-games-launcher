@@ -1,103 +1,114 @@
 # Features
 
-## Overview
+Discord Games Launcher puts a game of your choice in your Discord status. It
+also lists the quests your Discord client is offering and starts the game each
+one asks for.
 
-Discord Games Launcher manages your Discord "Playing" status. Pick from 20,000+ games, keep your own library, and show any game as your status with one click.
+## Quests
 
-## Game Catalogue
+The Quests view shows what your own Discord client is offering right now: the
+game, the reward, the time left, and one button that fits the state of the
+quest. The list is read from the running app over a loopback endpoint, so the
+request stays on this machine.
 
-Browse all games Discord can show as a status, in a simple card grid. Only games with a Windows version are listed.
+| Quest kind | What the row offers |
+| --- | --- |
+| Play on desktop | **Run**. Adds the game to your library if needed, then starts its dummy process. |
+| Watch video | **Watch**. Opens the video in Discord, which does the counting. |
+| Phone only | Nothing. Discord counts these in the mobile app only. |
 
-- **Search:** results filter instantly as you type, with a "Showing X of Y" counter
-- **Select several:** click cards to pick more than one, then add them all at once
-- **In Library marker:** see at a glance which games you already added
-- **Right-click:** quickly add a game without using the buttons
+Discord counts progress only for quests you accepted in the client. An
+unaccepted quest shows **Accept first**, which opens Discord's quest page. The
+row turns into **Run** on its own within about 20 seconds of accepting.
 
-**How to use it:**
+Rows show the artwork, the game and its process name, the reward (Orbs or an
+item), the time left in amber inside the last day, and the progress bar once
+counting starts. The toolbar filters by All, Play, or Watch, and a switch shows
+finished and expired quests.
 
-1. Open the **Catalogue** tab
-2. Type in the search box to filter
-3. Click cards to select one or more games
-4. Click the **Add N selected to library** button (or double-click a single card)
+Discord sometimes offers the same game in two quests. One dummy process
+finishes both, and the row says how many other quests share it.
 
-## Your Game Library
+### Starting Discord through the launcher
 
-Your personal collection lives in the **My Library** tab. Each card shows the game name and whether it is **Running** (green) or **Stopped** (gray).
+The Quests view can start Discord for you with the endpoint already in place,
+so there is no restart. This only works while Discord is closed.
 
-- **Double-click** a card to start or stop it (or press Enter/Space, or right-click and choose the action)
-- **Right-click** a card to start, stop, or remove it (removing asks you to confirm first)
-- **Toolbar buttons:** Refresh the view, Repair the library, or Stop all games at once
-- **Repair:** fixes library entries that misbehave, for example after files were deleted by antivirus. It warns you before removing anything permanently
-- Your library is saved, so it is still there after you restart the app
+If Discord is already running, the view offers **Set up and restart Discord**.
+That adds the endpoint switch to your Discord shortcuts and startup entry, then
+restarts Discord once. You stay signed in.
 
-**What happens when you add a game:** it is added instantly, ready to start.
+From then on the list is there whenever Discord starts. The toolbar keeps a
+**Set up silent start** button while the switch is missing, so the one restart
+can wait until a convenient moment. **Turn silent connection off** removes the
+switch again, and **Settings** in the sidebar lists every entry it touched and
+can remove it from there.
 
-**What happens when you start a game:** a small window opens showing the game name, "Game Started!", and a running timer. Discord notices it within about 15 seconds and your status becomes "Playing [Game Name]".
+## Catalogue
 
-## Showing Your Status on Discord
+Browse every game Discord can display as an activity. Only games with a Windows
+build are listed.
 
-Each running game opens its own small window. You can run several at once, control each one separately, and stop everything with **Stop all**. Closing the app stops all running games.
+- Search by game name or executable; the filter runs in SQL as you type.
+- Click rows to select several games, then add them together, or use Add on one
+  row.
+- Games already in your library are dimmed and skipped.
+- More games load as you scroll. Only the visible rows are drawn, so the full
+  list stays quick.
 
-A few things to know:
+**Sync catalogue** pulls the current game list from Discord again, for when new
+games have appeared.
 
-- Discord must be running (the desktop app, not the website)
-- Discord checks for games roughly every 15 seconds, so give it a moment
-- In Discord settings, **Display current activity as a status message** must be turned on
-- Some games are picked up faster than others
+## Library
 
-## Game Pictures
+The Library holds the games you added, each with its running state and the
+exact process name Discord compares against.
 
-Cards show each game's artwork from Discord. If a game has no picture (or you are offline), you see the first letter of its name instead.
+Start and Stop sit on the row. The three-dot menu offers Start, Stop, and
+Remove, and Remove asks before it deletes files. Refresh reloads the list,
+Repair rebuilds the dummy files for every game (useful after antivirus removed
+one), and Stop all ends every running game.
 
-## Dark Look
+The library survives a restart of the app. Adding a game is instant because only
+the dummy executable is copied, not a real game.
 
-The whole app uses a comfortable dark theme with a soft purple accent. It follows your Windows display scaling, so it stays sharp on high-resolution screens.
+## Status on Discord
 
-## Tips for the Best Experience
+Starting a game opens a small window with the game name, "Game Started!", and a
+running timer. Discord notices the process within about 15 seconds and your
+status becomes "Playing [Game Name]". Several games can run at once, each with
+its own window, and closing the launcher stops all of them.
 
-### Organization
+For the status to appear:
 
-- Keep 10-20 games you play most in your library
-- Remove games you no longer play to keep the list tidy
-- Search instead of scrolling when the list is long
+- Discord must be running as the desktop app, not in a browser
+- **Display current activity as a status message** must be on in Discord's
+  Activity Privacy settings
+- Give Discord one scan cycle, about 15 seconds
 
-### Discord
+Each dummy window uses roughly 10 to 20 MB while it runs, and the launcher
+itself is close to idle when no game is started.
 
-- Keep Discord running while using the launcher
-- Your status can take 10-15 seconds to appear or disappear
-- The same status shows in the Discord mobile app
+## Artwork
 
-### Performance
+Rows and cards use the artwork Discord serves for the game. When a game has no
+picture, or you are offline, the first letter of its name fills in instead.
 
-- Each running game uses about 10-20 MB of memory for its little window
-- Stop games you are not showing off
-- The launcher itself uses very little memory when idle
+## Look
 
-### Upkeep
+The whole app uses Discord's dark palette with one accent colour, and it follows
+your Windows display scaling.
 
-- Press **Sync catalogue** now and then for the latest game list
-- If something looks wrong in your library, try the **Repair** button
-- Make sure Discord has "Display currently running game" enabled
+## Limits
 
-## Limitations
+- Windows only. Discord detects games differently on macOS and Linux.
+- The Discord desktop app is required; the web version cannot show activity.
+- Only games Discord already knows about can be shown.
+- The status is plain "Playing X", without the detail a real rich presence
+  integration provides.
+- The launcher fakes the status. It does not start the real game.
 
-1. **Windows only:** Windows 10/11
-2. **Discord desktop app required:** the website version cannot show game activity
-3. **Known games only:** it can only show games Discord already recognizes
-4. **Basic status only:** shows "Playing [Game]", not detailed activity info
-5. **Does not launch real games:** it only controls the status display
+## Getting help
 
-**Workarounds:**
-
-- **Unsupported game:** try a similar game name
-- **Web Discord:** switch to the desktop app
-- **Detailed status:** use the game's own Discord integration, if it has one
-
-## Getting Help
-
-Having trouble or want something new?
-
-1. Check [Troubleshooting](./troubleshooting.md)
-2. Search existing GitHub issues
-3. File a new issue
-4. Join the community Discord (link in README)
+[Troubleshooting](./troubleshooting.md) covers the common failures. For
+anything else, open an issue on the project page.

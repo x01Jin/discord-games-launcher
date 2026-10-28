@@ -90,18 +90,27 @@ class GameManager:
                     f"Discord API {newest} unreachable, using fallback ({version})"
                 )
         if version == newest and previous is not None:
-            return f" — back on latest API ({version})"
+            return f": back on latest API ({version})"
         if version != newest:
-            return f" — using fallback API ({version})"
+            return f": using fallback API ({version})"
         return ""
 
     def search_games(self, query: str, limit: int = 100) -> list["Game"]:
-        """Search cached games by name."""
-        return self.db.search_games(query, limit)
+        """Search cached games by name, Windows-playable only."""
+        return self.db.search_games(query, limit, win32_only=True)
 
     def get_all_games(self, limit: int | None = None) -> list["Game"]:
         """Get all cached games."""
         return self.db.get_all_games(limit)
+
+    def get_games_page(self, limit: int = 200, offset: int = 0) -> list["Game"]:
+        """One catalogue page of Windows-playable games."""
+        return self.db.get_games_page(limit, offset, win32_only=True)
+
+    def count_playable_games(self) -> int:
+        """Cached games that have at least one Windows executable."""
+        stats = self.db.get_cache_stats()
+        return max(0, stats.get("cached_games", 0) - stats.get("games_no_win_exes", 0))
 
     def get_game(self, game_id: int) -> Optional["Game"]:
         """Get a specific game by ID."""
@@ -522,7 +531,7 @@ class GameManager:
         Rewrites the stored candidate blob when Discord's data changed; when
         the best executable changed, materializes the new dummy and drops
         the superseded exe file (unless drop_superseded is False, used by
-        the silent sync path — deletions happen on explicit repair only).
+        the silent sync path, where deletions wait for explicit repair).
         Running games are skipped. Best-effort: failures are logged and
         counted, never raised.
         """

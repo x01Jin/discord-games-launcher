@@ -6,7 +6,22 @@ import {
   useStopAll,
   useToggleGame,
 } from "../hooks/useLibrary";
-import { LibraryCard } from "./LibraryCard";
+import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
+import { Dialog } from "../../../shared/components/Dialog";
+import {
+  Button,
+  EmptyState,
+  Skeleton,
+} from "../../../shared/components/primitives";
+import {
+  LibraryIcon,
+  RefreshIcon,
+  StopIcon,
+  WrenchIcon,
+} from "../../../shared/components/icons";
+import { formatCount } from "../../../shared/lib/format";
+import { useUiStore } from "../../../shared/store/ui-store";
+import { LibraryRow } from "./LibraryRow";
 
 export function LibraryPage() {
   const { data, isLoading, isError, refetch, isFetching } = useLibraryGames();
@@ -14,148 +29,193 @@ export function LibraryPage() {
   const stopAll = useStopAll();
   const remove = useRemoveGame();
   const repair = useRepairLibrary();
-  const [confirmingRepair, setConfirmingRepair] = useState(false);
+  const setPage = useUiStore((state) => state.setPage);
+
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [confirmRepair, setConfirmRepair] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const games = data?.games ?? [];
-  const backendError: string | undefined = data?.error;
+  const running = games.filter((game) => game.is_running).length;
+  const backendError = data?.error;
 
-  return (
-    <section
-      aria-label="My library"
-      className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col"
-    >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 bg-ink pt-4">
-        <p className="text-xs text-muted">
-          {games.length} game{games.length === 1 ? "" : "s"} in library
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="rounded-full bg-card px-4 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 hover:ring-white/25 disabled:opacity-60"
-          >
-            {isFetching ? "Refreshing…" : "Refresh"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmingRepair(true)}
-            disabled={repair.isPending}
-            className="rounded-full bg-card px-4 py-1.5 text-xs font-semibold text-white ring-1 ring-white/10 hover:ring-white/25 disabled:opacity-60"
-          >
-            {repair.isPending ? "Repairing…" : "Repair"}
-          </button>
-          <button
-            type="button"
-            onClick={() => stopAll.mutate()}
-            disabled={stopAll.isPending || games.every((g) => !g.is_running)}
-            className="rounded-full bg-red-500/90 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
-          >
-            {stopAll.isPending ? "Stopping…" : "Stop all"}
-          </button>
-        </div>
-      </div>
+  const startToggle = (gameId: string, isRunning: boolean) => {
+    setPendingId(gameId);
+    toggle.mutate(
+      { id: gameId, running: isRunning },
+      { onSettled: () => setPendingId(null) },
+    );
+  };
 
-      <div className="dcgl-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-        {isLoading && (
-          <p className="mt-10 text-center text-sm text-muted">
-            Loading library…
-          </p>
-        )}
-
-        {(isError || backendError) && (
-          <div className="mt-10 px-4 text-center">
-            <p className="text-sm text-white">
-              {backendError ??
-                "Could not load your library. Check the backend connection."}
-            </p>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="mt-3 rounded-full bg-peri px-4 py-1.5 text-xs font-semibold text-ink hover:bg-peri-strong"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {!isLoading && !isError && !backendError && games.length === 0 && (
-          <div className="mt-10 text-center">
-            <p className="text-sm text-white">Your library is empty.</p>
-            <p className="mt-1 text-xs text-muted">
-              Browse the catalogue and add games to get started.
-            </p>
-          </div>
-        )}
-
-        <div
-          className="mt-4 grid gap-4 pb-8"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-          }}
-        >
-          {games.map((g) => (
-            <LibraryCard
-              key={g.game_id}
-              game={g}
-              onToggle={() =>
-                toggle.mutate({ id: g.game_id, running: g.is_running })
-              }
-              onRemove={() => remove.mutate(g.game_id)}
-            />
+  const body = (() => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2 px-5 py-4">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <Skeleton className="size-9" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
           ))}
         </div>
+      );
+    }
+    if (isError || backendError) {
+      return (
+        <EmptyState
+          icon={<LibraryIcon size={28} />}
+          title="Your library did not load"
+          description={backendError ?? "The backend did not answer. Try again."}
+          action={
+            <Button icon={<RefreshIcon size={13} />} onClick={() => void refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      );
+    }
+    if (games.length === 0) {
+      return (
+        <EmptyState
+          icon={<LibraryIcon size={28} />}
+          title="Nothing in the library yet"
+          description="Add a game from the catalogue, or run one straight from a quest. A fake process per game is all Discord needs to see."
+          action={<Button onClick={() => setPage("quests")}>Browse quests</Button>}
+        />
+      );
+    }
+    return (
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        {games.map((game) => (
+          <LibraryRow
+            key={game.game_id}
+            game={game}
+            busy={pendingId === game.game_id}
+            onToggle={() => startToggle(game.game_id, game.is_running)}
+            onRemove={() => setConfirmRemove({ id: game.game_id, name: game.name })}
+          />
+        ))}
       </div>
+    );
+  })();
 
-      {confirmingRepair && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-          onClick={() => setConfirmingRepair(false)}
-          role="presentation"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Repair library"
-            className="w-96 max-w-full rounded-xl bg-card p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-base font-semibold text-white">
-              Repair library?
-            </h2>
-            <div className="mt-2 space-y-2 text-sm text-muted">
-              <p>
-                <span className="font-semibold text-red-400">Warning: </span>
-                this permanently deletes files. It removes library entries whose
-                game left the catalogue (including their executables), replaces
-                outdated executables (deleting the superseded files), recreates
-                missing ones, and clears stale data.
-              </p>
-              <p>This cannot be undone.</p>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingRepair(false)}
-                className="rounded-full px-4 py-1.5 text-xs font-semibold text-muted hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={repair.isPending}
-                onClick={() => {
-                  setConfirmingRepair(false);
-                  repair.mutate();
-                }}
-                className="rounded-full bg-peri px-4 py-1.5 text-xs font-semibold text-ink hover:bg-peri-strong disabled:opacity-60"
-              >
-                {repair.isPending ? "Repairing…" : "Repair library"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+  return (
+    <section aria-label="Library" className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title="Library"
+        subtitle={
+          games.length
+            ? formatCount(games.length) +
+              " games · " +
+              (running ? running + " running" : "none running")
+            : "Games you added"
+        }
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              busy={isFetching && !isLoading}
+              icon={<RefreshIcon size={13} />}
+              onClick={() => void refetch()}
+            >
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<WrenchIcon size={13} />}
+              busy={repair.isPending}
+              onClick={() => setConfirmRepair(true)}
+            >
+              Repair
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<StopIcon size={11} />}
+              disabled={running === 0}
+              busy={stopAll.isPending}
+              onClick={() => stopAll.mutate()}
+            >
+              Stop all
+            </Button>
+          </>
+        }
+      />
+
+      {games.length > 0 && !isLoading ? (
+        <Toolbar>
+          <span className="text-[12px] text-subtle">
+            A running game keeps its dummy process alive until you stop it.
+            Removing one stops it and deletes its files.
+          </span>
+        </Toolbar>
+      ) : null}
+
+      {body}
+
+      <Dialog
+        open={confirmRepair}
+        title="Repair library?"
+        danger
+        onClose={() => setConfirmRepair(false)}
+        description={
+          <>
+            Repair removes library entries whose game left the catalogue,
+            replaces outdated executable names, recreates missing files, and
+            clears stale state.
+            <br />
+            <span className="font-semibold text-[#ff8f8f]">
+              Files are deleted permanently.
+            </span>{" "}
+            This cannot be undone.
+          </>
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmRepair(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              busy={repair.isPending}
+              onClick={() => {
+                setConfirmRepair(false);
+                repair.mutate();
+              }}
+            >
+              Repair library
+            </Button>
+          </>
+        }
+      />
+
+      <Dialog
+        open={confirmRemove !== null}
+        title={"Remove " + (confirmRemove?.name ?? "") + "?"}
+        onClose={() => setConfirmRemove(null)}
+        description="The game leaves your library and its files are deleted. You can add it again from the catalogue."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (confirmRemove) remove.mutate(confirmRemove.id);
+                setConfirmRemove(null);
+              }}
+            >
+              Remove game
+            </Button>
+          </>
+        }
+      />
     </section>
   );
 }
