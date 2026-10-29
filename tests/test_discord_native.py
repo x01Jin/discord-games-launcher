@@ -541,47 +541,8 @@ def test_candidate_ports_only_scans_sockets_as_a_last_resort(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# activity setting and orb balance
+# orb balance
 # ---------------------------------------------------------------------------
-
-
-def make_native_stub(monkeypatch, answer):
-    native = DiscordNative()
-    calls = []
-
-    def fake_evaluate(expression, timeout=8.0):
-        calls.append(expression)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-    monkeypatch.setattr(native, "_evaluate_on_client", fake_evaluate)
-    return native, calls
-
-
-def test_show_current_game_reads_the_value(monkeypatch):
-    native, calls = make_native_stub(monkeypatch, {"ok": True, "previous": True, "value": True})
-    assert native.show_current_game() is True
-    assert "replace" not in calls[0]
-    assert "__DCGL_WANTED__" not in calls[0]
-
-
-def test_set_show_current_game_sends_boolean_and_returns_previous(monkeypatch):
-    native, calls = make_native_stub(monkeypatch, {"ok": True, "previous": True, "value": False})
-    assert native.set_show_current_game(False) is True
-    assert "const wanted = false;" in calls[0]
-
-
-def test_set_show_current_game_raises_when_discord_refuses(monkeypatch):
-    native, _ = make_native_stub(monkeypatch, {"ok": False, "error": "no store"})
-    with pytest.raises(DiscordNativeError, match="no store"):
-        native.set_show_current_game(False)
-
-
-def test_set_show_current_game_raises_on_missing_answer(monkeypatch):
-    native, _ = make_native_stub(monkeypatch, {"ok": True})
-    with pytest.raises(DiscordNativeError, match="activity setting"):
-        native.set_show_current_game(True)
 
 
 @pytest.mark.parametrize("value,expected", [(67080, 67080), (0, 0), (-5, None), (1.5, None), (True, None)])

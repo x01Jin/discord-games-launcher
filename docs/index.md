@@ -45,7 +45,8 @@ discord-games-launcher/
 │   ├── logger.py           # Logging setup
 │   ├── prefs.py            # Quest options stored in settings.json
 │   ├── process_manager.py  # Process lifecycle and detection
-│   └── quests.py           # Quest list, executable mapping, run and stop
+│   ├── quests.py           # Quest list, run modes, queue and watch runs
+│   └── rpc_activity.py     # Game activity over Discord's rich presence pipe
 ├── frontend/          # React UI
 │   └── src/
 │       ├── modules/   # quests, catalogue, library, settings

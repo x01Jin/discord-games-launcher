@@ -290,13 +290,20 @@ instead of one connection per quest.
 #### ensure_game_row()
 
 ```python
-def ensure_game_row(self, game_id: int, name: str, icon_hash: str | None, executables: list[dict[str, Any]]) -> bool
+def ensure_game_row(
+    self,
+    game_id: int,
+    name: str,
+    icon_hash: str | None,
+    executables: list[dict[str, Any]],
+) -> bool
 ```
 
 Inserts a cache row for an application the catalogue sync has not delivered
-yet, so the `user_library` foreign key holds. Insert-only:
-`ON CONFLICT DO NOTHING` leaves an existing row alone, and the next sync owns
-the row from then on.
+yet, so the `user_library` foreign key holds when a game is added by id. Insert
+only: `ON CONFLICT DO NOTHING` leaves an existing row alone, and the next sync
+owns the row from then on. Quest rows no longer need this: a quest run posts
+heartbeats and adds nothing to the library.
 
 #### get_cache_stats()
 

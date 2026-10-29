@@ -87,6 +87,11 @@ def run_gui(game_name: str) -> None:
         root.after(1000, _tick)
 
     _tick()
+    # Quest runs should never take focus from whatever the user is doing.
+    # The window is still there to confirm the session is alive, but it opens
+    # minimised and the launcher starts the process with SW_SHOWMINNOACTIVE.
+    root.update_idletasks()
+    root.iconify()
     root.mainloop()
 
 

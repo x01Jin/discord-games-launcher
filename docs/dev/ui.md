@@ -85,25 +85,22 @@ The default view. It reads the quest list from the running Discord client (see
 - Rows: checkbox (only on rows that can be queued), art (video thumbnail for
   watch quests), quest name, one metadata line, reward chip, time left (amber
   inside 24 h), progress bar once enrolled, and one action chosen by the
-  backend: Run, Stop, Accept, Watch (green), Phone, Done, or Unsupported. The
+  backend: Run, Stop, Watch (green), Done, or Unsupported. The
   metadata line joins the kind label (non-play quests), the game name when it
   adds something to the title, and the executable, with no repeated words: a
-  play quest on "Call of Duty: Modern Warfare 4" reads `sp26-cod.exe`. A
-  quest credited by another quest's session shows a Credited chip. A queued row
-  shows a Queued chip; the video that is being
-  credited shows an accent Watching chip and its action becomes Stop, so the
-  wait can be ended from the row. A quest credited by another quest's game run
-  on the same application shows a Credited chip, and its Stop ends that shared
-  session.
+  play quest on "Call of Duty: Modern Warfare 4" reads `sp26-cod.exe`. Video
+  rows also carry a Video chip, and a mobile video quest is labelled "Mobile
+  video" because it finishes from here rather than on the phone. A queued row
+  shows a Queued chip; the video being credited shows an accent Watching chip
+  and its action becomes Stop, so the wait can be ended from the row.
 - Selection: every unfinished play or video quest gets a checkbox, accepted or
   not. Start selected accepts the quests that need it and queues them in two
   lanes: games run one after another, videos are credited in the background.
+  Run and Watch accept a quest themselves, so there is no Accept button; an
+  unaccepted row shows a "Not accepted" chip in the meantime.
   The lanes do not block each other, so a video starts while a game keeps
   running. The queue bar names what is running or which video is playing, with
   Skip video and Clear queue.
-- Accept: shown for a play quest that was never accepted. It enrolls through the
-  running client without opening a window; the row turns into Run once the
-  client reports the quest as enrolled.
 - Disconnected: one panel that states the situation, shows what the client
   reported, and offers the single useful action. With silent mode off it lists
   the three steps of the setup; with the setup done but the client still
@@ -114,12 +111,12 @@ The default view. It reads the quest list from the running Discord client (see
 
 Games and videos in flight, plus what comes next.
 
-- Header: subtitle counts games, the video, and queued quests separately;
-  Refresh and Clear queue (which stops the video and empties the queue, leaving
-  a running game alone).
-- Now: the video being credited and every running game, as full quest rows with
-  Stop. A video row carries the Watching chip, and quests sharing one game
-  process show Running plus Credited.
+- Header: subtitle counts the play run, the video, and queued quests
+  separately; Refresh and Clear queue (which stops the video and empties the
+  queue, leaving the play run alone).
+- Now: the video being credited and the running play quest, as full quest rows
+  with Stop. A video row carries the Watching chip. One play run at a time, so
+  Now holds at most two active rows.
 - Up next: the queued quests grouped into their two lanes, Videos and Games,
   both always shown with a count, so an empty lane says so instead of
   disappearing. Each row has its position, art, name, kind, reward chip,
@@ -171,10 +168,11 @@ their own beyond one dialog flag.
   (`disable_silent_mode` / `enable_silent_mode`), so the page only reflects
   state. Both mutations invalidate `["silent-mode"]` and `["quests"]`, which is
   what flips the cards, the sidebar dot, and the Quests toolbar button.
-- Quest runs: a Hide activity switch and a play-session-tail field (0 to 30
-  minutes). Both save through `set_quest_prefs` and apply to the next run
-  without a restart. Hide activity turns Discord's own "Playing" status off
-  while dummy processes run and restores the previous value when they stop.
+- Quest runs: a Play activity segmented control (**Show activity** / **Private**,
+  `aria-pressed`) and a pause-between-quests field (0 to 30 minutes). Both save
+  through `set_quest_prefs` and apply to the next run without a restart. Two
+  buttons rather than a dropdown because there are two modes and both need their
+  consequence spelled out; the panel copy says no game launches either way.
 - A footnote says the removal restores the exact original command lines and that
   an already-open Discord keeps its endpoint until it is closed, because the
   patch only takes effect on the next start.

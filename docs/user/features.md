@@ -13,17 +13,18 @@ request stays on this machine.
 
 | Quest kind | What the row offers |
 | --- | --- |
-| Play on desktop | **Run**. Adds the game to your library if needed, then starts its dummy process. |
+| Play on desktop | **Run**. Reports your play time to Discord, with no game window and no library entry. |
 | Watch video | **Watch**. Discord credits the video while the app reports its progress, so no player window opens. |
-| Phone only | Nothing. Discord counts these in the mobile app only. |
+| Mobile video | **Watch**. The progress post Discord accepts for this task is the same as the desktop one, so it finishes here too. |
 
-Discord counts progress only for quests you accepted in the client. An
-unaccepted quest shows **Accept**, which accepts it through Discord without
-opening a window. The row turns into **Run** on its own within about 20 seconds.
+Discord counts progress only for quests you accepted in the client. The app
+accepts a quest itself the moment you press **Run** or **Watch**, without
+opening a Discord window, so there is no separate Accept step. Rows that are
+still unaccepted say so with a chip.
 
-Rows show the artwork, the game and its process name, the reward (Orbs or an
-item), the time left in amber inside the last day, and the progress bar once
-counting starts. The header shows your current orb balance, which Discord loads
+Rows show the artwork, the game and the executable Discord expects, the reward
+(Orbs or an item), the time left in amber inside the last day, and the progress
+bar once counting starts. The header shows your current orb balance, which Discord loads
 once you have opened its quest page at least once.
 
 The toolbar filters by All, Play, or Watch and by reward type (Orbs, avatar
@@ -31,6 +32,11 @@ decorations, in-game items), sorts by suggested order, expiry, orbs, or
 progress, and keeps a switch for finished and expired quests.
 
 ### Running several quests
+
+A quest run opens no game window at all. Play time is reported to Discord the
+same way its own client reports it, so nothing pops up and your Playing status
+stays as it is. The catalogue still uses the dummy game executable for games you
+start yourself.
 
 Every unfinished play or video quest has a checkbox, accepted or not. Tick the
 ones you want and press **Start selected**: the queue accepts each quest that
@@ -54,19 +60,19 @@ queue** stops the video and empties the queue but leaves a running game alone.
 
 ### Quest options
 
-Settings has two switches under Quest runs:
+Under Quest runs, **Play activity** picks what Discord shows while a quest runs.
+**Show activity** (the default) puts the game on your profile; **Private** shows
+nothing. Neither one opens a game or touches your Playing status elsewhere, and
+both earn the same quest time.
 
-- Hide activity turns Discord's own "Playing" status off while a dummy game
-  runs, then puts your previous setting back.
-- Play session tail keeps a dummy process alive for part of the configured
-  minutes after the quest target is reached, so the last minutes are seen by
-  Discord's scan. 0 stops as soon as the target is reached.
+**Pause between quests** (0 to 30 minutes, default 2) spaces runs out. After a
+quest finishes on its own, the next queued one waits a random part of that pause,
+so runs do not follow each other back to back. 0 starts the next quest on the
+next tick. A manual **Stop** skips the pause.
 
-Discord sometimes offers the same game in two quests. One dummy process
-credits both, so you never get two identical windows: the first quest starts the
-game, the rest join that run and show a **Credited** chip. The process stays up
-until every quest on that game reaches its target. **Stop** on any of those rows
-ends the shared run, which stops all of them.
+Discord sometimes offers the same game in two quests. They run one after the
+other from the queue, because two runs at once would only split the same play
+time between two requests, and the second row waits its turn like any other.
 
 ### Starting Discord through the launcher
 

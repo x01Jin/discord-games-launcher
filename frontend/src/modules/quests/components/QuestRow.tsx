@@ -1,7 +1,6 @@
 import type { QuestGame } from "../../../shared/api-client";
 import { GameArt } from "../../../shared/components/GameArt";
 import {
-  AlertIcon,
   ClockIcon,
   OrbIcon,
   PlayIcon,
@@ -20,14 +19,13 @@ interface Props {
   onSelect: (next: boolean) => void;
   onStart: () => void;
   onStop: () => void;
-  onAccept: () => void;
   onWatch: () => void;
 }
 
 const KIND_LABEL: Record<QuestGame["kind"], string> = {
   play: "Play on desktop",
   watch: "Watch video",
-  watch_mobile: "Watch on phone",
+  watch_mobile: "Mobile video",
 };
 
 export function QuestRow({
@@ -39,7 +37,6 @@ export function QuestRow({
   onSelect,
   onStart,
   onStop,
-  onAccept,
   onWatch,
 }: Props) {
   const showProgress =
@@ -100,26 +97,20 @@ export function QuestRow({
               Queued
             </Chip>
           ) : null}
-          {quest.riding && !watching ? (
-            <Chip
-              tone="success"
-              title="The game run for another quest already credits this one, so only one process is running."
-            >
-              Credited
-            </Chip>
-          ) : null}
           {quest.kind === "watch" ? (
-            <Chip title="This one has to be watched inside Discord">Video</Chip>
+            <Chip title="Progress is posted to Discord in the background, no window opens">
+              Video
+            </Chip>
           ) : null}
           {quest.kind === "watch_mobile" ? (
-            <Chip tone="warning" title="This one only counts on the Discord mobile app">
-              Phone only
+            <Chip title="Discord lists this video task for mobile. The progress post it accepts is the same, so it still finishes here.">
+              Mobile video
             </Chip>
           ) : null}
-          {quest.action === "enroll" ? (
+          {!quest.enrolled && quest.state === "ready" ? (
             <Chip
               tone="warning"
-              title="Discord only counts time for quests you accepted in the client"
+              title="Starting this quest accepts it in Discord first"
             >
               Not accepted
             </Chip>
@@ -178,7 +169,6 @@ export function QuestRow({
             busy={busy}
             onStart={onStart}
             onStop={onStop}
-            onAccept={onAccept}
             onWatch={onWatch}
           />
         </div>
@@ -192,12 +182,8 @@ function QuestAction({
   busy,
   onStart,
   onStop,
-  onAccept,
   onWatch,
-}: Pick<
-  Props,
-  "quest" | "busy" | "onStart" | "onStop" | "onAccept" | "onWatch"
->) {
+}: Pick<Props, "quest" | "busy" | "onStart" | "onStop" | "onWatch">) {
   switch (quest.action) {
     case "stop":
       return (
@@ -210,9 +196,7 @@ function QuestAction({
           title={
             quest.kind === "watch"
               ? "Stop watching this video. The queue moves on to the next quest."
-              : quest.riding
-                ? "Stop the shared game session. Every quest credited by this process stops with it."
-                : "Stop the game session."
+              : "Stop crediting this quest. The queue moves on to the next one."
           }
         >
           Stop
@@ -222,18 +206,6 @@ function QuestAction({
       return (
         <Button variant="primary" size="sm" busy={busy} icon={<PlayIcon size={11} />} onClick={onStart}>
           Run
-        </Button>
-      );
-    case "enroll":
-      return (
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<AlertIcon size={12} />}
-          onClick={onAccept}
-          title="Accept this quest through the Discord client, then press Run."
-        >
-          Accept
         </Button>
       );
     case "open":

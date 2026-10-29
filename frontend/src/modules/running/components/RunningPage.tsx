@@ -74,23 +74,13 @@ export function RunningPage() {
 
   // A video in flight is a "running" entry in Discord's payload, but it is not a
   // game session; counting it twice reads as "1 running · 1 video" with no game.
-  // Quests riding on another quest's game session are being credited right
-  // now without a process of their own, so they belong in "Now" as well.
   const games = useMemo(
-    () =>
-      quests.filter(
-        (quest) =>
-          (quest.state === "running" || quest.riding) && quest.id !== watchingId,
-      ),
+    () => quests.filter((quest) => quest.state === "running" && quest.id !== watchingId),
     [quests, watchingId],
   );
 
-  // Quests sharing one game process are several rows but one running game, and
-  // the sidebar counts processes too, so the subtitle does the same.
-  const runningGames = useMemo(
-    () => new Set(games.map((quest) => quest.application_id)).size,
-    [games],
-  );
+  // One play session at a time, so the subtitle counts sessions, not rows.
+  const runningGames = games.length;
 
   const running = useMemo(
     () => (watching ? [watching, ...games] : games),
@@ -223,8 +213,7 @@ export function RunningPage() {
                       onSettled: () => setPendingId(null),
                     });
                   }}
-                  onAccept={noop}
-                  onWatch={noop}
+                    onWatch={noop}
                 />
               ))}
             </>

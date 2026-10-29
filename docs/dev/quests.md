@@ -3,24 +3,25 @@
 ## Overview
 
 A Discord quest can pay out for playing a game on this PC. Discord decides
-that by watching which games are running, which is the same signal this
-launcher already fakes. The Quests view closes the loop: it lists the
-play-on-desktop quests your own client is showing you, and starts the matching
-dummy process.
+that from the play-time heartbeats a running game sends. The Quests view closes
+the loop: it lists the play-on-desktop quests your own client is showing you,
+and posts those heartbeats itself.
 
 Two rules shaped the implementation:
 
 1. **The quest list comes from the client, not the REST API.** Reading a
    user's quests from discord.com needs their token. This app never touches
    tokens, and the client already holds the data.
-2. **The quest list is the short one.** The catalogue exists so you can pick
-   any of 24,000 games. A quest tells you which one is worth running, so the
-   Quests view is the shortest path from "Discord is offering X" to "process
-   named X is alive".
+2. **A quest run opens no game.** Discord's client posts
+   `POST /quests/{id}/heartbeat` while a game is open, and nothing on the server
+   checks that the named process exists: the executable path is a label. Posting
+   that request from here credits play time with no dummy executable, no library
+   entry, and no window. The catalogue keeps the dummy executable feature for
+   games you add yourself.
 
 Modules: `launcher/discord_native.py` (client access),
 `launcher/discord_setup.py` (launch-argument setup), `launcher/quests.py`
-(quest model, executable resolution, start/stop).
+(quest model, heartbeat and video runs, queue, prefs).
 
 ## Which quests appear
 
@@ -29,9 +30,9 @@ one is labelled with what this PC can actually do about it:
 
 | Kind           | Discord task key       | Can this app finish it?             |
 | -------------- | ---------------------- | ----------------------------------- |
-| `play`         | `PLAY_ON_DESKTOP`      | Yes, by running the dummy executable |
+| `play`         | `PLAY_ON_DESKTOP`      | Yes, by posting the play-time heartbeat from here |
 | `watch`        | `WATCH_VIDEO`          | Yes, by posting the video progress from here |
-| `watch_mobile` | `WATCH_VIDEO_ON_MOBILE` | No - it only counts on the phone app |
+| `watch_mobile` | `WATCH_VIDEO_ON_MOBILE` | Yes - the same `video-progress` post finishes it |
 
 A quest that offers several keys is filed under the first of those three, so a
 quest with both a desktop and a console task still shows up as `play`. Console
@@ -45,16 +46,15 @@ Their video thumbnail and required watch time come from the same payload.
 ## Accepting a quest first
 
 Discord only credits progress for a quest the account has **accepted in the
-client** (`userStatus.enrolledAt` is set). Running the fake process for a quest
-that was never accepted produces heartbeats nobody counts, which looks like the
-app doing nothing.
+client** (`userStatus.enrolledAt` is set). A heartbeat for a quest that was
+never accepted counts for nothing, which looks like the app doing nothing.
 
-So the app accepts the quest itself. The row shows **Accept**
-(`accept_quest()`), which posts `/quests/{id}/enroll` from the renderer with the
+So the app accepts the quest itself. `start_quest()` and the queue call
+`accept_quest()`, which posts `/quests/{id}/enroll` from the renderer with the
 quest's `trafficMetadataSealed` blob, the same request Discord's own button
-makes. `start_quest()` and the queue do the same call before they start a quest,
-so an unaccepted row runs without a detour through Discord. Once the payload
-reports the quest as enrolled, the same row offers **Run**.
+makes. Run and Watch both accept on the way in, so the row has no separate
+Accept step. An unaccepted quest still carries a "Not accepted" chip, and a
+failed enrollment is reported instead of starting a run nobody would credit.
 
 ## Why the DevTools protocol
 
@@ -176,25 +176,62 @@ It also reports `questAccessSuspendedUntil` and
 `questEnrollmentBlockedUntil`, the two fields Discord's own client uses to stop
 quest work. The view surfaces them instead of pretending the list is usable.
 
-## Mapping a quest onto an executable
+## The executable path is a label
 
-Discord matches a running process name to an application. A quest gives the
-application **id**, not the executable, so the id is resolved against the local
-catalogue cache:
+The heartbeat needs an `executable_path` and Discord does not check it against
+the filesystem: a fabricated name credits the same as a real one, which was
+verified against a live account with an application the catalogue had never
+seen.
 
-- `Database.get_games([...])` loads every quest application in one query.
-- `DiscordAPIClient.get_best_win32_executables()` scores the candidates the
-  same way the catalogue does (non-launcher, shortest, no path separators).
-- When the catalogue has never seen the application (a brand-new game the
-  weekly sync has not delivered), the name is reduced to a plausible
-  executable (`Risk of Rain 2` becomes `RiskofRain2.exe`) and a cache row is
-  inserted with `Database.ensure_game_row()` so the library foreign key holds.
-  The next catalogue sync overwrites that row with real data.
+- The path comes from the quest payload (`process_name`) when the catalogue row
+  exists, otherwise `derive_executable_name()` reduces the game name to a
+  plausible file (`Risk of Rain 2` becomes `RiskofRain2.exe`).
+- No cache row is written, no library entry is added, and nothing is copied to
+  disk, so a quest for a game the catalogue cannot search still completes.
+- Quest rows read the library only to show an "in library" badge; the quest
+  path never writes to it.
 
 Two quests can point at the same application (Discord ships one offer per
-region). Running the game once credits all of them: the first row shows
-Running, the others show Credited while that session is alive, and the session
-lasts until the last of them is finished.
+region). They run one after the other from the queue, because two play runs at
+once would only split the same account's play time between two requests.
+
+## Run modes
+
+Two ways to credit a play quest, chosen in Settings and stored as `run_mode` in
+`settings.json`:
+
+- `activity` (default) posts the heartbeat and also tells the client the game is
+  running, so the profile shows it. Nothing launches.
+- `silent` posts the heartbeat and nothing else. The profile stays as it was.
+
+Both earn the same quest time because the time comes from the heartbeat, not from
+a process. What the client shows is a separate matter.
+
+Activity goes through Discord's own rich presence pipe,
+`\\.\pipe\discord-ipc-0` to `discord-ipc-9` (`launcher/rpc_activity.py`): a JSON
+handshake carrying the quest's application id, then `SET_ACTIVITY` with the game
+name as `details` and a start timestamp. Closing the pipe withdraws the activity,
+which is what a stop or a finished quest does. The handshake answer echoes the
+activity back with the game name and application id, which is the confirmation
+that the client accepted it.
+
+The reference userscript patches `RunningGameStore` instead. That store does not
+exist in Discord 1.0.9265: a scan of 460 stores in the loaded client found only
+`OverlayRunningGameStore`, and duck-typed matchers for `getRunningGames` landed
+on i18n proxies that return message objects. The pipe is the route that survived
+on this build, and it needs no injected script and no debug port.
+
+Two limits worth knowing:
+
+- The pipe only works while the client has its RPC endpoint open, which it does
+  by default. If `show()` fails the run continues on heartbeats and the log says
+  why, so a quest never stalls over a cosmetic feature.
+- An account set to Invisible shows no Playing line no matter what the client
+  holds. The activity is still there; the status setting hides it.
+
+A stale activity can outlive the pipe in `LocalActivityStore`. It credits
+nothing (verified: no progress drift over 50 s with one sitting there) and clears
+when the client next refreshes presence.
 
 ## States and actions
 
@@ -203,7 +240,7 @@ backend decides both so the UI never has to infer capability from a task key.
 
 | State        | Meaning                                                |
 | ------------ | ------------------------------------------------------ |
-| `running`    | The dummy process for this quest's game is alive       |
+| `running`    | This quest's play run or video is being credited here  |
 | `ready`      | Inside its window and not finished                     |
 | `expired`    | Past `expiresAt`; the client keeps these in its store  |
 | `completed`  | `completedAt` set, or progress reached the target      |
@@ -211,41 +248,49 @@ backend decides both so the UI never has to infer capability from a task key.
 
 | Action        | Button          | When                                      |
 | ------------- | --------------- | ----------------------------------------- |
-| `run`         | Run             | Accepted play quest, not running          |
-| `stop`        | Stop            | Its dummy process is alive                |
-| `enroll`      | Accept          | Play quest not accepted in the client     |
-| `open`        | Watch           | Desktop watch quest, credited in the background |
-| `mobile`      | Phone           | Mobile-only watch quest                   |
+| `run`         | Run             | Play quest inside its window, not running |
+| `stop`        | Stop            | Its play run or video wait is active      |
+| `open`        | Watch           | Video quest, credited in the background   |
 | `done`        | Done / Expired  | Finished or past its end date             |
-| `unsupported` | Unsupported     | No application id to fake                 |
+| `unsupported` | Unsupported     | Play quest with no application id         |
 
 Sort order is running, ready, expired, unresolved, completed; inside a state,
 play quests come before watch quests, then soonest expiry. The page hides
 finished rows behind "Show finished" and can filter to Play or Watch.
 
 `start_quest()` accepts a play quest first when it was never enrolled, then
-starts the process; an enrollment failure is reported instead of starting a
-process nobody would credit. `stop_quest()` works for any quest whose dummy
-process is alive.
+begins the heartbeat run; an enrollment failure is reported instead of starting
+a run nobody would credit. When another play quest is already running the call
+queues the new one and says so, so pressing Run twice never starts two runs at
+once. `stop_quest()` ends the running play quest or the video being credited.
+A manual stop skips the pause between quests and starts the next queued one
+right away.
 
 ## Queue
 
 Start selected (`start_quest_queue`) keeps the selection in one queue, and the
 queue lives in the service so it survives a page change. The queue is pumped in
-two independent lanes, the same split the reference userscript uses (one game
+two independent lanes, the same split the reference userscript uses (one play
 runner and a separate video runner):
 
-- Play quests start through `start_quest()` and run one at a time. A monitor
-  thread wakes every `MONITOR_INTERVAL` (10 s) and starts the next queued game
-  once the previous process has exited or its tail has ended.
-- Video quests are watched in the background, without opening a Discord window.
-  The queue accepts the quest if needed, then posts `video-progress` from here
-  (see below) every 7 to 9.5 s until the client reports `completedAt` or a
-  progress that reached the target. One video is posted at a time, and it does
-  not wait for a running game: a video starts while a game keeps running, and
-  the next game starts while a video is in flight. A watch gives up after
-  `WATCH_TIMEOUT_SECONDS` (30 min). The monitor thread runs every 2 s while a
-  video is in flight, and re-reads the full quest payload at most every
+- Play quests start through `start_quest()` and run one at a time. A run posts
+  `heartbeat` (see below) every `PLAY_BEAT_SECONDS` (20 s); the server credits
+  the time that passed since the previous beat. The run ends when the response
+  sets `completed_at` or when the credited seconds reach the target, and a run
+  that somehow never completes stops after `PLAY_TIMEOUT_SECONDS` (4 h).
+  The monitor thread ticks every 2 s while a run is in flight.
+- When a play run finishes on its own, the next queued game waits a random 40%
+  to 100% of the configured pause (default 2 min) before it starts, so runs do
+  not follow each other back to back. A manual Stop skips the pause.
+- Video quests are credited in the background, without opening a Discord
+  window. A mobile video quest takes this lane too, because Discord accepts the
+  same progress post for it. The queue accepts the quest if needed, then posts
+  `video-progress` from here (see below) every 7 to 9.5 s until the client
+  reports `completedAt` or a progress that reached the target. One video is
+  posted at a time, and it does not wait for a play run: a video starts while a
+  play run continues, and the next game starts while a video is in flight. A
+  watch gives up after `WATCH_TIMEOUT_SECONDS` (30 min). While a video is in
+  flight the monitor re-reads the full quest payload at most every
   `WATCH_REFRESH_SECONDS` (15 s).
 - Stop on a row whose video is in flight calls `stop_quest()`, which ends the
   wait instead of greying the action out. Skip video (`skip_quest_watch`) does
@@ -256,38 +301,42 @@ runner and a separate video runner):
   order given and keeps unlisted ids at the end; `drop_queue_item()` removes
   one. The Running view moves ids within their own lane, so a video never
   changes where a game sits in its lane.
-- A game that fails to start stays queued and is retried on the next tick.
-  Anything that cannot be queued is skipped at enqueue time, and the message
-  names both counts.
-- Two quests can point at the same Discord application (Modern Warfare 4 is
-  offered twice on some accounts). One process credits all of them: the service
-  keeps `_quest_apps` (application id to the quest that started it) and
-  `_riders` (application id to every quest id that session pays out). The first
-  start launches the executable; every later quest on that application calls
-  `_add_rider()` and is dropped from the queue with no second process.
-  `list_quests()` marks those rows `riding`, the row shows a Credited chip, and
-  Stop on any of them ends the shared session. The play-session tail waits until
-  `_quest_done()` is true for every rider, so the process stays alive until the
-  last quest on that game reaches its target.
+- A play quest that fails to start (Discord refused the heartbeat, the quest
+  expired between selection and its turn) stays queued and is retried on the
+  next tick with the reason logged. Anything that cannot be queued is skipped at
+  enqueue time, and the message names both counts.
+- Pressing Run while another play quest is running enqueues it and answers
+  "Queued behind the game quest that is running", so two runs never overlap.
 
-## Accepting and video progress
+## The client API
 
-Both calls run in the renderer through `QUEST_API_EXPRESSION`
+Every write runs in the renderer through `QUEST_API_EXPRESSION`
 (`launcher/discord_native.py`). The expression finds `QuestStore` the same way
 the read does, then finds Discord's HTTP client by shape: the module export whose
-value has `get`, `post`, and `del` functions and no `_dispatcher`. That client
-already carries the session, so no token is read or stored here.
+value has `get`, `post`, and `del` functions and no `_dispatcher`. Some modules
+export the global object, whose numeric keys are cross-origin iframes, so each
+property read sits inside its own try block; one of those frames used to abort
+the whole scan with "Blocked a frame with origin https://discord.com". That
+client already carries the session, so no token is read or stored here.
 
-| Op        | Method  | Route                       | Body                                                                                   |
-| --------- | ------- | --------------------------- | -------------------------------------------------------------------------------------- |
-| `enroll`  | POST    | `/quests/{id}/enroll`        | `{location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}`  |
-| `video`   | POST    | `/quests/{id}/video-progress` | `{timestamp: <seconds, 6 decimals>}`                                                    |
-| `claim`   | POST    | `/quests/{id}/claim-reward`  | `{platform: 0, location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}` |
+| Op          | Method | Route                        | Body                                                                                  |
+| ----------- | ------ | ---------------------------- | ------------------------------------------------------------------------------------- |
+| `enroll`    | POST   | `/quests/{id}/enroll`        | `{location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}` |
+| `heartbeat` | POST   | `/quests/{id}/heartbeat`     | `{application_id, terminal, executable_path}`                                        |
+| `video`     | POST   | `/quests/{id}/video-progress` | `{timestamp: <seconds, 6 decimals>}`                                                   |
+| `claim`     | POST   | `/quests/{id}/claim-reward`  | `{platform: 0, location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}` |
 
 `traffic_metadata_sealed` comes from the quest payload and is what ties the
 request to an offer the client actually saw. Expired quests answer
 `{"message": "Quest has expired", "code": 260017}` with HTTP 404, so the queue
 only picks quests whose `config.expiresAt` is still in the future.
+
+The heartbeat is the request the Discord client sends while a game is open. It
+was captured from a real run and credits about 20 s per 20 s beat, both with a
+running process and with nothing on disk. `terminal: true` closes the run: it
+credits one last beat and clears the client-side heartbeat field. The response
+carries `progress.PLAY_ON_DESKTOP.value` and `completed_at`, which the service
+reads to decide when the quest is done.
 
 Video progress is accumulated from the monotonic clock between posts
 (`_watch_step`), capped at 15 s per step, and the timestamp sent is that sum.
@@ -298,20 +347,19 @@ exists for the same API surface but the queue does not claim on its own.
 ## Quest options
 
 Two options live in `%LOCALAPPDATA%\discord-games-launcher\settings.json`
-(`launcher/prefs.py`). Both reach the service through `get_quest_prefs` /
+(`launcher/prefs.py`). They reach the service through `get_quest_prefs` /
 `set_quest_prefs` and apply on the next tick, with no restart.
 
-- Hide activity flips `showCurrentGame` inside the client's
-  `UserSettingsProtoStore` through the same DevTools connection
-  (`SHOW_CURRENT_GAME_EXPRESSION`, `set_show_current_game()`). The previous
-  value is remembered and restored when the last process stops, when the option
-  is turned off, or on shutdown. The write only happens while the option is on,
-  so a user who already had the status off stays off.
-- Play session tail keeps the dummy process alive after the target is reached
-  for a random 40% to 100% of the configured minutes (default 2, allowed 0 to
-  30). Discord scans process names roughly every 15 s, so a run that stops the
-  instant the target lands can be missed. 0 stops on the tick that crosses the
-  target.
+- `run_mode` (Play activity, default `activity`) picks between showing the game
+  on the profile and staying private. See "Run modes" above. An unknown value
+  falls back to `activity`.
+- `play_session_tail_min` (Pause between quests, default 2, allowed 0 to 30)
+  spaces out finished runs: the next queued game starts after a random 40% to
+  100% of those minutes. 0 starts it on the next tick.
+
+"Hide activity" is gone. A run posts its own heartbeat, so the app does not turn
+any client setting off, and the private mode is the thing that keeps the profile
+quiet.
 
 ## Caching
 
@@ -336,24 +384,27 @@ and `Bridge.get_quests(force=True)` bypasses it.
 
 ## Scope
 
-This app starts a process Discord already recognises as a game, and it posts
-quest enrollment and video progress through the client's own HTTP layer. It does
-not touch quest types other than play-on-desktop and desktop video, and it cannot
-finish phone-only watch quests. Discord enforces against quest automation; that
-risk belongs to running any tool like this one, and the app does not hide it
-behind a green checkmark.
+This app posts quest enrollment, play-time heartbeats, and video progress through
+the client's own HTTP layer, and shows the running game over the client's rich
+presence pipe in activity mode. Video tasks finish the same way whether Discord
+keys them for desktop or for mobile, because both accept the same progress post.
+Console, stream, and activity quests are not listed. Discord enforces against
+quest automation; that risk belongs to running any tool like this one, and the
+app does not hide it behind a green checkmark.
 
 ## Tests
 
 - `tests/test_discord_native.py`: install discovery, target selection, frame
   codec, a full `Runtime.evaluate` round trip against a fake DevTools peer,
   payload parsing, status wording.
-- `tests/test_quests.py`: decoration, executable resolution, states, sorting,
-  cache behaviour, start and stop, orbs and prefs, hide and restore activity,
-  tails, and the queue including enrollment, video progress cadence and the watch
-  timeout.
+- `tests/test_quests.py`: decoration, executable labelling, states, sorting,
+  heartbeat runs (first beat, cadence, completion, timeout, terminal beat on
+  stop), run modes (activity shows and withdraws the game, silent never touches
+  the pipe, a refused pipe falls back to private), orbs and prefs, the pause
+  between quests, one run at a time, the queue including enrollment, mobile video
+  quests, video progress cadence and the watch timeout.
 - `tests/test_prefs.py`: settings file round trip, clamping, unknown keys,
-  corrupt file fallback.
+  run mode validation, corrupt file fallback.
 - `tests/test_bridge_quests.py`: bridge surface, error wrapping, event push.
 - `tests/test_discord_setup.py`: argument rewriting, shortcut and Run key
   round trips against fakes, idempotence, disable restoring the original line.

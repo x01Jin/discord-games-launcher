@@ -1,15 +1,11 @@
-"""Quest listing for the Discord client that is running on this machine.
+"""Quest listing and quest runs for the running Discord client.
 
-The launcher's usual job is to fake a game process so Discord shows a
-"Playing" status. Quests need the same thing, but with one difference: the
-user does not care which of 24,000 games is running, only which of the few
-games an active quest is paying for. This module turns the client's quest
-list into exactly that short list, and maps each quest onto the executable the
-launcher already knows how to fake.
-
-Quest data comes from the running client (see launcher.discord_native), never
-from Discord's REST API. The executable names come from the local catalogue
-cache, which is where they already live.
+A play quest is credited by posting the client's own play heartbeat from here,
+so no game process is ever launched and no dummy executable is created.
+Activity mode also adds the game to the client's running-games store, which is
+what Discord shows on the profile; silent mode leaves the store alone, so
+nothing is shown. Both modes read quests from the running client (see
+launcher.discord_native), never from Discord's REST API.
 """
 
 from __future__ import annotations
@@ -23,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 from launcher import prefs as quest_prefs
-from launcher.api import DiscordAPIError
 from launcher.discord_native import DiscordNative, DiscordNativeError
 from launcher.game_manager import GameManager
+from launcher.rpc_activity import DiscordRpcActivity, RpcError
 
 # How long a quest payload is reused before the client is asked again. The
 # client only refreshes quests on its own schedule, so a shorter window would
@@ -44,6 +40,16 @@ WATCH_TIMEOUT_SECONDS = 1800.0
 # How often the watched video's quest is re-read to confirm it finished. The
 # progress posts themselves are cheaper than a full quest read.
 WATCH_REFRESH_SECONDS = 15.0
+
+# Discord's game client beats every twenty seconds and the server credits the
+# time since the previous beat, so this interval is also the progress rate.
+PLAY_BEAT_SECONDS = 20.0
+
+# A run that never reaches its target is abandoned rather than beaten forever.
+PLAY_TIMEOUT_SECONDS = 4 * 3600.0
+
+# The playing activity is injected into the client's own store, so it lasts
+# until it is withdrawn. Nothing ticks it, and no game process exists.
 
 def _parse_time(raw: Any) -> datetime | None:
     if not isinstance(raw, str) or not raw:
@@ -100,26 +106,6 @@ def _quest_done(quest: dict[str, Any] | None) -> bool:
     return target > 0 and progress >= target
 
 
-def _accepted_on_application(
-    index: dict[str, dict[str, Any]], app_id: int | None
-) -> set[str]:
-    """Play quests Discord credits whenever that game runs.
-
-    The account accepted them, so they accrue progress whether or not the app
-    queued them. They keep the session open so the user does not have to start
-    the same game a second time for a quest they never selected.
-    """
-    if app_id is None:
-        return set()
-    return {
-        quest_id
-        for quest_id, quest in index.items()
-        if _application_id(quest.get("applicationId")) == app_id
-        and quest.get("kind") == "play"
-        and quest.get("enrolledAt")
-    }
-
-
 def derive_executable_name(game_name: str) -> str:
     """Best-effort executable name for a quest app missing from the cache.
 
@@ -157,9 +143,11 @@ class QuestService:
         ttl: float = CACHE_TTL_SECONDS,
         prefs_path: Path | None = None,
         monitor: bool = True,
+        activity: DiscordRpcActivity | None = None,
     ):
         self.manager = game_manager
         self.native = native or DiscordNative(logger=logger)
+        self._rpc = activity or DiscordRpcActivity(logger=logger)
         self.logger = logger
         self.ttl = ttl
         self.prefs_path = prefs_path
@@ -167,14 +155,20 @@ class QuestService:
         self._payload: dict[str, Any] | None = None
         self._fetched_at = 0.0
 
-        # Quest runs this service started, so the tail monitor and the
-        # hide-activity switch know when the last one ends.
+        # One game quest runs at a time, credited by the heartbeats this
+        # service posts. A video run is tracked separately, so both lanes can
+        # move at once.
         self._run_lock = threading.Lock()
-        self._quest_apps: dict[int, str] = {}
-        # One game session credits every quest pointing at that application, so
-        # each running app keeps the set of quest ids it is working on.
-        self._riders: dict[int, set[str]] = {}
-        self._tails: dict[int, float] = {}
+        self._playing: str | None = None
+        self._playing_app: int | None = None
+        self._playing_exe = ""
+        self._playing_target = 0
+        self._playing_at = 0.0
+        self._beat_next = 0.0
+        # True while a game is shown on the profile, so it can be withdrawn.
+        self._activity_shown = False
+        # Cooldown between a finished game quest and the next one.
+        self._play_ready_at = 0.0
         self._queue: list[str] = []
         # The video quest the queue is crediting progress for.
         self._watching: str | None = None
@@ -183,7 +177,6 @@ class QuestService:
         self._watch_last = 0.0
         self._watch_next = 0.0
         self._watch_checked_at = 0.0
-        self._hid_activity = False
         self._monitor_enabled = monitor
         self._monitor_thread: threading.Thread | None = None
         self._monitor_stop = threading.Event()
@@ -254,38 +247,29 @@ class QuestService:
         games = self._games_by_id(app_ids)
 
         library_ids = self._safe(lambda: self.manager.db.get_library_ids(), set())
-        learner = LibState(library_ids, self.manager)
 
         quests = [
-            self._decorate(quest, games.get(_application_id(quest.get("applicationId"))), learner)
+            self._decorate(
+                quest,
+                games.get(_application_id(quest.get("applicationId"))),
+                library_ids,
+            )
             for quest in raw_quests
         ]
         with self._run_lock:
             queued = list(self._queue)
-            active_ids = list(self._quest_apps.values())
+            playing = self._playing
             watching = self._watching
-            # The quest that started the process is not riding: only the extra
-            # quests credited by the same session are.
-            riding = {
-                quest_id
-                for app_id, quest_ids in self._riders.items()
-                if app_id in self._quest_apps
-                for quest_id in quest_ids
-                if quest_id != self._quest_apps.get(app_id)
-            }
         if watching is not None:
             queued.insert(0, watching)
         queued_set = set(queued)
         for quest in quests:
-            quest["queued"] = quest.get("id") in queued_set
-            # A quest riding on another quest's game is already being credited,
-            # so its row offers Stop instead of starting a duplicate process.
-            quest["riding"] = quest.get("id") in riding
-            if quest.get("riding"):
-                quest["action"] = "stop"
-            # A video in flight has no game process behind it, so the row would
-            # still offer Watch. The queue owns it; offer Stop instead.
-            if watching is not None and quest.get("id") == watching:
+            quest_id = quest.get("id")
+            quest["queued"] = quest_id in queued_set
+            # A run in flight has no game process behind it, so nothing marks
+            # its row as running. Both lanes offer Stop instead of Run or Watch.
+            if quest_id == playing or quest_id == watching:
+                quest["state"] = "running"
                 quest["action"] = "stop"
         quests.sort(key=_sort_key)
 
@@ -305,7 +289,7 @@ class QuestService:
             "prefs": self.prefs(),
             "queue": {
                 "ids": queued,
-                "active": active_ids[0] if active_ids else watching,
+                "active": playing or watching,
                 "watching": watching,
             },
         }
@@ -326,11 +310,15 @@ class QuestService:
         except Exception:  # noqa: BLE001 - decoration is best-effort
             return default
 
-    def _decorate(self, quest: dict[str, Any], game, learner: LibState) -> dict[str, Any]:
+    def _decorate(
+        self, quest: dict[str, Any], game, library_ids: set[int]
+    ) -> dict[str, Any]:
         app_id = _application_id(quest.get("applicationId"))
         game_name = str(quest.get("gameName") or "Unknown game")
         kind = str(quest.get("kind") or "play")
         playable = kind == "play"
+        # Mobile video quests post the same progress payload as desktop ones.
+        watchable = kind in ("watch", "watch_mobile")
 
         executables: list[dict[str, Any]] = []
         icon_hash: str | None = None
@@ -362,20 +350,19 @@ class QuestService:
         )
         expired = seconds_left is not None and seconds_left <= 0
 
-        # Discord only credits a quest the account has accepted. Starting the
-        # game before that produces heartbeats nobody counts, which reads as
-        # "the app did nothing", so the row asks for enrollment first.
+        # Discord only credits a quest the account has accepted. A run before
+        # that posts heartbeats nobody counts, which reads as "the app did
+        # nothing", so the chip tells the row apart until Run or Watch accepts it.
         enrolled = bool(quest.get("enrolledAt"))
 
-        in_library = app_id is not None and app_id in learner.ids
-        is_running = bool(learner.running(app_id)) if in_library else False
+        # A quest run does not touch the library. The flag only says whether
+        # the user already owns this game, which the row does not act on.
+        in_library = app_id is not None and app_id in library_ids
 
         if completed:
             state = "completed"
         elif expired:
             state = "expired"
-        elif is_running:
-            state = "running"
         elif not playable:
             state = "ready"
         elif app_id is None:
@@ -387,16 +374,14 @@ class QuestService:
         # capability from a task key.
         if completed or expired:
             action = "done"
-        elif not playable:
-            action = "open" if kind == "watch" else "mobile"
-        elif app_id is None:
+        elif not playable and not watchable:
+            action = "mobile"
+        elif playable and app_id is None:
             action = "unsupported"
-        elif is_running:
-            action = "stop"
-        elif not enrolled:
-            action = "enroll"
         else:
-            action = "run"
+            # Run and Watch accept the quest on the way in, so there is no
+            # separate enrollment step in the row.
+            action = "run" if playable else "open"
 
         video = quest.get("video") or {}
         return {
@@ -435,7 +420,7 @@ class QuestService:
             "executables": [str(e.get("name", "")) for e in executables if e.get("name")],
             "process_name": str(executables[0].get("name", "")) if executables else None,
             "in_library": in_library,
-            "is_running": is_running,
+            "is_running": False,
             "state": state,
         }
 
@@ -453,7 +438,7 @@ class QuestService:
         return None
 
     def start_quest(self, quest_id: str) -> tuple[bool, str]:
-        """Add the quest's game to the library if needed, then start it."""
+        """Start crediting a play quest by posting heartbeats for it."""
         quest = self._find(quest_id)
         if quest is None:
             return False, "That quest is no longer in Discord's list"
@@ -463,6 +448,24 @@ class QuestService:
             return False, "That quest has expired"
         if quest.get("kind") != "play":
             return False, "That quest is not completed by playing a game"
+
+        app_id = _application_id(quest.get("application_id"))
+        if app_id is None:
+            return False, "Discord did not send an application id for that quest"
+
+        with self._run_lock:
+            playing = self._playing
+        if playing == quest_id:
+            return True, "That quest is already running"
+        if playing is not None:
+            # One game quest at a time. Pressing Run while another runs lines
+            # this one up instead of starting a second session.
+            added = self._enqueue(quest_id)
+            self._start_monitor()
+            if not added:
+                return True, "That quest is already in the queue"
+            return True, "Queued behind the game quest that is running"
+
         if not quest.get("enrolled"):
             # Discord only counts progress for quests the account accepted.
             # This is the same request Discord's own Accept button sends.
@@ -473,35 +476,72 @@ class QuestService:
             quest["enrolled"] = True
             self.invalidate()
 
-        app_id = _application_id(quest.get("application_id"))
-        if app_id is None:
-            return False, "Discord did not send an application id for that quest"
+        return self._begin_play(quest, app_id)
 
-        with self._run_lock:
-            primary = self._quest_apps.get(app_id)
-        if primary is not None or self.manager.process_mgr.is_running(app_id):
-            # A second launch of the same executable shows up as a second
-            # identical game in Discord's activity and earns nothing extra.
-            # One session credits every quest that points at the application.
-            self._add_rider(app_id, quest_id, primary)
-            return True, (
-                "That game is already running, so this quest is credited by "
-                "the same session"
-            )
+    def _mode(self) -> str:
+        """The run mode the user picked, defaulting to activity."""
+        try:
+            mode = str(self.prefs().get(quest_prefs.RUN_MODE) or "")
+        except (OSError, ValueError):
+            return quest_prefs.MODE_ACTIVITY
+        return mode if mode in quest_prefs.RUN_MODES else quest_prefs.MODE_ACTIVITY
 
-        if not quest.get("in_library"):
+    def _begin_play(
+        self, quest: dict[str, Any], app_id: int
+    ) -> tuple[bool, str]:
+        """Start a play run: post the heartbeat, then show the game if asked.
+
+        The time always comes from the heartbeat. Activity mode also hands the
+        game to the client over its game pipe, which is how the profile ends
+        up saying Playing.
+        """
+        quest_id = str(quest.get("id"))
+        name = str(quest.get("name") or "")
+        executable = str(
+            quest.get("process_name")
+            or derive_executable_name(name or quest.get("game_name") or "")
+        )
+        target = int(quest.get("target_seconds") or 0)
+        now = time.monotonic()
+        try:
+            self.native.send_heartbeat(quest_id, app_id, executable)
+        except (DiscordNativeError, OSError) as exc:
+            return False, f"Discord would not credit that quest: {exc}"
+        activity = False
+        if self._mode() == quest_prefs.MODE_ACTIVITY:
             try:
-                registered = self._ensure_registered(app_id, quest)
-            except (DiscordAPIError, OSError, ValueError) as exc:
-                return False, f"Could not prepare the game: {exc}"
-            if not registered:
-                return False, "Could not prepare the game for this quest"
-            quest["in_library"] = True
+                self._rpc.show(app_id, name or executable)
+                activity = True
+            except (RpcError, OSError) as exc:
+                # The quest still earns its time, it just does so privately.
+                self._log("warning", f"Could not show the game as playing: {exc}")
+        with self._run_lock:
+            self._playing = quest_id
+            self._playing_app = app_id
+            self._playing_exe = executable
+            self._playing_target = max(0, target)
+            self._playing_at = now
+            self._beat_next = now + PLAY_BEAT_SECONDS
+            self._activity_shown = activity
+        self.invalidate()
+        self._start_monitor()
+        self._log(
+            "info",
+            (
+                f"Showing the play quest {name!r} as playing with heartbeats"
+                if activity
+                else f"Crediting the play quest {name!r} with heartbeats"
+            ),
+        )
+        return True, f"Showing {name} as playing" if activity else f"Crediting {name}"
 
-        ok, message = self.manager.start_game(app_id)
-        if ok:
-            self._track_start(app_id, quest_id)
-        return ok, message
+    def _enqueue(self, quest_id: str) -> bool:
+        with self._run_lock:
+            if quest_id in self._queue:
+                return False
+            self._queue.append(quest_id)
+        self.invalidate()
+        return True
 
     def accept_quest(self, quest_id: str) -> tuple[bool, str]:
         """Accept a quest without opening Discord's quest page."""
@@ -524,127 +564,54 @@ class QuestService:
     def stop_quest(self, quest_id: str) -> tuple[bool, str]:
         with self._run_lock:
             watching = self._watching
+            playing = self._playing
         if watching is not None and quest_id == watching:
             self._stop_watching(quest_id, "Stopped watching the video")
             return True, "Stopped watching the video"
+        if playing is not None and quest_id == playing:
+            # A manual stop starts the next quest right away: the tail only
+            # spaces out quests that finished on their own.
+            self._stop_playing("Stopped the quest session", tail=False)
+            return True, "Stopped the quest session"
         quest = self._find(quest_id)
         if quest is None:
             return False, "That quest is no longer in Discord's list"
-        app_id = _application_id(quest.get("application_id"))
-        if app_id is None:
-            return False, "Discord did not send an application id for that quest"
-        ok, message = self.manager.stop_game(app_id)
-        if ok:
-            self._track_stop(app_id)
-        return ok, message
+        return False, "That quest is not running"
 
-    def _ensure_registered(self, app_id: int, quest: dict[str, Any]) -> bool:
-        """Make sure the catalogue and library know this application."""
-        game = self.manager.db.get_game(app_id)
-        if game is None:
-            executables = [
-                {
-                    "name": name,
-                    "os": "win32",
-                    "is_launcher": False,
-                }
-                for name in (quest.get("executables") or [])
-            ]
-            self.manager.db.ensure_game_row(
-                game_id=app_id,
-                name=quest.get("game_name") or quest.get("name") or str(app_id),
-                icon_hash=quest.get("icon_hash"),
-                executables=executables,
-            )
-        ok, message = self.manager.add_to_library(app_id)
-        if ok:
-            return True
-        return message == "Game is already in library"
 
     # -- run tracking ------------------------------------------------------
-    # The reference userscript keeps a finished game's process alive for a
-    # random slice of PLAY_SESSION_TAIL_MIN extra minutes, so a session does
-    # not stop on the exact second the target is reached. Discord ends its own
-    # heartbeat on completion, so the tail only extends the presence.
     def prefs(self) -> dict[str, Any]:
         return quest_prefs.load(self.prefs_path)
 
     def update_prefs(self, values: dict[str, Any]) -> dict[str, Any]:
-        updated = quest_prefs.save(values, self.prefs_path)
-        # Turning the setting off while a run is hidden puts the activity back
-        # right away instead of at the end of the run.
-        if not updated.get(quest_prefs.HIDE_ACTIVITY):
-            self._restore_activity()
-        return updated
-
-    def _hide_activity(self) -> None:
-        if not self.prefs().get(quest_prefs.HIDE_ACTIVITY):
-            return
-        with self._run_lock:
-            if self._hid_activity:
-                return
-        try:
-            previous = self.native.set_show_current_game(False)
-        except (DiscordNativeError, OSError) as exc:
-            self._log("warning", f"Could not hide the Discord activity: {exc}")
-            return
-        with self._run_lock:
-            # previous False means the user already had it off; leave it alone
-            # and do not turn it on later.
-            self._hid_activity = bool(previous)
-
-    def _restore_activity(self) -> None:
-        with self._run_lock:
-            if not self._hid_activity:
-                return
-            self._hid_activity = False
-        try:
-            self.native.set_show_current_game(True)
-        except (DiscordNativeError, OSError) as exc:
-            self._log("warning", f"Could not restore the Discord activity: {exc}")
-
-    def _track_start(self, app_id: int, quest_id: str) -> None:
-        with self._run_lock:
-            self._quest_apps[app_id] = str(quest_id)
-            self._riders[app_id] = {str(quest_id)}
-            self._tails.pop(app_id, None)
-        self._hide_activity()
-        self._start_monitor()
-
-    def _add_rider(self, app_id: int, quest_id: str, primary: str | None) -> None:
-        """Credit one more quest from a game session that is already running."""
-        with self._run_lock:
-            self._quest_apps.setdefault(app_id, str(primary or quest_id))
-            riders = self._riders.setdefault(app_id, set())
-            if primary:
-                riders.add(str(primary))
-            riders.add(str(quest_id))
-            self._tails.pop(app_id, None)
-        self._hide_activity()
-        self._start_monitor()
-        self.invalidate()
-
-    def _track_stop(self, app_id: int) -> None:
-        with self._run_lock:
-            self._quest_apps.pop(app_id, None)
-            self._riders.pop(app_id, None)
-            self._tails.pop(app_id, None)
-            idle = not self._quest_apps
-        if idle:
-            self._restore_activity()
+        return quest_prefs.save(values, self.prefs_path)
 
     def shutdown(self) -> None:
-        """Restore Discord's setting and stop the monitor thread."""
+        """Close the beat in flight and stop the monitor thread."""
+        with self._run_lock:
+            playing = self._playing
+            app_id = self._playing_app
+            executable = self._playing_exe
+            shown = self._activity_shown
+        if shown:
+            self._hide_activity()
+        if playing is not None and app_id is not None:
+            try:
+                self.native.send_heartbeat(playing, app_id, executable, terminal=True)
+            except (DiscordNativeError, OSError) as exc:
+                self._log("warning", f"Could not close the quest session: {exc}")
         self._monitor_stop.set()
         with self._run_lock:
+            self._playing = None
+            self._playing_app = None
+            self._activity_shown = False
             self._watching = None
             self._queue.clear()
-            self._riders.clear()
+            self._play_ready_at = 0.0
             self._watch_seconds = 0.0
             self._watch_last = 0.0
             self._watch_next = 0.0
             self._watch_checked_at = 0.0
-        self._restore_activity()
 
     def _start_monitor(self) -> None:
         if not self._monitor_enabled:
@@ -655,7 +622,7 @@ class QuestService:
             self._monitor_stop.clear()
             self._monitor_thread = threading.Thread(
                 target=self._monitor_loop,
-                name="dcgl-quest-tail",
+                name="dcgl-quest-run",
                 daemon=True,
             )
             self._monitor_thread.start()
@@ -663,10 +630,10 @@ class QuestService:
     def _monitor_loop(self) -> None:
         while not self._monitor_stop.is_set():
             with self._run_lock:
-                watching = self._watching is not None
-            # Video progress goes out every 7 to 9.5 seconds, so the loop has
-            # to wake more often while a video is being watched.
-            if self._monitor_stop.wait(2.0 if watching else self.MONITOR_INTERVAL):
+                busy = self._watching is not None or self._playing is not None
+            # A video posts progress every 7 to 9.5 seconds and a play quest
+            # beats every 20, so a short wake covers both.
+            if self._monitor_stop.wait(2.0 if busy else self.MONITOR_INTERVAL):
                 break
             try:
                 self._monitor_tick(time.monotonic())
@@ -674,71 +641,104 @@ class QuestService:
                 self._log("warning", f"Quest monitor error: {exc}")
             with self._run_lock:
                 if (
-                    not self._quest_apps
+                    self._playing is None
                     and not self._queue
                     and self._watching is None
                 ):
                     break
-        self._restore_activity()
 
     def _monitor_tick(self, now: float) -> None:
-        """One pass: notice finished quests, start tails, end due ones."""
+        """One pass: beat the running quest, post video progress, pump."""
+        self._check_play(now)
         self._check_watch(now)
+        self._pump()
+
+    def _check_play(self, now: float) -> None:
+        """Keep the run going and notice when the quest is done."""
         with self._run_lock:
-            apps = list(self._quest_apps)
-            tails = dict(self._tails)
-        if not apps:
-            self._restore_activity()
-            self._pump()
+            quest_id = self._playing
+            app_id = self._playing_app
+            executable = self._playing_exe
+            target = self._playing_target
+            started = self._playing_at
+            beat_next = self._beat_next
+        if quest_id is None or app_id is None:
             return
-
-        due = [app_id for app_id, deadline in tails.items() if now >= deadline]
-        for app_id in due:
-            self._end_tail(app_id)
-
+        if now - started > PLAY_TIMEOUT_SECONDS:
+            self._stop_playing("Stopped the quest session after four hours")
+            return
+        if now < beat_next:
+            return
         with self._run_lock:
-            apps = [
-                app_id
-                for app_id in self._quest_apps
-                if self.manager.process_mgr.is_running(app_id)
-            ]
-            for app_id in list(self._quest_apps):
-                if app_id not in apps:
-                    self._quest_apps.pop(app_id, None)
-                    self._riders.pop(app_id, None)
-                    self._tails.pop(app_id, None)
-            idle = not self._quest_apps
-
-        if idle:
-            self._restore_activity()
-            self._pump()
-            return
-
-        tail_minutes = int(self.prefs().get(quest_prefs.PLAY_SESSION_TAIL_MIN) or 0)
+            self._beat_next = now + PLAY_BEAT_SECONDS
         try:
-            payload = self._refresh(force=True)
-        except (DiscordNativeError, OSError):
+            result = self.native.send_heartbeat(quest_id, app_id, executable)
+        except (DiscordNativeError, OSError) as exc:
+            self._log("warning", f"Could not beat the quest session: {exc}")
             return
+        completed = bool(result.get("completed"))
+        credited = result.get("credited")
+        if (
+            not completed
+            and isinstance(credited, int)
+            and not isinstance(credited, bool)
+            and target > 0
+            and credited >= target
+        ):
+            completed = True
+        if completed:
+            # The beat that crossed the target already credited the time, so
+            # there is no terminal beat to send.
+            self._stop_playing("Quest finished, starting the next one", close=False)
 
-        index = _quest_index(payload)
+    def _hide_activity(self) -> None:
+        """Close the game pipe so the profile stops showing the game."""
         with self._run_lock:
-            for app_id in apps:
-                if app_id in self._tails:
-                    continue
-                # One process credits every accepted quest on its game, so it
-                # only earns its tail once all of them are finished.
-                riders = self._riders.get(app_id) or {self._quest_apps.get(app_id, "")}
-                holding = riders | _accepted_on_application(index, app_id)
-                if not all(_quest_done(index.get(quest_id)) for quest_id in holding):
-                    continue
-                # Between 40% and 100% of the configured tail, per run.
-                seconds = random.uniform(0.4, 1.0) * max(0, tail_minutes) * 60.0
-                self._tails[app_id] = now + seconds
-                self._log(
-                    "info",
-                    f"Quest finished for application {app_id}; "
-                    f"keeping the process {seconds:.0f}s longer",
-                )
+            self._activity_shown = False
+        try:
+            self._rpc.hide()
+        except OSError as exc:
+            self._log("warning", f"Could not clear the playing activity: {exc}")
+
+    def _stop_playing(
+        self, message: str, close: bool = True, tail: bool = True
+    ) -> None:
+        with self._run_lock:
+            quest_id = self._playing
+            app_id = self._playing_app
+            executable = self._playing_exe
+            if quest_id is None:
+                return
+            shown = self._activity_shown
+            self._playing = None
+            self._playing_app = None
+            self._playing_exe = ""
+            self._playing_target = 0
+            self._playing_at = 0.0
+            self._beat_next = 0.0
+            self._activity_shown = False
+        if shown:
+            try:
+                self._rpc.hide()
+            except OSError as exc:
+                self._log("warning", f"Could not clear the playing activity: {exc}")
+        if close and app_id is not None:
+            try:
+                self.native.send_heartbeat(quest_id, app_id, executable, terminal=True)
+            except (DiscordNativeError, OSError) as exc:
+                self._log("warning", f"Could not close the quest session: {exc}")
+        # Discord stops crediting the moment the beats stop, so a finished
+        # quest waits out the configured tail before the next one starts.
+        tail_minutes = int(self.prefs().get(quest_prefs.PLAY_SESSION_TAIL_MIN) or 0)
+        if tail and tail_minutes > 0:
+            self._play_ready_at = (
+                time.monotonic() + random.uniform(0.4, 1.0) * tail_minutes * 60.0
+            )
+        else:
+            self._play_ready_at = 0.0
+        self.invalidate()
+        self._log("info", message)
+        self._pump()
 
     def _check_watch(self, now: float) -> None:
         """Post video progress for the queued video quest and notice the end."""
@@ -824,19 +824,6 @@ class QuestService:
         self._log("info", message)
         self._pump()
 
-    def _end_tail(self, app_id: int) -> None:
-        with self._run_lock:
-            self._tails.pop(app_id, None)
-        try:
-            ok, message = self.manager.stop_game(app_id)
-        except Exception as exc:  # noqa: BLE001 - a failure is logged, not raised
-            self._log("warning", f"Could not end the quest session: {exc}")
-            return
-        with self._run_lock:
-            self._quest_apps.pop(app_id, None)
-            self._riders.pop(app_id, None)
-        self.invalidate()
-        self._log("info", f"Quest session ended: {message if not ok else 'stopped'}")
 
     def _log(self, level: str, message: str) -> None:
         if self.logger is None:
@@ -847,8 +834,8 @@ class QuestService:
             pass
 
     # -- queue -------------------------------------------------------------
-    # Discord credits one running game and one video at a time; the two are
-    # independent lanes, each run in the order the quests were selected.
+    # One game quest and one video quest run at a time. The two lanes are
+    # independent, and each runs in the order the quests were selected.
     def start_queue(self, quest_ids: list[str]) -> tuple[bool, str]:
         if not isinstance(quest_ids, (list, tuple)):
             return False, "Invalid quest selection"
@@ -866,17 +853,18 @@ class QuestService:
         skipped = 0
         for quest_id in wanted:
             quest = self._find(quest_id)
-            if quest is None or quest_id == self._watching:
+            with self._run_lock:
+                running = quest_id == self._watching or quest_id == self._playing
+            if quest is None or running:
                 skipped += 1
                 continue
             kind = quest.get("kind")
-            action = quest.get("action")
-            # Play quests run as a faked game process; the queue accepts them
-            # first when they were never started in Discord. Video quests are
-            # credited by posting progress from here. Both kinds are queued
-            # without opening Discord's quest page.
-            can_play = kind == "play" and action in ("run", "enroll")
-            can_watch = kind == "watch" and action == "open"
+            # Play quests are credited by posting heartbeats and video quests
+            # by posting progress, both from here. Neither opens Discord, so an
+            # unaccepted quest is no reason to refuse it.
+            ready = quest.get("state") == "ready"
+            can_play = kind == "play" and ready
+            can_watch = kind in ("watch", "watch_mobile") and ready
             if can_play or can_watch:
                 accepted.append(quest_id)
             else:
@@ -963,7 +951,10 @@ class QuestService:
             if quest_id == skip:
                 continue
             quest = self._find(quest_id)
-            if quest is not None and quest.get("kind") == kind:
+            if quest is None:
+                continue
+            quest_kind = quest.get("kind")
+            if quest_kind == kind or (kind == "watch" and quest_kind == "watch_mobile"):
                 return quest_id
         return None
 
@@ -1010,71 +1001,28 @@ class QuestService:
         return True
 
     def _start_playing(self) -> bool:
-        while True:
-            quest_id = self._next_queued("play")
-            if quest_id is None:
+        with self._run_lock:
+            if self._playing is not None:
                 return False
-            quest = self._find(quest_id) or {}
-            app_id = _application_id(quest.get("application_id"))
+            if time.monotonic() < self._play_ready_at:
+                # The tail after the previous quest has not run out yet.
+                return False
+        quest_id = self._next_queued("play")
+        if quest_id is None:
+            return False
+        try:
+            ok, message = self.start_quest(quest_id)
+        except (DiscordNativeError, OSError, ValueError) as exc:
+            ok, message = False, str(exc)
+        if ok:
             with self._run_lock:
-                busy = bool(self._quest_apps)
-                primary = self._quest_apps.get(app_id) if app_id is not None else None
-            if primary is not None:
-                # The game for this quest is already running for another quest.
-                # Discord credits both at once, so it joins that session.
-                self._add_rider(app_id, quest_id, primary)
-                with self._run_lock:
-                    if quest_id in self._queue:
-                        self._queue.remove(quest_id)
-                self._log(
-                    "info",
-                    f"Crediting {quest.get('name')!r} on the running "
-                    f"{quest.get('game_name')!r} session",
-                )
-                continue
-            if busy:
-                # One game at a time: a different game has to wait.
-                return False
-            try:
-                ok, message = self.start_quest(quest_id)
-            except (DiscordNativeError, OSError, ValueError) as exc:
-                ok, message = False, str(exc)
-            if ok:
-                with self._run_lock:
-                    if quest_id in self._queue:
-                        self._queue.remove(quest_id)
-                # Keep going: other queued quests for the same application can
-                # join the session instead of waiting for a second launch.
-                continue
-            # Leave the id queued so the next tick retries. Draining the queue
-            # against a disconnected client would lose the selection.
-            self._log("warning", f"Queued quest did not start: {message}")
-            return False
-
-class LibState:
-    """Per-request library membership cache.
-
-    Decorating 40 quests would otherwise run one process lookup each; the id
-    set is one query and the running check is memoised per application.
-    """
-
-    __slots__ = ("_manager", "_running", "ids")
-
-    def __init__(self, ids: set[int], manager: GameManager):
-        self.ids = ids
-        self._manager = manager
-        self._running: dict[int, bool] = {}
-
-    def running(self, app_id: int | None) -> bool:
-        if app_id is None:
-            return False
-        if app_id not in self._running:
-            try:
-                self._running[app_id] = self._manager.process_mgr.is_running(app_id)
-            except Exception:  # noqa: BLE001 - a dead process counts as not running
-                self._running[app_id] = False
-        return self._running[app_id]
-
+                if quest_id in self._queue:
+                    self._queue.remove(quest_id)
+            return True
+        # Leave the id queued so the next tick retries. Draining the queue
+        # against a disconnected client would lose the selection.
+        self._log("warning", f"Queued quest did not start: {message}")
+        return False
 
 _STATE_ORDER = {
     "running": 0,

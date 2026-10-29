@@ -72,17 +72,23 @@ class ProcessManager:
             # Working directory is the exe's parent directory
             working_dir = exe_path.parent
 
-            # Start process with game name as argument
-            # Use CREATE_NEW_CONSOLE on Windows for proper GUI behavior
-            creationflags = (
-                subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-            )
+            # Start the dummy minimised and without activation. A quest can
+            # start while the user is typing elsewhere, and a window that
+            # steals focus in that moment is worse than no window at all.
+            startupinfo = None
+            creationflags = 0
+            if sys.platform == "win32":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 7  # SW_SHOWMINNOACTIVE
+                creationflags = subprocess.CREATE_NO_WINDOW
 
             process = subprocess.Popen(
                 [str(exe_path), game_name],
                 cwd=str(working_dir),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                startupinfo=startupinfo,
                 creationflags=creationflags,
             )
 

@@ -188,16 +188,17 @@ Turns the client's quest payload into the list the UI shows:
 
 - Keeps the actionable task families: play on desktop, watch video, watch on
   mobile. Console and activity quests are dropped.
-- Resolves each quest's application id against the catalogue cache in one
-  query (`Database.get_games`) and scores the Windows executables with the
-  same ranking the catalogue uses.
-- Falls back to a derived executable name and an inserted cache row when the
-  application is not cached yet (`Database.ensure_game_row`).
+- Labels each quest with the executable Discord expects, taken from the cached
+  game row when there is one and derived from the name otherwise. The label is
+  never opened, so no library entry or cache row is written.
 - Computes state (`running`, `ready`, `expired`, `completed`,
-  `unresolved`), progress, time left, reward, and how many other quests share
-  the same game.
-- Caches the payload for 20 s; `start_quest` and `stop_quest` reuse the
-  library and process machinery unchanged.
+  `unresolved`), progress, time left, reward, and the "in library" badge.
+- Runs play quests by posting `/quests/{id}/heartbeat` through the client's own
+  HTTP layer every 20 s, and video quests with `/quests/{id}/video-progress`,
+  so neither path touches the process manager or the dummy executables.
+- Pumps one queue in two lanes (one play run, one video) with a monitor thread,
+  and spaces finished runs by the configured pause.
+- Caches the payload for 20 s; mutations invalidate it.
 
 ### 9. Process manager
 
@@ -225,13 +226,18 @@ start outcome is recorded in `executable_history` for the stats count.
 Process Launch:
 
 ```python
-# Start process with game name as argument
+# Start process with game name as argument. The dummy window opens minimized
+# and does not take focus, so a run never interrupts what the user is doing.
+startupinfo = subprocess.STARTUPINFO()
+startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+startupinfo.wShowWindow = 7  # SW_SHOWMINNOACTIVE
 process = subprocess.Popen(
     [str(exe_path), game_name],  # Pass game name as argument
     cwd=str(working_dir),
     stdout=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
-    creationflags=subprocess.CREATE_NEW_CONSOLE,
+    creationflags=subprocess.CREATE_NO_WINDOW,
+    startupinfo=startupinfo,
 )
 ```
 

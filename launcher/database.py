@@ -447,9 +447,9 @@ class Database:
     ) -> bool:
         """Insert a cache row for an application the sync has not seen.
 
-        Quests can point at applications the catalogue sync has not delivered
-        yet. The library has a foreign key onto games_cache, so without a row
-        the game cannot be added. Insert-only: a later sync owns the row.
+        Quest rows add nothing to the library any more, but the favourites
+        import and repair still need a row that the catalogue sync has not
+        delivered. Insert-only: a later sync owns the row.
         """
         try:
             payload = json.dumps(executables)

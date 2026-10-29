@@ -680,57 +680,6 @@ QUESTS_EXPRESSION = r"""
 """
 
 
-# Read or change Discord's own "display current activity as a status message"
-# setting. Reading passes null, writing passes true/false. The userscript this
-# app follows turns the setting off for the length of a quest run and puts it
-# back afterwards, which is the only way to keep a fake process invisible while
-# Discord still counts it.
-#
-# Discord 1.0.9265 exposes no action creator for this setting (no exported
-# setShowCurrentGame, and module sources are not readable), so the value Discord
-# itself reads is written in place. It lives in memory only: a Discord restart
-# reloads the synced value, so a crash cannot leave the setting off.
-SHOW_CURRENT_GAME_EXPRESSION = r"""
-(() => {
-  const wanted = __DCGL_WANTED__;
-  try {
-    const wc = window.webpackChunkdiscord_app;
-    if (!wc) return JSON.stringify({ ok: false, error: "Discord's module registry is not reachable" });
-    const req = wc.push([[Symbol()], {}, (r) => r]);
-    wc.pop();
-    const mods = (req && req.c) || {};
-
-    let store = null;
-    for (const id in mods) {
-      const record = mods[id];
-      if (!record || !record.exports) continue;
-      const exported = record.exports;
-      for (const candidate of [exported, exported.default, exported.A, exported.Z]) {
-        if (!candidate) continue;
-        let name = null;
-        try {
-          if (typeof candidate.getName === "function") name = candidate.getName();
-        } catch (e) { /* not a store */ }
-        if (name === "UserSettingsProtoStore") { store = candidate; break; }
-      }
-      if (store) break;
-    }
-
-    if (!store) return JSON.stringify({ ok: false, error: "Discord's settings store was not found" });
-    const status = store.settings && store.settings.status;
-    const field = status && status.showCurrentGame;
-    if (!field || typeof field.value !== "boolean") {
-      return JSON.stringify({ ok: false, error: "Discord did not expose the show-current-game setting" });
-    }
-
-    const previous = field.value;
-    if (wanted !== null) field.value = wanted;
-    return JSON.stringify({ ok: true, previous: previous, value: field.value });
-  } catch (error) {
-    return JSON.stringify({ ok: false, error: String((error && error.message) || error) });
-  }
-})()
-"""
 
 
 QUEST_API_EXPRESSION = r"""
@@ -768,17 +717,23 @@ QUEST_API_EXPRESSION = r"""
         if (!questStore && (name === "QuestStore" || name === "QuestsStore")) questStore = candidate;
       }
       for (const key of Object.keys(exported)) {
-        const value = exported[key];
-        if (
-          !api &&
-          value &&
-          typeof value.get === "function" &&
-          typeof value.post === "function" &&
-          typeof value.del === "function" &&
-          !value._dispatcher
-        ) {
-          api = value;
-        }
+        // Some modules export the global object, whose numeric keys are
+        // cross-origin iframes. Reading a property off one throws, and that
+        // error used to abort the whole scan before the HTTP client was found.
+        let value;
+        try {
+          value = exported[key];
+          if (
+            !api &&
+            value &&
+            typeof value.get === "function" &&
+            typeof value.post === "function" &&
+            typeof value.del === "function" &&
+            !value._dispatcher
+          ) {
+            api = value;
+          }
+        } catch (e) { /* frames from another origin are not candidates */ }
       }
     }
     if (!questStore) return fail("Discord's QuestStore was not found");
@@ -815,6 +770,14 @@ QUEST_API_EXPRESSION = r"""
       result = await post("/quests/" + op.questId + "/video-progress", {
         timestamp: op.timestamp,
       });
+    } else if (op.kind === "heartbeat") {
+      // Discord's own game client posts this every twenty seconds; the server
+      // credits play time per beat, so nothing has to run on the machine.
+      result = await post("/quests/" + op.questId + "/heartbeat", {
+        application_id: op.applicationId,
+        terminal: Boolean(op.terminal),
+        executable_path: op.executablePath,
+      });
     } else if (op.kind === "claim") {
       result = await post("/quests/" + op.questId + "/claim-reward", {
         platform: 0,
@@ -834,12 +797,24 @@ QUEST_API_EXPRESSION = r"""
         code: body.code ?? null,
       });
     }
+    // One beat answers with the running total for the quest's task, which is
+    // how the caller knows the target was reached without another full read.
+    let credited = null;
+    if (body.progress && typeof body.progress === "object") {
+      for (const key of Object.keys(body.progress)) {
+        const entry = body.progress[key];
+        if (entry && typeof entry.value === "number") {
+          credited = Math.max(credited === null ? 0 : credited, entry.value);
+        }
+      }
+    }
     return JSON.stringify({
       ok: true,
       status: result.status,
       enrolled: Boolean(body.enrolled_at),
       completed: Boolean(body.completed_at),
       progress: body.progress ?? null,
+      credited: credited,
     });
   } catch (error) {
     const body = (error && error.body) || {};
@@ -1053,41 +1028,6 @@ class DiscordNative:
         self._last_error = last_error
         raise DiscordNativeError(last_error or "Discord did not answer")
 
-    def show_current_game(self) -> bool:
-        """The current value of Discord's "show current game" setting."""
-        payload = self._show_current_game_expression("null")
-        previous = payload.get("previous")
-        if not isinstance(previous, bool):
-            raise DiscordNativeError("Discord did not report the activity setting")
-        return previous
-
-    def set_show_current_game(self, enabled: bool) -> bool:
-        """Set the activity setting in the running client, return the old value."""
-        payload = self._show_current_game_expression("true" if enabled else "false")
-        previous = payload.get("previous")
-        if not isinstance(previous, bool):
-            raise DiscordNativeError("Discord did not report the activity setting")
-        return previous
-
-    def _show_current_game_expression(self, wanted: str) -> dict[str, Any]:
-        value = self._evaluate_on_client(
-            SHOW_CURRENT_GAME_EXPRESSION.replace("__DCGL_WANTED__", wanted)
-        )
-        if isinstance(value, str):
-            try:
-                payload = json.loads(value)
-            except ValueError as exc:
-                raise DiscordNativeError("Discord returned an unreadable settings answer") from exc
-        elif isinstance(value, dict):
-            payload = value
-        else:
-            raise DiscordNativeError("Discord returned an unexpected settings answer")
-        if not payload.get("ok"):
-            raise DiscordNativeError(
-                str(payload.get("error") or "Discord refused the settings write")
-            )
-        return payload
-
 
     # -- quest actions -----------------------------------------------------
     # These go through Discord's own HTTP client inside the renderer, the same
@@ -1124,6 +1064,29 @@ class DiscordNative:
                 "kind": "video",
                 "questId": str(quest_id),
                 "timestamp": round(float(timestamp), 6),
+            }
+        )
+
+    def send_heartbeat(
+        self,
+        quest_id: str,
+        application_id: int | str,
+        executable_path: str,
+        terminal: bool = False,
+    ) -> dict[str, Any]:
+        """Post one play-time heartbeat for a quest.
+
+        This is the same request Discord's client sends while a game is open.
+        The server credits the time that passed since the previous beat, so a
+        quest finishes without any game process being launched.
+        """
+        return self._quest_api(
+            {
+                "kind": "heartbeat",
+                "questId": str(quest_id),
+                "applicationId": str(application_id),
+                "executablePath": str(executable_path),
+                "terminal": bool(terminal),
             }
         )
 

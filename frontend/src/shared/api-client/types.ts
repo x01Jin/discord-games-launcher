@@ -82,7 +82,6 @@ export type QuestKind = "play" | "watch" | "watch_mobile";
 export type QuestAction =
   | "run"
   | "stop"
-  | "enroll"
   | "open"
   | "mobile"
   | "done"
@@ -128,8 +127,6 @@ export interface QuestGame {
   process_name: string | null;
   in_library: boolean;
   is_running: boolean;
-  /** Another quest's game session is already crediting this one. */
-  riding: boolean;
   state: QuestState;
   /** Waiting in the start queue, behind a quest that is still running. */
   queued: boolean;
@@ -137,16 +134,19 @@ export interface QuestGame {
 
 /** Options that change how a run behaves. Stored in settings.json. */
 export interface QuestPrefs {
-  /** Turn Discord's own "Playing" status off while a dummy runs. */
-  hide_activity: boolean;
-  /** Keep a finished process alive up to this many minutes. 0 stops at once. */
+  /** Pause before the next queued quest starts, in minutes. 0 starts at once. */
   play_session_tail_min: number;
+  /**
+   * activity starts the dummy game so Discord shows it on the profile.
+   * silent posts the play heartbeat instead and shows nothing.
+   */
+  run_mode: "activity" | "silent";
 }
 
 export interface QuestQueue {
   ids: string[];
   active: string | null;
-  /** The video quest the queue opened in Discord and is waiting on. */
+  /** The video quest the queue is crediting in the background. */
   watching: string | null;
 }
 

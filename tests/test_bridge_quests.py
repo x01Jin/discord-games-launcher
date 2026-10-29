@@ -105,13 +105,13 @@ def test_connect_discord_reports_result(game_manager, quest_payload):
 def test_quest_prefs_default_and_save(game_manager, quest_payload, tmp_path):
     bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
     assert bridge.get_quest_prefs()["prefs"] == {
-        "hide_activity": False,
         "play_session_tail_min": 2,
+        "run_mode": "activity",
     }
 
-    saved = bridge.set_quest_prefs({"hide_activity": True, "play_session_tail_min": 4})
+    saved = bridge.set_quest_prefs({"play_session_tail_min": 4})
     assert saved["ok"] is True
-    assert saved["prefs"]["hide_activity"] is True
+    assert saved["prefs"]["play_session_tail_min"] == 4
     assert bridge.get_quests()["prefs"]["play_session_tail_min"] == 4
 
 
@@ -123,8 +123,8 @@ def test_set_quest_prefs_rejects_non_dict(game_manager, quest_payload, tmp_path)
 
 def test_quest_prefs_without_service(game_manager):
     bridge = Bridge(game_manager)
-    assert bridge.get_quest_prefs()["prefs"]["hide_activity"] is False
-    assert bridge.set_quest_prefs({"hide_activity": True})["ok"] is False
+    assert bridge.get_quest_prefs()["prefs"]["play_session_tail_min"] == 2
+    assert bridge.set_quest_prefs({"play_session_tail_min": 5})["ok"] is False
 
 
 def test_start_quest_queue_delegates(game_manager, quest_payload, tmp_path, monkeypatch):

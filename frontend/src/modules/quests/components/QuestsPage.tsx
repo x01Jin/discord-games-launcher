@@ -18,7 +18,6 @@ import {
   Switch,
 } from "../../../shared/components/primitives";
 import {
-  useAcceptQuest,
   useClearQuestQueue,
   useConnectDiscord,
   useDisableSilentMode,
@@ -70,15 +69,16 @@ const REWARD_FILTER_LABEL: Record<RewardFilter, string> = {
 const NO_QUESTS: QuestGame[] = [];
 
 /**
- * What the queue can take: accepted play quests, which run as a faked game
- * process, and video quests, which the queue opens in Discord and waits on.
+ * What the queue can take: play quests, which run as a faked game process, and
+ * video quests, which are credited by progress posts. Unaccepted quests are
+ * accepted by the queue itself, so enrollment state does not exclude one.
  */
 function isQueuable(quest: QuestGame) {
   if (quest.queued) return false;
-  // The queue accepts an unaccepted play quest itself, so "enroll" rows belong
-  // in the selection too. Video quests need no game process at all.
-  if (quest.kind === "play") return quest.action === "run" || quest.action === "enroll";
-  if (quest.kind === "watch") return quest.action === "open";
+  if (quest.kind === "play") return quest.action === "run";
+  if (quest.kind === "watch" || quest.kind === "watch_mobile") {
+    return quest.action === "open";
+  }
   return false;
 }
 
@@ -110,7 +110,6 @@ export function QuestsPage() {
   const { data, isLoading, isFetching, isError, refetch } = useQuests();
   const connect = useConnectDiscord();
   const startDiscord = useStartDiscord();
-  const acceptQuest = useAcceptQuest();
   const { data: silent } = useSilentMode();
   const enableSilent = useEnableSilentMode();
   const disableSilent = useDisableSilentMode();
@@ -463,13 +462,6 @@ export function QuestsPage() {
                   onStop={() =>
                     withPending(quest, () =>
                       stopQuest.mutate(quest.id, {
-                        onSettled: () => setPendingId(null),
-                      }),
-                    )
-                  }
-                  onAccept={() =>
-                    withPending(quest, () =>
-                      acceptQuest.mutate(quest.id, {
                         onSettled: () => setPendingId(null),
                       }),
                     )

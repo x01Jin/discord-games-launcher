@@ -15,11 +15,11 @@ be read, grey when it cannot.
 
 ## Quests
 
-Rows show what your Discord client is offering: artwork, game, process name,
-reward, time left, and one button. **Run** adds the game to your library and
-starts its dummy process. **Stop** ends it. **Accept** accepts the quest through
-the running client, because Discord only counts quests you accepted. **Watch**
-credits a video quest in the background, without opening a window.
+Rows show what your Discord client is offering: artwork, game, executable,
+reward, time left, and one button. **Run** reports your play time to Discord
+without opening a game. **Stop** ends the run. **Watch** credits a video quest in
+the background, without opening a window. Both accept the quest first, because
+Discord only counts quests you accepted.
 
 If Discord is closed, the page says so and offers **Start Discord**. If Discord
 is running but was started without the local endpoint, the page explains the one

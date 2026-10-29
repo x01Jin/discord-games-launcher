@@ -2,12 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { SilentLauncher } from "../../../shared/api-client";
 import { Dialog } from "../../../shared/components/Dialog";
 import { PageHeader } from "../../../shared/components/PageHeader";
-import {
-  Button,
-  Chip,
-  StatusDot,
-  Switch,
-} from "../../../shared/components/primitives";
+import { Button, Chip, StatusDot } from "../../../shared/components/primitives";
 import {
   RefreshIcon,
   TrashIcon,
@@ -165,31 +160,57 @@ export function SettingsPage() {
 
           <Panel
             title="Quest runs"
-            description="How a dummy game behaves while it earns quest time. Both settings are saved on this machine and apply to the next run."
+            description="Choose whether a running quest shows the game on your Discord profile or stays private."
           >
             <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] text-muted">Hide activity</p>
+                <p className="text-[12px] text-muted">Play activity</p>
                 <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
-                  Turn off Discord's own "Playing" status while a quest runs.
-                  Your previous setting comes back when the run ends.
+                  Show activity puts the game on your Discord profile while the
+                  quest runs, without opening it. Private runs earn the same
+                  quest time and show nothing. Neither one launches a game.
                 </p>
               </div>
-              <Switch
-                checked={prefs?.hide_activity ?? false}
-                onChange={(next) => setPrefs.mutate({ hide_activity: next })}
-                label="Hide the Playing status during runs"
-                hideLabel
-              />
+              <div
+                role="group"
+                aria-label="Play activity"
+                className="flex shrink-0 overflow-hidden rounded-[4px] border border-line-strong"
+              >
+                {(
+                  [
+                    ["activity", "Show activity"],
+                    ["silent", "Private"],
+                  ] as const
+                ).map(([mode, label]) => {
+                  const active = (prefs?.run_mode ?? "activity") === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        if (!active) setPrefs.mutate({ run_mode: mode });
+                      }}
+                      className={
+                        "h-7 px-2.5 text-[12px] transition-colors " +
+                        (active
+                          ? "bg-active text-ink"
+                          : "text-muted hover:bg-hover hover:text-ink")
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-
             <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2">
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] text-muted">Play session tail</p>
+                <p className="text-[12px] text-muted">Pause between quests</p>
                 <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
-                  Keep the game running for a random slice of these minutes
-                  after the target is reached, so a session does not stop on the
-                  exact second. 0 stops immediately.
+                  Wait a random slice of these minutes before the next queued
+                  quest starts, so runs do not follow each other back to back.
+                  0 starts the next one at once.
                 </p>
               </div>
               <label className="flex shrink-0 items-center gap-1.5">
@@ -204,7 +225,7 @@ export function SettingsPage() {
                     if (event.key === "Enter") event.currentTarget.blur();
                   }}
                   className="h-7 w-14 rounded-[4px] border border-line-strong bg-base px-2 text-right text-[12px] tabular-nums text-ink outline-none focus:border-accent"
-                  aria-label="Play session tail in minutes"
+                  aria-label="Pause between quests in minutes"
                 />
                 <span className="text-[12px] text-subtle">min</span>
               </label>

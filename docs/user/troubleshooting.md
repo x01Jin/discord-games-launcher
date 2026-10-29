@@ -47,13 +47,14 @@ nothing behind.
 
 Watch quests are credited from here: the app reports the video progress to
 Discord, so no player window opens and Discord stays usable. Phone quests only
-count in the mobile app, and those are listed but cannot be finished here.
+count in the mobile app, and those are listed and finished here through the
+same progress post.
 
-## A quest says "Accept"
+## A quest says "Not accepted"
 
-Press **Accept**. It accepts the quest through the running Discord client without
-opening a window, and the row becomes **Run** within about 20 seconds. The
-queue accepts unaccepted rows for you.
+Nothing to press: **Run** and **Watch** accept the quest through the running
+Discord client before they start, without opening a window. The chip disappears
+once that happens.
 
 The same applies to a game you started from the Library. Discord only counts
 progress for accepted quests.
@@ -63,11 +64,13 @@ progress for accepted quests.
 - **Done** or **Expired**: nothing to run. The quest is finished or past its end
   date.
 - **Unsupported**: Discord did not include the game this quest belongs to.
-- Nothing happens at all: check Activity Privacy in Discord (see the first
-  section) and allow 15 to 30 seconds.
+- The progress bar does not move: press **Refresh**, and give it 20 seconds.
+  Each beat adds the time since the previous one, so the bar moves in 20 second
+  steps.
+- A message says Discord refused the credit: Discord may have ended the quest
+  early or signed you out. Check its quest page.
 
-Progress only counts while the process runs. Stopping the game stops the
-progress.
+Progress only counts while a run is active. **Stop** ends it.
 
 ## The launcher does not start
 

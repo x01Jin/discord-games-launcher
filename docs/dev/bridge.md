@@ -54,15 +54,15 @@ Read from the running Discord client, never from the REST API. Details in
 | `connect_discord()`    | -          | `{ok, message}` - starts Discord with the endpoint, or restarts it once if it is already running    |
 | `start_discord()`      | -          | `{ok, message}` - launches Discord with the endpoint when it is closed; never restarts a running one  |
 | `open_quest_in_discord(quest_id)` | string | `{ok, message}` - opens `discord://-/quest-home` so a quest can be accepted or watched    |
-| `start_quest(quest_id)`| string ID  | `{ok, message}` - accepts the quest when needed, adds its game to the library, then starts it, emits `library_changed` |
-| `stop_quest(quest_id)` | string ID  | `{ok, message}`, emits `library_changed`                                                            |
+| `start_quest(quest_id)`| string ID  | `{ok, message}` - accepts the quest when needed, then starts a heartbeat run; queues the quest when another play run is active |
+| `stop_quest(quest_id)` | string ID  | `{ok, message}` - ends the play run or the video wait, no library effect                             |
 | `accept_quest(quest_id)` | string | `{ok, message}` - enrolls in a quest through the running client                 |
 | `start_quest_queue(quest_ids?)` | string ID list (opt) | `{ok, message}` - queues unfinished play and video quests, accepting them first |
 | `clear_quest_queue()` | -          | `{ok, cleared}` - empties both lanes and stops waiting on a video                                   |
 | `skip_quest_watch()`  | -          | `{ok, message}` - stops waiting for the video and starts the next queued video                      |
 | `reorder_quest_queue(quest_ids?) ` | string ID list | `{ok, message}` - puts the pending ids in that order                               |
 | `remove_from_quest_queue(quest_id)` | string ID | `{ok, message}` - drops one pending quest                                        |
-| `get_quest_prefs()`   | -          | `{ok, prefs}` - `{hide_activity, play_session_tail_min}`                                           |
+| `get_quest_prefs()`   | -          | `{ok, prefs}` - `{play_session_tail_min, run_mode}`                                                 |
 | `set_quest_prefs(values)` | object | `{ok, prefs, message}` - merges known keys, clamps the tail to 0..30                                 |
 | `silent_mode_status()` | -          | `{port, enabled, wanted, patched, total, launchers}` - which Windows launch entries carry the endpoint |
 | `enable_silent_mode()` | -          | `{ok, message, updated, failed}` - writes the switch into the Run key and every Discord shortcut    |
@@ -75,15 +75,15 @@ can show the reason. A successful read also carries `orbs` (integer or null),
 header, the options panel, and the queue bar.
 
 Each quest carries `kind` (`play`, `watch`, `watch_mobile`), `enrolled`, and an
-`action` (`run`, `stop`, `enroll`, `open`, `mobile`, `done`, `unsupported`),
-plus `queued`, `riding` (another quest's game run credits this one), and a
+`action` (`run`, `stop`, `open`, `done`, `unsupported`), plus `queued` and a
 reward object with the orb counts and reward labels.
 `start_quest` refuses a watch quest by name (there is no game to run) and
 accepts an unaccepted play quest before starting it, so the UI and the backend
-cannot disagree about what is runnable. `start_quest_queue` applies the same
-rule: play rows in `run` or `enroll` and watch rows in `open` are accepted, the
-rest are skipped, and the message names both counts. Queued play and video
-quests run in separate lanes, so accepting a video does not delay a game.
+cannot disagree about what is runnable. A second play quest started while one is
+running is queued, not run in parallel. `start_quest_queue` applies the same
+rule: play rows in `run` and video rows (desktop or mobile key) in `open` are
+accepted, the rest are skipped, and the message names both counts. Queued play
+and video quests run in separate lanes, so a video does not delay a play run.
 `stop_quest` on the id in `queue.watching` ends the watch.
 
 `silent_mode_status()` never raises either: a machine where the shortcuts cannot

@@ -4,7 +4,7 @@
 
 <img src="assets/dcgl.png" alt="Discord Games Launcher" width="256">
 
-A Windows app that makes Discord report a game as playing by running a dummy process under the name Discord looks for. The quest list comes from the Discord client you already have open.
+A Windows app that starts games in Discord without owning them, and finishes quests from the client you already have open. Library games run as a small dummy process named what Discord looks for; quests need no process at all.
 
 </div>
 
@@ -18,29 +18,29 @@ A Windows app that makes Discord report a game as playing by running a dummy pro
 
 ## How it works
 
-Discord scans running processes about every 15 seconds and matches executable names against its own game database. The launcher supplies what that scan expects:
+Discord scans running processes about every 15 seconds and matches executable names against its own game database. For a library game the launcher supplies what that scan expects:
 
 1. It reads the quest list from the running Discord client over its local DevTools endpoint.
 2. It downloads Discord's supported game list, about 20,000 entries, and keeps it in SQLite.
-3. It copies a prebuilt dummy executable under the process name a game or quest needs, and starts it.
+3. It copies a prebuilt dummy executable under the process name the game needs, and starts it.
 
-Discord then shows "Playing <game>" for as long as the process runs.
+Discord then shows "Playing <game>" for as long as the process runs. A quest run is different: it posts the same play-time heartbeat Discord's client posts, so no process, window, or library entry is created.
 
 ## Quests
 
-The Quests view lists what Discord pays for right now: desktop play quests, watch quests, and phone watch quests. Each row carries the game, its executable, the reward, the time left, and the one button that fits the quest state (Run, Stop, Watch, or Accept).
+The Quests view lists what Discord pays for right now: desktop play quests and video quests, including the ones Discord keys for its phone app. Each row carries the game, its executable, the reward, the time left, and the one button that fits the quest state (Run, Stop, or Watch).
 
-The header shows your current orb balance next to the quest counts. Sort by suggested order, expiry, orbs, or progress, filter by reward and quest type, and tick the rows you want: Start selected accepts the quests you never accepted, runs the play quests one after another, and credits each video quest in the background. Games and videos run in separate lanes, so a video starts while a game keeps running, and two quests for the same game share one process instead of opening two. Discord keeps running normally the whole time.
+The header shows your current orb balance next to the quest counts. Sort by suggested order, expiry, orbs, or progress, filter by reward and quest type, and tick the rows you want: Start selected accepts the quests you never accepted, runs the play quests one after another, and credits each video quest in the background. Games and videos run in separate lanes, so a video starts while a game keeps running, and a second play quest pressed while one is running joins the queue instead of starting a parallel run. Discord keeps running normally the whole time.
 
-The Running view shows what is in flight: the video being credited, running games, and the queue. Move a queued quest up or down, remove it, or stop a video from its row before it finishes.
+The Running view shows what is in flight: the video being credited, the running play quest, and the queue. Move a queued quest up or down, remove it, or stop a video from its row before it finishes.
 
 Quests are read out of the running client over loopback, so the request never leaves this machine.
 
-A play quest only counts after you accept it. The row says "Accept" and does that through the running client, then turns into Run; the queue accepts quests on its own.
+A quest only counts after you accept it. Run and Watch accept it first through the running client, so there is no separate Accept step and no Discord window opens. A quest run adds nothing to your library and copies nothing to disk: the play time is reported through the client's own endpoint, with the game shown on your profile or kept private. Dummy windows belong to catalogue games, and they start minimized without taking focus.
 
 If Discord was started without the local endpoint, the view offers one setup that adds the flag to your Discord shortcuts and startup entry. It restarts Discord once, and from then on the list is there every time Discord starts.
 
-Settings also holds the quest options: hide Discord's own "Playing" status while fakes run, and how many minutes a process stays alive after its quest target is reached. Settings in the sidebar lists every Discord entry the setup touched, in case you want the switch removed again.
+Settings also holds the quest options: Play activity chooses whether a run shows the game on your profile or stays private, and the pause between quests, in minutes, spaces finished runs out so they do not follow each other back to back. The same page lists every Discord entry the setup touched, in case you want the switch removed again.
 
 Read [docs/dev/quests.md](docs/dev/quests.md) for how the reading works and where it fails.
 

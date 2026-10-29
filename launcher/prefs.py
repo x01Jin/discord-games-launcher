@@ -15,15 +15,22 @@ from typing import Any
 
 from platformdirs import user_data_dir
 
-HIDE_ACTIVITY = "hide_activity"
 PLAY_SESSION_TAIL_MIN = "play_session_tail_min"
+RUN_MODE = "run_mode"
 
-# Discord's own default for showCurrentGame is on, and Orion ships the tail
-# off-on-by-default debate settled at 2 minutes. Both match what the reference
-# userscript calls its defaults.
+# Two ways to earn quest time. Activity mode starts the dummy game so Discord's
+# own detection sees it and shows the game on the profile; silent mode posts the
+# play heartbeat instead and shows nothing. Activity is the default because a
+# run that is visible behaves like the game Discord expects to see.
+MODE_ACTIVITY = "activity"
+MODE_SILENT = "silent"
+RUN_MODES = (MODE_ACTIVITY, MODE_SILENT)
+
+# The tail is the pause between two quests; the reference userscript's two
+# minutes is the default.
 DEFAULTS: dict[str, Any] = {
-    HIDE_ACTIVITY: False,
     PLAY_SESSION_TAIL_MIN: 2,
+    RUN_MODE: MODE_ACTIVITY,
 }
 
 MAX_TAIL_MINUTES = 30
@@ -44,10 +51,6 @@ def _clean(values: Any, base: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(values, dict):
         return result
 
-    hide = values.get(HIDE_ACTIVITY, result[HIDE_ACTIVITY])
-    if isinstance(hide, bool):
-        result[HIDE_ACTIVITY] = hide
-
     tail = values.get(PLAY_SESSION_TAIL_MIN, result[PLAY_SESSION_TAIL_MIN])
     if isinstance(tail, bool):
         pass
@@ -57,6 +60,10 @@ def _clean(values: Any, base: dict[str, Any]) -> dict[str, Any]:
         result[PLAY_SESSION_TAIL_MIN] = max(0, min(MAX_TAIL_MINUTES, int(tail)))
     elif isinstance(tail, str) and tail.strip().isdigit():
         result[PLAY_SESSION_TAIL_MIN] = max(0, min(MAX_TAIL_MINUTES, int(tail.strip())))
+
+    mode = values.get(RUN_MODE, result[RUN_MODE])
+    if isinstance(mode, str) and mode.strip().lower() in RUN_MODES:
+        result[RUN_MODE] = mode.strip().lower()
     return result
 
 
@@ -88,9 +95,12 @@ def update(path: Path | None = None, **changes: Any) -> dict[str, Any]:
 
 __all__ = [
     "DEFAULTS",
-    "HIDE_ACTIVITY",
     "MAX_TAIL_MINUTES",
+    "MODE_ACTIVITY",
+    "MODE_SILENT",
     "PLAY_SESSION_TAIL_MIN",
+    "RUN_MODE",
+    "RUN_MODES",
     "default_path",
     "load",
     "save",

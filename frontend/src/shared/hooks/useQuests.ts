@@ -58,11 +58,6 @@ export function useStartQuest() {
   return useQuestMutation((questId) => bridge.start_quest(questId));
 }
 
-/** Accept a quest through the client, so it can be credited without opening Discord. */
-export function useAcceptQuest() {
-  return useQuestMutation((questId) => bridge.accept_quest(questId));
-}
-
 export function useStopQuest() {
   return useQuestMutation((questId) => bridge.stop_quest(questId));
 }
@@ -146,7 +141,7 @@ export function useRemoveFromQuestQueue() {
   });
 }
 
-/** Hide activity and the play session tail. Stored next to the database. */
+/** The pause between quests. Stored next to the database. */
 export function useSetQuestPrefs() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);

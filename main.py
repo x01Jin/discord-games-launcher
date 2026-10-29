@@ -44,6 +44,57 @@ _FRAME_BG = 0x0014151C  # BGR for #14151c
 _FRAME_TEXT = 0x00FFFFFF
 
 
+_INSTANCE_HANDLE = None
+
+
+def _focus_existing_window() -> None:
+    """Bring the copy that already owns the launcher to the front."""
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, APP_TITLE)
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+    except (AttributeError, OSError):
+        pass
+
+
+def _claim_single_instance() -> bool:
+    """Return False when another copy is already running.
+
+    Each copy runs its own quest service against the same Discord client, so
+    two copies post every heartbeat twice and both start the next queued
+    quest. A named mutex keeps one copy alive; the second just shows it.
+    """
+    global _INSTANCE_HANDLE
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.CreateMutexW.argtypes = [
+            wintypes.LPVOID,
+            wintypes.BOOL,
+            wintypes.LPCWSTR,
+        ]
+        handle = kernel32.CreateMutexW(None, False, "Local\\DiscordGamesLauncher")
+        if not handle:
+            return True
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+            kernel32.CloseHandle(handle)
+            _focus_existing_window()
+            return False
+        _INSTANCE_HANDLE = handle
+        return True
+    except (AttributeError, OSError):
+        return True
+
+
 def _report_fatal(message: str) -> None:
     """Show a dialog when a windowed build dies before the log is readable.
 
@@ -185,6 +236,10 @@ def main():
     """Main application entry point."""
     print(f"Discord Games Launcher v{APP_VERSION}")
     print("=" * 40)
+
+    if not _claim_single_instance():
+        print("Another copy is already running; brought it to the front.")
+        return
 
     game_manager = None
     logger = None
