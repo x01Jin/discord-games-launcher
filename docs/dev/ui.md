@@ -60,12 +60,12 @@ part of the ecosystem rather than as a themed web page.
 
 | Component        | Role                                                                                 |
 | ---------------- | ------------------------------------------------------------------------------------ |
-| `primitives.tsx` | Button, IconButton, Chip, StatusDot, ProgressBar, Switch, Skeleton, EmptyState        |
+| `primitives.tsx` | Button, IconButton, Checkbox, Chip, StatusDot, ProgressBar, Switch, Skeleton, EmptyState |
 | `PageHeader.tsx` | `PageHeader` and `Toolbar`                                                           |
 | `SearchField.tsx`| Search input with icon, clear button, Escape                                          |
 | `GameArt.tsx`    | Art tile: quest artwork, then app icon, then initials                                 |
 | `Dialog.tsx`     | Modal with Escape, backdrop, focus handoff                                            |
-| `Menu.tsx`       | Cursor-anchored menu that flips at the viewport edges                                 |
+| `Menu.tsx`       | Cursor-anchored menu in a portal, flips at the viewport edges                        |
 | `Sidebar.tsx`    | Navigation and live client state                                                      |
 | `Toasts.tsx`     | Bottom-right stack, three at a time                                                   |
 | `icons.tsx`      | Inline SVG set; no icon package                                                       |
@@ -75,18 +75,27 @@ part of the ecosystem rather than as a themed web page.
 The default view. It reads the quest list from the running Discord client (see
 [Quests](./quests.md)).
 
-- Header: counts of open, running, and finished quests; Refresh.
-- Toolbar: All / Play / Watch filter, a "Show finished" switch, and a
-  "Set up silent start" button while the launch argument is not installed.
-  The count shows how many rows are visible, plus the total only when the
-  filter hides some.
-- Rows: art (video thumbnail for watch quests), quest name, kind label,
-  game and process name, reward chip, time left (amber inside 24 h), progress
-  bar once enrolled, and one action chosen by the backend: Run, Stop, Accept
-  first, Watch, Phone, Done, or Unsupported.
-- Accept first: shown for a play quest Discord has not been accepted yet.
-  It opens Discord's quest page; the row turns into Run once the client reports
-  the quest as enrolled.
+- Header: counts of open, running, and finished quests, the orb balance when
+  the client reports one, and Refresh.
+- Toolbar: All / Play / Watch filter, a reward filter (All rewards, Orbs,
+  Avatar decoration, In-game), a sort menu (Suggested, Expiring soon, Most
+  orbs, Most progress), a "Show finished" switch, and a "Set up silent start"
+  button while the launch argument is not installed. The count shows how many
+  rows are visible, plus the total only when the filter hides some.
+- Rows: checkbox (only on rows that can be queued), art (video thumbnail for
+  watch quests), quest name, kind label, game and process name, reward chip,
+  time left (amber inside 24 h), progress bar once enrolled, and one action
+  chosen by the backend: Run, Stop, Accept, Watch (green), Phone, Done, or
+  Unsupported. A queued row shows a Queued chip; the video that is being
+  credited shows an accent Watching chip, and its Watch button is disabled.
+- Selection: every unfinished play or video quest gets a checkbox, accepted or
+  not. Start selected accepts the quests that need it, runs play quests one at a
+  time, and credits video quests in the background, moving on when each one
+  completes. The queue bar names what is running or which video is playing, with
+  Skip video and Clear queue.
+- Accept: shown for a play quest that was never accepted. It enrolls through the
+  running client without opening a window; the row turns into Run once the
+  client reports the quest as enrolled.
 - Disconnected: one panel that states the situation, shows what the client
   reported, and offers the single useful action. With silent mode off it lists
   the three steps of the setup; with the setup done but the client still
@@ -118,7 +127,7 @@ The default view. It reads the quest list from the running Discord client (see
 
 ## Settings
 
-Two panels, no state of their own beyond one dialog flag.
+Three panels, no state of their own beyond one dialog flag.
 
 - Discord client: the channel and version from `status()`, and where the
   loopback endpoint is: `Port 9222` when connected, "Running without it" when
@@ -132,6 +141,10 @@ Two panels, no state of their own beyond one dialog flag.
   (`disable_silent_mode` / `enable_silent_mode`), so the page only reflects
   state. Both mutations invalidate `["silent-mode"]` and `["quests"]`, which is
   what flips the cards, the sidebar dot, and the Quests toolbar button.
+- Quest runs: a Hide activity switch and a play-session-tail field (0 to 30
+  minutes). Both save through `set_quest_prefs` and apply to the next run
+  without a restart. Hide activity turns Discord's own "Playing" status off
+  while dummy processes run and restores the previous value when they stop.
 - A footnote says the removal restores the exact original command lines and that
   an already-open Discord keeps its endpoint until it is closed, because the
   patch only takes effect on the next start.

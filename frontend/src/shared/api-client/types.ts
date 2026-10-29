@@ -90,8 +90,14 @@ export type QuestAction =
 
 export interface QuestReward {
   label: string | null;
+  /** Every reward name on the quest, in Discord's order. */
+  labels: string[];
   orbs: number | null;
   premium_orbs: number | null;
+  /** The reward is an avatar decoration. */
+  avatar_decoration: boolean;
+  /** The reward is an in-game item or currency. */
+  in_game: boolean;
 }
 
 export interface QuestGame {
@@ -124,6 +130,23 @@ export interface QuestGame {
   is_running: boolean;
   shares_game_with: number;
   state: QuestState;
+  /** Waiting in the start queue, behind a quest that is still running. */
+  queued: boolean;
+}
+
+/** Options that change how a run behaves. Stored in settings.json. */
+export interface QuestPrefs {
+  /** Turn Discord's own "Playing" status off while a dummy runs. */
+  hide_activity: boolean;
+  /** Keep a finished process alive up to this many minutes. 0 stops at once. */
+  play_session_tail_min: number;
+}
+
+export interface QuestQueue {
+  ids: string[];
+  active: string | null;
+  /** The video quest the queue opened in Discord and is waiting on. */
+  watching: string | null;
 }
 
 export interface DiscordStatus {
@@ -183,6 +206,21 @@ export interface QuestsResult {
   suspended_until?: string | null;
   enrollment_blocked_until?: string | null;
   total_quests?: number;
+  /** Orb balance from the client. null until Discord has fetched it. */
+  orbs?: number | null;
+  prefs?: QuestPrefs;
+  queue?: QuestQueue;
+}
+
+export interface QuestPrefsResult {
+  ok: boolean;
+  prefs: QuestPrefs;
+  message?: string;
+}
+
+export interface ClearQueueResult {
+  ok: boolean;
+  cleared: number;
 }
 
 export type DcglEventDetail = { type: "library_changed" };
@@ -208,7 +246,13 @@ export interface PywebviewApi {
   start_discord(): Promise<MutResult>;
   open_quest_in_discord(quest_id: string): Promise<MutResult>;
   start_quest(quest_id: string): Promise<MutResult>;
+  accept_quest(quest_id: string): Promise<MutResult>;
   stop_quest(quest_id: string): Promise<MutResult>;
+  start_quest_queue(quest_ids: string[]): Promise<MutResult>;
+  clear_quest_queue(): Promise<ClearQueueResult>;
+  skip_quest_watch(): Promise<MutResult>;
+  get_quest_prefs(): Promise<QuestPrefsResult>;
+  set_quest_prefs(values: Partial<QuestPrefs>): Promise<QuestPrefsResult>;
 
   silent_mode_status(): Promise<SilentModeStatus>;
   enable_silent_mode(): Promise<SilentModeResult>;

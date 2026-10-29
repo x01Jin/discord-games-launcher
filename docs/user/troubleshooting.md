@@ -45,13 +45,15 @@ To undo the setup, use **Turn silent connection off** on the Quests panel, or
 **Remove patch** in Settings. Both restore the original command lines and leave
 nothing behind.
 
-Watch quests need the video played in Discord, and phone quests only count in
-the mobile app. Those are listed but cannot be finished here.
+Watch quests are credited from here: the app reports the video progress to
+Discord, so no player window opens and Discord stays usable. Phone quests only
+count in the mobile app, and those are listed but cannot be finished here.
 
-## A quest says "Accept first"
+## A quest says "Accept"
 
-Press **Accept first**. It opens Discord's quest page; accept the quest there and
-come back. The row becomes **Run** within about 20 seconds.
+Press **Accept**. It accepts the quest through the running Discord client without
+opening a window, and the row becomes **Run** within about 20 seconds. The
+queue accepts unaccepted rows for you.
 
 The same applies to a game you started from the Library. Discord only counts
 progress for accepted quests.

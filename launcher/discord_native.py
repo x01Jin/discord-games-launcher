@@ -367,22 +367,12 @@ class CdpConnection:
             return chunk
         return self._sock.recv(count)
 
-    def evaluate(self, expression: str, timeout: float = 15.0) -> Any:
-        """Evaluate an expression in the page and return its value."""
+    def command(self, method: str, params: dict[str, Any] | None = None, timeout: float = 15.0) -> dict[str, Any]:
+        """Send one DevTools command and return its result object."""
         self._counter += 1
         message_id = self._counter
         payload = json.dumps(
-            {
-                "id": message_id,
-                "method": "Runtime.evaluate",
-                "params": {
-                    "expression": expression,
-                    "returnByValue": True,
-                    "awaitPromise": True,
-                    "userGesture": False,
-                    "timeout": int(timeout * 1000),
-                },
-            },
+            {"id": message_id, "method": method, "params": params or {}},
             separators=(",", ":"),
         ).encode("utf-8")
         self._sock.sendall(_mask_frame(0x1, payload))
@@ -423,16 +413,30 @@ class CdpConnection:
                 continue
             if "error" in message:
                 raise DiscordNativeError(f"DevTools error: {message['error']}")
-            result = message.get("result") or {}
-            details = result.get("exceptionDetails")
-            if details:
-                text = details.get("exception", {}).get("description") or details.get(
-                    "text", "evaluation failed"
-                )
-                raise DiscordNativeError(str(text))
-            remote = result.get("result") or {}
-            return remote.get("value")
+            return message.get("result") or {}
         raise DiscordNativeError("Timed out waiting for the DevTools response")
+
+    def evaluate(self, expression: str, timeout: float = 15.0) -> Any:
+        """Evaluate an expression in the page and return its value."""
+        result = self.command(
+            "Runtime.evaluate",
+            {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": True,
+                "userGesture": False,
+                "timeout": int(timeout * 1000),
+            },
+            timeout=timeout,
+        )
+        details = result.get("exceptionDetails")
+        if details:
+            text = details.get("exception", {}).get("description") or details.get(
+                "text", "evaluation failed"
+            )
+            raise DiscordNativeError(str(text))
+        remote = result.get("result") or {}
+        return remote.get("value")
 
     def close(self) -> None:
         try:
@@ -467,7 +471,8 @@ QUESTS_EXPRESSION = r"""
     account: null,
     suspendedUntil: null,
     enrollmentBlockedUntil: null,
-    storeFound: false
+    storeFound: false,
+    orbs: null
   };
   try {
     const wc = window.webpackChunkdiscord_app;
@@ -489,6 +494,7 @@ QUESTS_EXPRESSION = r"""
 
     let questStore = null;
     let userStore = null;
+    let orbStore = null;
     for (const id in mods) {
       const record = mods[id];
       if (!record || !record.exports) continue;
@@ -499,8 +505,9 @@ QUESTS_EXPRESSION = r"""
         if (!name) continue;
         if (!questStore && (name === "QuestStore" || name === "QuestsStore")) questStore = candidate;
         else if (!userStore && name === "UserStore") userStore = candidate;
+        else if (!orbStore && name === "VirtualCurrencyStore") orbStore = candidate;
       }
-      if (questStore && userStore) break;
+      if (questStore && userStore && orbStore) break;
     }
 
     if (!questStore) {
@@ -525,6 +532,18 @@ QUESTS_EXPRESSION = r"""
       const user = typeof userStore?.getCurrentUser === "function" ? userStore.getCurrentUser() : null;
       if (user) out.account = { id: String(user.id || ""), username: user.username || null };
     } catch (e) { /* the account is decoration, not data */ }
+
+    // The Orb pill on Discord's own quest page. Null until the client has
+    // fetched it once this session (opening the quest page does that), which
+    // the UI has to say rather than showing a wrong zero.
+    try {
+      if (orbStore && typeof orbStore.getCurrentBalance === "function") {
+        const balance = orbStore.getCurrentBalance();
+        if (typeof balance === "number" && Number.isInteger(balance) && balance >= 0) {
+          out.orbs = balance;
+        }
+      }
+    } catch (e) { /* the balance is decoration, not data */ }
 
     const future = (raw) => {
       if (!raw) return null;
@@ -588,7 +607,30 @@ QUESTS_EXPRESSION = r"""
       const status = quest.userStatus || {};
       const progress = status.progress && status.progress[chosenKey];
       const assets = config.assets || {};
-      const rewards = (config.rewardsConfig && config.rewardsConfig.rewards) || [];
+      const rewards = Array.isArray(config.rewardsConfig && config.rewardsConfig.rewards)
+        ? config.rewardsConfig.rewards
+        : [];
+      // Every entry matters: a quest can list an in-game item first and Orbs
+      // second, so reading rewards[0] reports no Orbs for a quest that pays
+      // them. Discord's own card sums the entries the same way.
+      let rewardOrbs = 0;
+      let rewardPremiumOrbs = 0;
+      let rewardAvatarDecoration = false;
+      let rewardInGame = false;
+      const rewardNames = [];
+      for (const entry of rewards) {
+        const base = Number(entry && entry.orbQuantity);
+        if (base > 0) {
+          rewardOrbs += base;
+          const premium = Number(entry.premiumOrbQuantity);
+          rewardPremiumOrbs += premium > 0 ? premium : base;
+        }
+        const rewardType = entry && entry.type;
+        if (rewardType === 3) rewardAvatarDecoration = true;
+        else if (rewardType === 1) rewardInGame = true;
+        const label = entry && entry.messages && entry.messages.name;
+        if (label) rewardNames.push(String(label));
+      }
       const reward = rewards.length ? rewards[0] : null;
       const video = (chosen.assets && chosen.assets.video) || null;
 
@@ -620,9 +662,12 @@ QUESTS_EXPRESSION = r"""
         } : null,
         accent: (config.colors && config.colors.primary) || null,
         rewardType: reward ? reward.type : null,
-        rewardName: (reward && reward.messages && reward.messages.name) || null,
-        rewardOrbs: reward && typeof reward.orbQuantity === "number" ? reward.orbQuantity : null,
-        rewardPremiumOrbs: reward && typeof reward.premiumOrbQuantity === "number" ? reward.premiumOrbQuantity : null
+        rewardName: rewardNames.length ? rewardNames[0] : null,
+        rewardNames: rewardNames,
+        rewardOrbs: rewardOrbs > 0 ? rewardOrbs : null,
+        rewardPremiumOrbs: rewardOrbs > 0 ? rewardPremiumOrbs : null,
+        rewardAvatarDecoration: rewardAvatarDecoration,
+        rewardInGame: rewardInGame
       });
     }
 
@@ -631,6 +676,178 @@ QUESTS_EXPRESSION = r"""
     out.error = String((error && error.message) || error);
   }
   return JSON.stringify(out);
+})()
+"""
+
+
+# Read or change Discord's own "display current activity as a status message"
+# setting. Reading passes null, writing passes true/false. The userscript this
+# app follows turns the setting off for the length of a quest run and puts it
+# back afterwards, which is the only way to keep a fake process invisible while
+# Discord still counts it.
+#
+# Discord 1.0.9265 exposes no action creator for this setting (no exported
+# setShowCurrentGame, and module sources are not readable), so the value Discord
+# itself reads is written in place. It lives in memory only: a Discord restart
+# reloads the synced value, so a crash cannot leave the setting off.
+SHOW_CURRENT_GAME_EXPRESSION = r"""
+(() => {
+  const wanted = __DCGL_WANTED__;
+  try {
+    const wc = window.webpackChunkdiscord_app;
+    if (!wc) return JSON.stringify({ ok: false, error: "Discord's module registry is not reachable" });
+    const req = wc.push([[Symbol()], {}, (r) => r]);
+    wc.pop();
+    const mods = (req && req.c) || {};
+
+    let store = null;
+    for (const id in mods) {
+      const record = mods[id];
+      if (!record || !record.exports) continue;
+      const exported = record.exports;
+      for (const candidate of [exported, exported.default, exported.A, exported.Z]) {
+        if (!candidate) continue;
+        let name = null;
+        try {
+          if (typeof candidate.getName === "function") name = candidate.getName();
+        } catch (e) { /* not a store */ }
+        if (name === "UserSettingsProtoStore") { store = candidate; break; }
+      }
+      if (store) break;
+    }
+
+    if (!store) return JSON.stringify({ ok: false, error: "Discord's settings store was not found" });
+    const status = store.settings && store.settings.status;
+    const field = status && status.showCurrentGame;
+    if (!field || typeof field.value !== "boolean") {
+      return JSON.stringify({ ok: false, error: "Discord did not expose the show-current-game setting" });
+    }
+
+    const previous = field.value;
+    if (wanted !== null) field.value = wanted;
+    return JSON.stringify({ ok: true, previous: previous, value: field.value });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: String((error && error.message) || error) });
+  }
+})()
+"""
+
+
+QUEST_API_EXPRESSION = r"""
+(async () => {
+  const op = __DCGL_OP__;
+  const fail = (error, extra) => JSON.stringify(Object.assign({ ok: false, error: String(error) }, extra || {}));
+  try {
+    const wc = window.webpackChunkdiscord_app;
+    if (!wc) return fail("Discord's module registry is not reachable");
+    const req = wc.push([[Symbol()], {}, (r) => r]);
+    wc.pop();
+    const mods = (req && req.c) || {};
+
+    const nameOf = (candidate) => {
+      if (!candidate || (typeof candidate !== "object" && typeof candidate !== "function")) return null;
+      try {
+        if (typeof candidate.getName === "function") return candidate.getName();
+      } catch (e) { /* stores are not all well behaved */ }
+      try {
+        if (typeof candidate.displayName === "string") return candidate.displayName;
+      } catch (e) { /* ignore */ }
+      return null;
+    };
+
+    // Same discovery as the quest reader: named stores first, because the
+    // duck-typed matcher can land on an unrelated cache in this build.
+    let questStore = null;
+    let api = null;
+    for (const id in mods) {
+      const record = mods[id];
+      if (!record || !record.exports) continue;
+      const exported = record.exports;
+      for (const candidate of [exported, exported.default, exported.A, exported.Z]) {
+        const name = nameOf(candidate);
+        if (!questStore && (name === "QuestStore" || name === "QuestsStore")) questStore = candidate;
+      }
+      for (const key of Object.keys(exported)) {
+        const value = exported[key];
+        if (
+          !api &&
+          value &&
+          typeof value.get === "function" &&
+          typeof value.post === "function" &&
+          typeof value.del === "function" &&
+          !value._dispatcher
+        ) {
+          api = value;
+        }
+      }
+    }
+    if (!questStore) return fail("Discord's QuestStore was not found");
+    if (!api) return fail("Discord's HTTP client was not found");
+
+    const raw = questStore.quests;
+    let list = [];
+    if (raw) {
+      if (typeof raw.values === "function") list = Array.from(raw.values());
+      else if (Array.isArray(raw)) list = raw;
+      else list = Object.values(raw);
+    }
+    const quest = list.find((q) => q && String(q.id) === String(op.questId)) || null;
+    const sealed = quest ? (quest.trafficMetadataSealed ?? null) : null;
+
+    const post = async (url, body) => {
+      const response = await api.post({ url: url, body: body });
+      return {
+        ok: response ? response.ok !== false : false,
+        status: response ? response.status ?? null : null,
+        body: response ? response.body ?? null : null,
+      };
+    };
+
+    let result;
+    if (op.kind === "enroll") {
+      result = await post("/quests/" + op.questId + "/enroll", {
+        location: 11,
+        is_targeted: false,
+        metadata_sealed: null,
+        traffic_metadata_sealed: sealed,
+      });
+    } else if (op.kind === "video") {
+      result = await post("/quests/" + op.questId + "/video-progress", {
+        timestamp: op.timestamp,
+      });
+    } else if (op.kind === "claim") {
+      result = await post("/quests/" + op.questId + "/claim-reward", {
+        platform: 0,
+        location: 11,
+        is_targeted: false,
+        metadata_sealed: null,
+        traffic_metadata_sealed: sealed,
+      });
+    } else {
+      return fail("Unknown quest operation");
+    }
+
+    const body = result.body || {};
+    if (!result.ok) {
+      return fail(body.message || "Discord refused the quest request", {
+        status: result.status,
+        code: body.code ?? null,
+      });
+    }
+    return JSON.stringify({
+      ok: true,
+      status: result.status,
+      enrolled: Boolean(body.enrolled_at),
+      completed: Boolean(body.completed_at),
+      progress: body.progress ?? null,
+    });
+  } catch (error) {
+    const body = (error && error.body) || {};
+    return fail((body && body.message) || (error && error.message) || error, {
+      status: (error && error.status) || null,
+      code: body.code ?? null,
+    });
+  }
 })()
 """
 
@@ -648,6 +865,9 @@ def parse_quest_payload(value: Any) -> dict[str, Any]:
         raise DiscordNativeError(str(value.get("error") or "Discord could not list quests"))
     if not isinstance(value.get("quests"), list):
         value["quests"] = []
+    orbs = value.get("orbs")
+    if isinstance(orbs, bool) or not isinstance(orbs, int) or orbs < 0:
+        value["orbs"] = None
     return value
 
 
@@ -806,6 +1026,110 @@ class DiscordNative:
 
         self._last_error = last_error
         raise DiscordNativeError(last_error or "Discord did not return a quest list")
+
+    def _evaluate_on_client(self, expression: str, timeout: float = 8.0) -> Any:
+        """Run one expression in the first renderer that answers.
+
+        Same target ranking as read_quests: a popout or overlay page answers
+        the DevTools handshake but has no module registry, so the wrong target
+        looks like a failed call rather than a wrong window.
+        """
+        targets, error = find_targets(self.candidate_ports())
+        if not targets:
+            raise DiscordNativeError(
+                error or "Discord's local DevTools endpoint is not open"
+            )
+        last_error: str | None = None
+        for target in targets[:4]:
+            try:
+                with CdpConnection(target.ws_url) as connection:
+                    value = connection.evaluate(expression, timeout=timeout)
+            except DiscordNativeError as exc:
+                last_error = str(exc)
+                continue
+            self._last_target = target
+            self._last_error = None
+            return value
+        self._last_error = last_error
+        raise DiscordNativeError(last_error or "Discord did not answer")
+
+    def show_current_game(self) -> bool:
+        """The current value of Discord's "show current game" setting."""
+        payload = self._show_current_game_expression("null")
+        previous = payload.get("previous")
+        if not isinstance(previous, bool):
+            raise DiscordNativeError("Discord did not report the activity setting")
+        return previous
+
+    def set_show_current_game(self, enabled: bool) -> bool:
+        """Set the activity setting in the running client, return the old value."""
+        payload = self._show_current_game_expression("true" if enabled else "false")
+        previous = payload.get("previous")
+        if not isinstance(previous, bool):
+            raise DiscordNativeError("Discord did not report the activity setting")
+        return previous
+
+    def _show_current_game_expression(self, wanted: str) -> dict[str, Any]:
+        value = self._evaluate_on_client(
+            SHOW_CURRENT_GAME_EXPRESSION.replace("__DCGL_WANTED__", wanted)
+        )
+        if isinstance(value, str):
+            try:
+                payload = json.loads(value)
+            except ValueError as exc:
+                raise DiscordNativeError("Discord returned an unreadable settings answer") from exc
+        elif isinstance(value, dict):
+            payload = value
+        else:
+            raise DiscordNativeError("Discord returned an unexpected settings answer")
+        if not payload.get("ok"):
+            raise DiscordNativeError(
+                str(payload.get("error") or "Discord refused the settings write")
+            )
+        return payload
+
+
+    # -- quest actions -----------------------------------------------------
+    # These go through Discord's own HTTP client inside the renderer, the same
+    # way the client enrolls and reports video progress. No user token is ever
+    # read or stored: the request is signed by the running client.
+    def _quest_api(self, op: dict[str, Any], timeout: float = 20.0) -> dict[str, Any]:
+        expression = QUEST_API_EXPRESSION.replace("__DCGL_OP__", json.dumps(op))
+        value = self._evaluate_on_client(expression, timeout=timeout)
+        if isinstance(value, str):
+            try:
+                payload = json.loads(value)
+            except ValueError as exc:
+                raise DiscordNativeError(
+                    "Discord returned an unreadable quest answer"
+                ) from exc
+        elif isinstance(value, dict):
+            payload = value
+        else:
+            raise DiscordNativeError("Discord returned an unexpected quest answer")
+        if not payload.get("ok"):
+            raise DiscordNativeError(
+                str(payload.get("error") or "Discord refused the quest request")
+            )
+        return payload
+
+    def accept_quest(self, quest_id: str) -> dict[str, Any]:
+        """Accept (enroll in) a quest from the running client."""
+        return self._quest_api({"kind": "enroll", "questId": str(quest_id)})
+
+    def send_video_progress(self, quest_id: str, timestamp: float) -> dict[str, Any]:
+        """Report how many seconds of a video quest have been watched."""
+        return self._quest_api(
+            {
+                "kind": "video",
+                "questId": str(quest_id),
+                "timestamp": round(float(timestamp), 6),
+            }
+        )
+
+    def claim_quest_reward(self, quest_id: str) -> dict[str, Any]:
+        """Claim the reward of a finished quest."""
+        return self._quest_api({"kind": "claim", "questId": str(quest_id)})
 
     # -- control ----------------------------------------------------------
     def start(self, wait_seconds: float = 45.0) -> tuple[bool, str]:

@@ -30,7 +30,7 @@ one is labelled with what this PC can actually do about it:
 | Kind           | Discord task key       | Can this app finish it?             |
 | -------------- | ---------------------- | ----------------------------------- |
 | `play`         | `PLAY_ON_DESKTOP`      | Yes, by running the dummy executable |
-| `watch`        | `WATCH_VIDEO`          | No - the client has to play the video. The row opens Discord instead |
+| `watch`        | `WATCH_VIDEO`          | Yes, by posting the video progress from here |
 | `watch_mobile` | `WATCH_VIDEO_ON_MOBILE` | No - it only counts on the phone app |
 
 A quest that offers several keys is filed under the first of those three, so a
@@ -38,9 +38,9 @@ quest with both a desktop and a console task still shows up as `play`. Console
 and activity quests are not listed at all: nothing on this machine can move
 them.
 
-Watch quests are listed because "no quests" and "four quests, two of which you
-have to watch yourself" are different answers, and only the second one is
-true. Their video thumbnail and required watch time come from the same payload.
+Watch quests are listed because "no quests" and "four quests, two of which pay
+for watching a video" are different answers, and only the second one is true.
+Their video thumbnail and required watch time come from the same payload.
 
 ## Accepting a quest first
 
@@ -49,11 +49,12 @@ client** (`userStatus.enrolledAt` is set). Running the fake process for a quest
 that was never accepted produces heartbeats nobody counts, which looks like the
 app doing nothing.
 
-So the row is explicit: an unaccepted play quest shows **Accept first**, which
-opens Discord's quest page, and `QuestService.start_quest()` refuses with
-"Accept the quest in Discord first". Once the client reports the quest as
-enrolled, the same row offers **Run**. The list refreshes on the poll, so no
-manual step is needed after accepting.
+So the app accepts the quest itself. The row shows **Accept**
+(`accept_quest()`), which posts `/quests/{id}/enroll` from the renderer with the
+quest's `trafficMetadataSealed` blob, the same request Discord's own button
+makes. `start_quest()` and the queue do the same call before they start a quest,
+so an unaccepted row runs without a detour through Discord. Once the payload
+reports the quest as enrolled, the same row offers **Run**.
 
 ## Why the DevTools protocol
 
@@ -154,6 +155,19 @@ The expression in `QUESTS_EXPRESSION` runs inside the renderer:
 4. Emit a compact, JSON-serialisable subset: name, game title, application id,
    target seconds, progress, expiry, reward, and artwork paths.
 
+### Orbs and rewards
+
+Rewards are read from every entry of `rewardsConfig.rewards`: orb rewards
+carry `orbQuantity` with `premiumOrbQuantity` as the fallback, avatar
+decorations are type 3, and in-game rewards (tokens, calling cards) are type 1.
+The orb amounts are summed per quest and the first reward name labels the row.
+
+The orb balance is not part of a quest; it lives in a second store,
+`VirtualCurrencyStore.getCurrentBalance()`, which the expression reads
+alongside the quest list. The client returns null until it has fetched the
+balance, which it defers until the quest page is opened once. The service passes
+null through instead of 0 so the header can leave the chip out.
+
 It also reports `questAccessSuspendedUntil` and
 `questEnrollmentBlockedUntil`, the two fields Discord's own client uses to stop
 quest work. The view surfaces them instead of pretending the list is usable.
@@ -194,8 +208,8 @@ backend decides both so the UI never has to infer capability from a task key.
 | ------------- | --------------- | ----------------------------------------- |
 | `run`         | Run             | Accepted play quest, not running          |
 | `stop`        | Stop            | Its dummy process is alive                |
-| `enroll`      | Accept first    | Play quest not accepted in the client     |
-| `open`        | Watch           | Desktop watch quest                       |
+| `enroll`      | Accept          | Play quest not accepted in the client     |
+| `open`        | Watch           | Desktop watch quest, credited in the background |
 | `mobile`      | Phone           | Mobile-only watch quest                   |
 | `done`        | Done / Expired  | Finished or past its end date             |
 | `unsupported` | Unsupported     | No application id to fake                 |
@@ -204,9 +218,74 @@ Sort order is running, ready, expired, unresolved, completed; inside a state,
 play quests come before watch quests, then soonest expiry. The page hides
 finished rows behind "Show finished" and can filter to Play or Watch.
 
-`start_quest()` only accepts a play quest, and only once it is enrolled, so a
-stray call cannot start a process that would never be credited. `stop_quest()`
-works for any quest whose dummy process is alive.
+`start_quest()` accepts a play quest first when it was never enrolled, then
+starts the process; an enrollment failure is reported instead of starting a
+process nobody would credit. `stop_quest()` works for any quest whose dummy
+process is alive.
+
+## Queue
+
+Start selected (`start_quest_queue`) runs the selection in list order, and the
+queue lives in the service so it survives a page change.
+
+- Play quests start through `start_quest()` and run one at a time. A monitor
+  thread wakes every `MONITOR_INTERVAL` (10 s) and starts the next quest once
+  the previous process has exited or its tail has ended.
+- Video quests are watched in the background, without opening a Discord window.
+  The queue accepts the quest if needed, then posts `video-progress` from here
+  (see below) every 7 to 9.5 s until the client reports `completedAt` or a
+  progress that reached the target. A watch gives up after
+  `WATCH_TIMEOUT_SECONDS` (30 min). The monitor thread runs every 2 s while a
+  video is in flight, and re-reads the full quest payload at most every
+  `WATCH_REFRESH_SECONDS` (15 s). Skip video (`skip_quest_watch`) stops waiting
+  and moves on; Clear queue empties the queue and drops the wait. A quest that is
+  already being watched is not queued again by pressing Watch twice.
+- A quest that fails to start stays at the head and is retried on the next tick.
+  Anything that cannot be queued is skipped at enqueue time, and the message
+  names both counts.
+
+## Accepting and video progress
+
+Both calls run in the renderer through `QUEST_API_EXPRESSION`
+(`launcher/discord_native.py`). The expression finds `QuestStore` the same way
+the read does, then finds Discord's HTTP client by shape: the module export whose
+value has `get`, `post`, and `del` functions and no `_dispatcher`. That client
+already carries the session, so no token is read or stored here.
+
+| Op        | Method  | Route                       | Body                                                                                   |
+| --------- | ------- | --------------------------- | -------------------------------------------------------------------------------------- |
+| `enroll`  | POST    | `/quests/{id}/enroll`        | `{location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}`  |
+| `video`   | POST    | `/quests/{id}/video-progress` | `{timestamp: <seconds, 6 decimals>}`                                                    |
+| `claim`   | POST    | `/quests/{id}/claim-reward`  | `{platform: 0, location: 11, is_targeted: false, metadata_sealed: null, traffic_metadata_sealed}` |
+
+`traffic_metadata_sealed` comes from the quest payload and is what ties the
+request to an offer the client actually saw. Expired quests answer
+`{"message": "Quest has expired", "code": 260017}` with HTTP 404, so the queue
+only picks quests whose `config.expiresAt` is still in the future.
+
+Video progress is accumulated from the monotonic clock between posts
+(`_watch_step`), capped at 15 s per step, and the timestamp sent is that sum.
+Discord credits it as watch time, so the video plays in Discord's own sense
+without a player window, a quest page, or any focus change. `claim_quest_reward()`
+exists for the same API surface but the queue does not claim on its own.
+
+## Quest options
+
+Two options live in `%LOCALAPPDATA%\discord-games-launcher\settings.json`
+(`launcher/prefs.py`). Both reach the service through `get_quest_prefs` /
+`set_quest_prefs` and apply on the next tick, with no restart.
+
+- Hide activity flips `showCurrentGame` inside the client's
+  `UserSettingsProtoStore` through the same DevTools connection
+  (`SHOW_CURRENT_GAME_EXPRESSION`, `set_show_current_game()`). The previous
+  value is remembered and restored when the last process stops, when the option
+  is turned off, or on shutdown. The write only happens while the option is on,
+  so a user who already had the status off stays off.
+- Play session tail keeps the dummy process alive after the target is reached
+  for a random 40% to 100% of the configured minutes (default 2, allowed 0 to
+  30). Discord scans process names roughly every 15 s, so a run that stops the
+  instant the target lands can be missed. 0 stops on the tick that crosses the
+  target.
 
 ## Caching
 
@@ -231,11 +310,12 @@ and `Bridge.get_quests(force=True)` bypasses it.
 
 ## Scope
 
-This app starts a process Discord already recognises as a game. It does not
-join quests, send heartbeats, or touch the quest API, and it cannot complete
-quest types other than play-on-desktop. Discord enforces against quest
-automation; that risk belongs to running any tool like this one, and the app
-does not hide it behind a green checkmark.
+This app starts a process Discord already recognises as a game, and it posts
+quest enrollment and video progress through the client's own HTTP layer. It does
+not touch quest types other than play-on-desktop and desktop video, and it cannot
+finish phone-only watch quests. Discord enforces against quest automation; that
+risk belongs to running any tool like this one, and the app does not hide it
+behind a green checkmark.
 
 ## Tests
 
@@ -243,7 +323,11 @@ does not hide it behind a green checkmark.
   codec, a full `Runtime.evaluate` round trip against a fake DevTools peer,
   payload parsing, status wording.
 - `tests/test_quests.py`: decoration, executable resolution, states, sorting,
-  cache behaviour, start and stop.
+  cache behaviour, start and stop, orbs and prefs, hide and restore activity,
+  tails, and the queue including enrollment, video progress cadence and the watch
+  timeout.
+- `tests/test_prefs.py`: settings file round trip, clamping, unknown keys,
+  corrupt file fallback.
 - `tests/test_bridge_quests.py`: bridge surface, error wrapping, event push.
 - `tests/test_discord_setup.py`: argument rewriting, shortcut and Run key
   round trips against fakes, idempotence, disable restoring the original line.

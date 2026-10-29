@@ -6,6 +6,7 @@ import {
   Button,
   Chip,
   StatusDot,
+  Switch,
 } from "../../../shared/components/primitives";
 import {
   RefreshIcon,
@@ -17,6 +18,7 @@ import {
   useEnableSilentMode,
   useQuestStatus,
   useQuests,
+  useSetQuestPrefs,
   useSilentMode,
 } from "../../../shared/hooks/useQuests";
 
@@ -85,10 +87,22 @@ function LauncherRow({ launcher }: { launcher: SilentLauncher }) {
 export function SettingsPage() {
   const silent = useSilentMode();
   const status = useQuestStatus();
-  const { refetch: refetchQuests, isFetching: questsFetching } = useQuests();
+  const quests = useQuests();
+  const { refetch: refetchQuests, isFetching: questsFetching } = quests;
   const enable = useEnableSilentMode();
   const disable = useDisableSilentMode();
+  const setPrefs = useSetQuestPrefs();
+  const prefs = quests.data?.prefs;
   const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [tailDraft, setTailDraft] = useState<string | null>(null);
+
+  const commitTail = () => {
+    if (tailDraft === null) return;
+    const minutes = Math.round(Number(tailDraft));
+    setTailDraft(null);
+    if (!Number.isFinite(minutes) || prefs?.play_session_tail_min === minutes) return;
+    setPrefs.mutate({ play_session_tail_min: Math.min(30, Math.max(0, minutes)) });
+  };
 
   const state = silent.data;
   const launchers = state?.launchers ?? [];
@@ -147,6 +161,54 @@ export function SettingsPage() {
           >
             <Row label="Client">{clientLine}</Row>
             <Row label="Endpoint">{endpointLine}</Row>
+          </Panel>
+
+          <Panel
+            title="Quest runs"
+            description="How a dummy game behaves while it earns quest time. Both settings are saved on this machine and apply to the next run."
+          >
+            <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
+              <div className="min-w-0">
+                <p className="text-[12px] text-muted">Hide activity</p>
+                <p className="mt-0.5 max-w-[400px] text-[11px] leading-4 text-faint">
+                  Turn off Discord's own "Playing" status while a quest runs.
+                  Your previous setting comes back when the run ends.
+                </p>
+              </div>
+              <Switch
+                checked={prefs?.hide_activity ?? false}
+                onChange={(next) => setPrefs.mutate({ hide_activity: next })}
+                label="Hide the Playing status during runs"
+                hideLabel
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2">
+              <div className="min-w-0">
+                <p className="text-[12px] text-muted">Play session tail</p>
+                <p className="mt-0.5 max-w-[400px] text-[11px] leading-4 text-faint">
+                  Keep the game running for a random slice of these minutes
+                  after the target is reached, so a session does not stop on the
+                  exact second. 0 stops immediately.
+                </p>
+              </div>
+              <label className="flex shrink-0 items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={tailDraft ?? String(prefs?.play_session_tail_min ?? 2)}
+                  onChange={(event) => setTailDraft(event.target.value)}
+                  onBlur={commitTail}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                  className="h-7 w-14 rounded-[4px] border border-line-strong bg-base px-2 text-right text-[12px] tabular-nums text-ink outline-none focus:border-accent"
+                  aria-label="Play session tail in minutes"
+                />
+                <span className="text-[11px] text-faint">min</span>
+              </label>
+            </div>
           </Panel>
 
           <Panel

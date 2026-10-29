@@ -100,8 +100,11 @@ export function Sidebar() {
           <DiscordIcon size={14} />
           <span className="flex-1 truncate">Discord client</span>
           {stats.data && stats.data.running_processes > 0 ? (
-            <span className="tabular-nums text-muted">
-              {stats.data.running_processes} fake
+            <span
+              className="tabular-nums text-muted"
+              title="Dummy game processes currently running for quests"
+            >
+              {stats.data.running_processes} running
             </span>
           ) : null}
         </div>

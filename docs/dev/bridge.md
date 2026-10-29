@@ -54,20 +54,32 @@ Read from the running Discord client, never from the REST API. Details in
 | `connect_discord()`    | -          | `{ok, message}` - starts Discord with the endpoint, or restarts it once if it is already running    |
 | `start_discord()`      | -          | `{ok, message}` - launches Discord with the endpoint when it is closed; never restarts a running one  |
 | `open_quest_in_discord(quest_id)` | string | `{ok, message}` - opens `discord://-/quest-home` so a quest can be accepted or watched    |
-| `start_quest(quest_id)`| string ID  | `{ok, message}` - adds the quest's game to the library if needed, then starts it, emits `library_changed` |
+| `start_quest(quest_id)`| string ID  | `{ok, message}` - accepts the quest when needed, adds its game to the library, then starts it, emits `library_changed` |
 | `stop_quest(quest_id)` | string ID  | `{ok, message}`, emits `library_changed`                                                            |
+| `accept_quest(quest_id)` | string | `{ok, message}` - enrolls in a quest through the running client                 |
+| `start_quest_queue(quest_ids?)` | string ID list (opt) | `{ok, message}` - runs unfinished play and video quests in order, accepting them first |
+| `clear_quest_queue()` | -          | `{ok, cleared}` - empties the queue and stops waiting on a video                                    |
+| `skip_quest_watch()`  | -          | `{ok, message}` - stops waiting for the video and starts the next queued quest                      |
+| `get_quest_prefs()`   | -          | `{ok, prefs}` - `{hide_activity, play_session_tail_min}`                                           |
+| `set_quest_prefs(values)` | object | `{ok, prefs, message}` - merges known keys, clamps the tail to 0..30                                 |
 | `silent_mode_status()` | -          | `{port, enabled, wanted, patched, total, launchers}` - which Windows launch entries carry the endpoint |
 | `enable_silent_mode()` | -          | `{ok, message, updated, failed}` - writes the switch into the Run key and every Discord shortcut    |
 | `disable_silent_mode()`| -          | `{ok, message, restored, failed}` - puts the original arguments back and clears the marker           |
 
 `get_quests` never raises. A missing client, a missing DevTools endpoint, or a
 read that times out all come back as `{connected: false, error}` so the view
-can show the reason.
+can show the reason. A successful read also carries `orbs` (integer or null),
+`prefs`, and `queue` (`{ids, active, watching}`), so one query covers the
+header, the options panel, and the queue bar.
 
 Each quest carries `kind` (`play`, `watch`, `watch_mobile`), `enrolled`, and an
-`action` (`run`, `stop`, `enroll`, `open`, `mobile`, `done`, `unsupported`).
-`start_quest` refuses watch quests and unaccepted play quests by name, so the
-UI and the backend cannot disagree about what is runnable.
+`action` (`run`, `stop`, `enroll`, `open`, `mobile`, `done`, `unsupported`),
+plus `queued` and a reward object with the orb counts and reward labels.
+`start_quest` refuses a watch quest by name (there is no game to run) and
+accepts an unaccepted play quest before starting it, so the UI and the backend
+cannot disagree about what is runnable. `start_quest_queue` applies the same
+rule: play rows in `run` or `enroll` and watch rows in `open` are accepted, the
+rest are skipped, and the message names both counts.
 
 `silent_mode_status()` never raises either: a machine where the shortcuts cannot
 be read comes back as `{enabled: false, launchers: [], error}`, and the panel

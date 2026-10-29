@@ -19,6 +19,7 @@ import webview
 from platformdirs import user_data_dir
 from screeninfo import get_monitors
 
+from launcher import __version__ as APP_VERSION
 from launcher.api import DiscordAPIClient
 from launcher.bridge import Bridge
 from launcher.database import Database
@@ -30,7 +31,6 @@ from launcher.process_manager import ProcessManager
 from launcher.quests import QuestService
 
 APP_TITLE = "Discord Games Launcher"
-APP_VERSION = "3.0.0"
 
 # DWM window attributes (verified against Win11 SDK docs)
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
@@ -42,6 +42,27 @@ _DWMWA_TEXT_COLOR = 36
 
 _FRAME_BG = 0x0014151C  # BGR for #14151c
 _FRAME_TEXT = 0x00FFFFFF
+
+
+def _report_fatal(message: str) -> None:
+    """Show a dialog when a windowed build dies before the log is readable.
+
+    Frozen builds run without a console, so a traceback on stdout reaches
+    nobody; without this the window never appears and the user sees nothing.
+    """
+    if not getattr(sys, "frozen", False) or os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            f"The app could not start.\n\n{message}",
+            APP_TITLE,
+            0x10,
+        )
+    except (AttributeError, OSError):
+        pass
 
 
 def _dwm_set(hwnd: int, attr: int, value: int) -> bool:
@@ -167,6 +188,7 @@ def main():
 
     game_manager = None
     logger = None
+    quest_service = None
 
     try:
         print("Initializing components...")
@@ -218,8 +240,11 @@ def main():
         if logger:
             logger.critical(f"Fatal error: {e}")
 
+        _report_fatal(str(e))
         sys.exit(1)
     finally:
+        if quest_service:
+            quest_service.shutdown()
         if game_manager:
             game_manager.process_mgr.force_cleanup_all()
         if logger:

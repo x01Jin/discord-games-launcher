@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 
 export interface MenuItem {
@@ -46,7 +47,9 @@ export function Menu({ x, y, items, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Rendered at the document root: list rows use content-visibility, which
+  // clips anything fixed positioned inside them.
+  return createPortal(
     <>
       <div
         className="fixed inset-0 z-40"
@@ -86,6 +89,7 @@ export function Menu({ x, y, items, onClose }: Props) {
           </button>
         ))}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

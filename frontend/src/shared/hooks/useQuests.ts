@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { bridge } from "../api-client";
-import type { DiscordStatus, QuestsResult, SilentModeStatus } from "../api-client";
+import type {
+  DiscordStatus,
+  QuestPrefs,
+  QuestsResult,
+  SilentModeStatus,
+} from "../api-client";
 import { useUiStore } from "../store/ui-store";
 
 /**
@@ -53,8 +58,77 @@ export function useStartQuest() {
   return useQuestMutation((questId) => bridge.start_quest(questId));
 }
 
+/** Accept a quest through the client, so it can be credited without opening Discord. */
+export function useAcceptQuest() {
+  return useQuestMutation((questId) => bridge.accept_quest(questId));
+}
+
 export function useStopQuest() {
   return useQuestMutation((questId) => bridge.stop_quest(questId));
+}
+
+/** Start several accepted play quests one after another. */
+export function useStartQuestQueue() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: (questIds: string[]) => bridge.start_quest_queue(questIds),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      pushToast(result.message, result.ok ? "success" : "error");
+    },
+    onError: () => pushToast("The backend did not answer. Try again.", "error"),
+  });
+}
+
+export function useClearQuestQueue() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: () => bridge.clear_quest_queue(),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      pushToast(
+        result.cleared
+          ? "Cleared " + result.cleared + " queued quest(s)."
+          : "The queue was already empty.",
+        "success",
+      );
+    },
+    onError: () => pushToast("The backend did not answer. Try again.", "error"),
+  });
+}
+
+/** Stop waiting on the video the queue opened in Discord. */
+export function useSkipQuestWatch() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: () => bridge.skip_quest_watch(),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      pushToast(result.message, result.ok ? "success" : "error");
+    },
+    onError: () => pushToast("The backend did not answer. Try again.", "error"),
+  });
+}
+
+/** Hide activity and the play session tail. Stored next to the database. */
+export function useSetQuestPrefs() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: (values: Partial<QuestPrefs>) => bridge.set_quest_prefs(values),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      if (!result.ok) pushToast(result.message ?? "Could not save that.", "error");
+    },
+    onError: () => pushToast("Could not save that setting.", "error"),
+  });
 }
 
 /**

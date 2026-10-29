@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 from launcher import discord_setup
+from launcher import prefs as quest_prefs
 from launcher.discord_native import DiscordNativeError
 from launcher.game_manager import GameManager, GameManagerError
 
@@ -375,6 +376,69 @@ class Bridge:
             return {"ok": False, "message": f"Failed to start quest: {e}"}
         self._emit({"type": "library_changed"})
         return {"ok": ok, "message": message}
+
+    def accept_quest(self, quest_id: str) -> dict[str, Any]:
+        """Accept a quest through the running client, no window opened."""
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(quest_id, str) or not quest_id.strip():
+            return {"ok": False, "message": "Invalid quest id"}
+        try:
+            ok, message = self.quest_service.accept_quest(quest_id.strip())
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"ok": False, "message": f"Failed to accept the quest: {e}"}
+        return {"ok": ok, "message": message}
+
+    def start_quest_queue(self, quest_ids: list[str] | None = None) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(quest_ids, (list, tuple)):
+            return {"ok": False, "message": "Select the quests to start"}
+        try:
+            ok, message = self.quest_service.start_queue(list(quest_ids))
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"ok": False, "message": f"Failed to queue quests: {e}"}
+        if ok:
+            self._emit({"type": "library_changed"})
+        return {"ok": ok, "message": message}
+
+    def clear_quest_queue(self) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        try:
+            count = self.quest_service.clear_queue()
+        except (OSError, ValueError) as e:
+            return {"ok": False, "message": f"Could not clear the queue: {e}"}
+        return {"ok": True, "cleared": count, "message": f"Cleared {count} queued quest(s)"}
+
+    def skip_quest_watch(self) -> dict[str, Any]:
+        """Stop waiting for the video the queue opened in Discord."""
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        try:
+            ok, message = self.quest_service.skip_watch()
+        except (OSError, ValueError) as e:
+            return {"ok": False, "message": f"Could not skip the video: {e}"}
+        return {"ok": ok, "message": message}
+
+    def get_quest_prefs(self) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {"ok": False, "prefs": quest_prefs.DEFAULTS}
+        try:
+            return {"ok": True, "prefs": self.quest_service.prefs()}
+        except (OSError, ValueError) as e:
+            return {"ok": False, "prefs": quest_prefs.DEFAULTS, "message": str(e)}
+
+    def set_quest_prefs(self, values: dict[str, Any] | None = None) -> dict[str, Any]:
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(values, dict):
+            return {"ok": False, "message": "Invalid quest settings"}
+        try:
+            updated = self.quest_service.update_prefs(values)
+        except (OSError, ValueError, TypeError) as e:
+            return {"ok": False, "message": f"Could not save quest settings: {e}"}
+        return {"ok": True, "prefs": updated, "message": "Quest settings saved"}
 
     def stop_quest(self, quest_id: str) -> dict[str, Any]:
         if self.quest_service is None:

@@ -7,15 +7,21 @@ import {
   PlayIcon,
   StopIcon,
 } from "../../../shared/components/icons";
-import { Button, Chip, ProgressBar } from "../../../shared/components/primitives";
+import { Button, Checkbox, Chip, ProgressBar } from "../../../shared/components/primitives";
 import { formatPercent, formatProgress, formatTimeLeft } from "../../../shared/lib/format";
 
 interface Props {
   quest: QuestGame;
   busy: boolean;
+  selected: boolean;
+  selectable: boolean;
+  /** The queue is waiting for this video to be credited in Discord. */
+  watching?: boolean;
+  onSelect: (next: boolean) => void;
   onStart: () => void;
   onStop: () => void;
-  onOpen: () => void;
+  onAccept: () => void;
+  onWatch: () => void;
 }
 
 const KIND_LABEL: Record<QuestGame["kind"], string> = {
@@ -24,7 +30,18 @@ const KIND_LABEL: Record<QuestGame["kind"], string> = {
   watch_mobile: "Watch on phone",
 };
 
-export function QuestRow({ quest, busy, onStart, onStop, onOpen }: Props) {
+export function QuestRow({
+  quest,
+  busy,
+  selected,
+  selectable,
+  watching = false,
+  onSelect,
+  onStart,
+  onStop,
+  onAccept,
+  onWatch,
+}: Props) {
   const showProgress =
     quest.target_seconds > 0 &&
     (quest.enrolled || quest.progress_seconds > 0 || quest.state === "running");
@@ -35,7 +52,22 @@ export function QuestRow({ quest, busy, onStart, onStop, onOpen }: Props) {
     quest.seconds_left < 86_400;
 
   return (
-    <div className="row-skip flex items-center gap-3 border-b border-line px-5 py-2.5 transition-colors duration-100 hover:bg-hover">
+    <div
+      className={
+        "row-skip flex items-center gap-3 border-b border-line px-5 py-2.5 transition-colors duration-100 " +
+        (selected ? "bg-accent/[0.07] hover:bg-accent/[0.1]" : "hover:bg-hover")
+      }
+    >
+      <div className="flex w-4 shrink-0 justify-center">
+        {selectable ? (
+          <Checkbox
+            checked={selected}
+            onChange={onSelect}
+            label={"Select " + quest.name}
+          />
+        ) : null}
+      </div>
+
       <GameArt
         name={quest.game_name}
         gameId={quest.application_id}
@@ -50,6 +82,15 @@ export function QuestRow({ quest, busy, onStart, onStop, onOpen }: Props) {
             {quest.name}
           </p>
           {quest.state === "running" ? <Chip tone="success">Running</Chip> : null}
+          {watching ? (
+            <Chip tone="accent" title="The queue is waiting for this video in Discord">
+              Watching
+            </Chip>
+          ) : quest.queued ? (
+            <Chip tone="accent" title="Starts when the quest ahead of it finishes">
+              Queued
+            </Chip>
+          ) : null}
           {quest.kind === "watch" ? (
             <Chip title="This one has to be watched inside Discord">Video</Chip>
           ) : null}
@@ -103,12 +144,19 @@ export function QuestRow({ quest, busy, onStart, onStop, onOpen }: Props) {
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
-        {quest.reward.orbs ? (
-          <Chip tone="orb" icon={<OrbIcon size={11} />} title={quest.reward.label ?? undefined}>
+        {typeof quest.reward.orbs === "number" ? (
+          <Chip
+            tone="orb"
+            icon={<OrbIcon size={11} />}
+            title={quest.reward.labels.join(", ") || "Orbs"}
+          >
             {quest.reward.orbs.toLocaleString("en-US")}
           </Chip>
         ) : quest.reward.label ? (
-          <Chip title={quest.reward.label}>
+          <Chip
+            title={quest.reward.labels.join(", ")}
+            tone={quest.reward.avatar_decoration ? "accent" : "neutral"}
+          >
             <span className="max-w-[170px] truncate-1">{quest.reward.label}</span>
           </Chip>
         ) : null}
@@ -129,7 +177,8 @@ export function QuestRow({ quest, busy, onStart, onStop, onOpen }: Props) {
             busy={busy}
             onStart={onStart}
             onStop={onStop}
-            onOpen={onOpen}
+            onAccept={onAccept}
+            onWatch={onWatch}
           />
         </div>
       </div>
@@ -142,8 +191,12 @@ function QuestAction({
   busy,
   onStart,
   onStop,
-  onOpen,
-}: Props) {
+  onAccept,
+  onWatch,
+}: Pick<
+  Props,
+  "quest" | "busy" | "onStart" | "onStop" | "onAccept" | "onWatch"
+>) {
   switch (quest.action) {
     case "stop":
       return (
@@ -163,20 +216,21 @@ function QuestAction({
           variant="secondary"
           size="sm"
           icon={<AlertIcon size={12} />}
-          onClick={onOpen}
-          title="Discord only credits accepted quests. Accept it in Discord, then press Run."
+          onClick={onAccept}
+          title="Accept this quest through the Discord client, then press Run."
         >
-          Accept first
+          Accept
         </Button>
       );
     case "open":
       return (
         <Button
-          variant="secondary"
+          variant="success"
           size="sm"
+          disabled={quest.queued}
           icon={<PlayIcon size={11} />}
-          onClick={onOpen}
-          title="Watch quests are credited by the Discord client. This opens the quest."
+          onClick={onWatch}
+          title="Watch this video in the background. Discord credits the progress without opening its quest page."
         >
           Watch
         </Button>

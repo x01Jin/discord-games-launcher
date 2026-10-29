@@ -13,9 +13,15 @@ def quest_payload():
     return payload(quest(app_id="100", name="Play Me"))
 
 
-def make_bridge(game_manager, payload_data, **native_kwargs):
+def make_bridge(game_manager, payload_data, prefs_path=None, **native_kwargs):
     native = FakeNative(payload=payload_data, **native_kwargs)
-    service = QuestService(game_manager, native=native, ttl=60.0)
+    service = QuestService(
+        game_manager,
+        native=native,
+        ttl=60.0,
+        prefs_path=prefs_path,
+        monitor=False,
+    )
     return Bridge(game_manager, quest_service=service), native
 
 
@@ -94,3 +100,79 @@ def test_connect_discord_reports_result(game_manager, quest_payload):
     result = bridge.connect_discord()
     assert result["ok"] is True
     assert native.connects == 1
+
+
+def test_quest_prefs_default_and_save(game_manager, quest_payload, tmp_path):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    assert bridge.get_quest_prefs()["prefs"] == {
+        "hide_activity": False,
+        "play_session_tail_min": 2,
+    }
+
+    saved = bridge.set_quest_prefs({"hide_activity": True, "play_session_tail_min": 4})
+    assert saved["ok"] is True
+    assert saved["prefs"]["hide_activity"] is True
+    assert bridge.get_quests()["prefs"]["play_session_tail_min"] == 4
+
+
+def test_set_quest_prefs_rejects_non_dict(game_manager, quest_payload, tmp_path):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    result = bridge.set_quest_prefs(["nope"])
+    assert result["ok"] is False
+
+
+def test_quest_prefs_without_service(game_manager):
+    bridge = Bridge(game_manager)
+    assert bridge.get_quest_prefs()["prefs"]["hide_activity"] is False
+    assert bridge.set_quest_prefs({"hide_activity": True})["ok"] is False
+
+
+def test_start_quest_queue_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    calls = []
+    monkeypatch.setattr(
+        bridge.quest_service, "start_queue", lambda ids: (calls.append(ids), (True, "Queued 1"))[1]
+    )
+    result = bridge.start_quest_queue(["quest-1"])
+    assert result["ok"] is True
+    assert calls == [["quest-1"]]
+
+
+def test_clear_quest_queue_reports_count(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    monkeypatch.setattr(bridge.quest_service, "clear_queue", lambda: 3)
+    result = bridge.clear_quest_queue()
+    assert result["ok"] is True
+    assert result["cleared"] == 3
+
+
+def test_skip_quest_watch_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    monkeypatch.setattr(
+        bridge.quest_service, "skip_watch", lambda: (True, "Skipped the video")
+    )
+    result = bridge.skip_quest_watch()
+    assert result["ok"] is True
+    assert result["message"] == "Skipped the video"
+
+
+def test_accept_quest_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    calls = []
+    monkeypatch.setattr(
+        bridge.quest_service, "accept_quest", lambda qid: (calls.append(qid), (True, "Quest accepted"))[1]
+    )
+    result = bridge.accept_quest("quest-1")
+    assert result == {"ok": True, "message": "Quest accepted"}
+    assert calls == ["quest-1"]
+
+
+def test_accept_quest_rejects_bad_input(game_manager, quest_payload):
+    bridge, _native = make_bridge(game_manager, quest_payload)
+    assert bridge.accept_quest("")["ok"] is False
+
+
+def test_start_quest_queue_rejects_bad_input(game_manager, quest_payload):
+    bridge, _native = make_bridge(game_manager, quest_payload)
+    result = bridge.start_quest_queue("quest-1")
+    assert result["ok"] is False

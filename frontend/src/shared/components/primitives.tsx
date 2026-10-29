@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { SpinnerIcon } from "./icons";
+import { CheckIcon, SpinnerIcon } from "./icons";
 
 /* --------------------------------------------------------------------------
  * Button
@@ -195,10 +195,13 @@ export function Switch({
   checked,
   onChange,
   label,
+  hideLabel = false,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
+  /** The label is still exposed to assistive tech, just not drawn. */
+  hideLabel?: boolean;
 }) {
   return (
     <label className="flex cursor-pointer select-none items-center gap-2 text-[12px] text-muted">
@@ -220,8 +223,51 @@ export function Switch({
           }
         />
       </button>
-      {label}
+      {hideLabel ? <span className="sr-only">{label}</span> : label}
     </label>
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * Checkbox
+ * ----------------------------------------------------------------------- */
+
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className = "",
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange(!checked);
+      }}
+      className={[
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors duration-100",
+        checked
+          ? "border-accent bg-accent text-white"
+          : "border-line-strong bg-transparent text-transparent hover:border-muted hover:text-muted/40",
+        "disabled:cursor-default disabled:opacity-40",
+        className,
+      ].join(" ")}
+    >
+      <CheckIcon size={11} strokeWidth={3} />
+    </button>
   );
 }
 

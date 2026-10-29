@@ -1,50 +1,138 @@
-import { useMemo, useState } from "react";
-import type { QuestGame } from "../../../shared/api-client";
-import { RefreshIcon, WrenchIcon } from "../../../shared/components/icons";
-import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
-import { Button, EmptyState, Skeleton, Switch } from "../../../shared/components/primitives";
+import { useMemo, useRef, useState } from "react";
+import type { QuestGame, QuestReward } from "../../../shared/api-client";
 import {
+  CheckIcon,
+  ChevronDownIcon,
+  OrbIcon,
+  RefreshIcon,
+  TrashIcon,
+  WrenchIcon,
+} from "../../../shared/components/icons";
+import { Menu } from "../../../shared/components/Menu";
+import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
+import {
+  Button,
+  Checkbox,
+  EmptyState,
+  Skeleton,
+  Switch,
+} from "../../../shared/components/primitives";
+import {
+  useAcceptQuest,
+  useClearQuestQueue,
   useConnectDiscord,
   useDisableSilentMode,
   useEnableSilentMode,
-  useOpenInDiscord,
   useQuests,
   useSilentMode,
   useStartDiscord,
+  useSkipQuestWatch,
   useStartQuest,
+  useStartQuestQueue,
   useStopQuest,
 } from "../../../shared/hooks/useQuests";
 import { useUiStore } from "../../../shared/store/ui-store";
 import { QuestConnectPanel } from "./QuestConnectPanel";
 import { QuestRow } from "./QuestRow";
 
-type Filter = "all" | "play" | "watch";
+type KindFilter = "all" | "play" | "watch";
+type RewardFilter = "all" | "orbs" | "decoration" | "in_game";
+type Sort = "suggested" | "expiring" | "orbs" | "progress";
 
-const FILTERS: { id: Filter; label: string }[] = [
+const KIND_FILTERS: { id: KindFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "play", label: "Play" },
   { id: "watch", label: "Watch" },
 ];
 
+const REWARD_FILTERS: { id: RewardFilter; label: string }[] = [
+  { id: "all", label: "All rewards" },
+  { id: "orbs", label: "Orbs" },
+  { id: "decoration", label: "Avatar decoration" },
+  { id: "in_game", label: "In-game item" },
+];
+
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "suggested", label: "Suggested" },
+  { id: "expiring", label: "Expiring soon" },
+  { id: "orbs", label: "Most orbs" },
+  { id: "progress", label: "Most progress" },
+];
+
+const REWARD_FILTER_LABEL: Record<RewardFilter, string> = {
+  all: "All rewards",
+  orbs: "Orbs",
+  decoration: "Avatar decoration",
+  in_game: "In-game item",
+};
+
 /** Stable empty list so the memos below do not re-run on every render. */
 const NO_QUESTS: QuestGame[] = [];
+
+/**
+ * What the queue can take: accepted play quests, which run as a faked game
+ * process, and video quests, which the queue opens in Discord and waits on.
+ */
+function isQueuable(quest: QuestGame) {
+  if (quest.queued) return false;
+  // The queue accepts an unaccepted play quest itself, so "enroll" rows belong
+  // in the selection too. Video quests need no game process at all.
+  if (quest.kind === "play") return quest.action === "run" || quest.action === "enroll";
+  if (quest.kind === "watch") return quest.action === "open";
+  return false;
+}
+
+function matchesReward(reward: QuestReward, filter: RewardFilter) {
+  if (filter === "orbs") return typeof reward.orbs === "number";
+  if (filter === "decoration") return reward.avatar_decoration;
+  if (filter === "in_game") return reward.in_game;
+  return true;
+}
+
+function sortQuests(quests: QuestGame[], sort: Sort) {
+  if (sort === "suggested") return quests;
+  const copy = [...quests];
+  if (sort === "expiring") {
+    copy.sort((a, b) => {
+      const left = a.seconds_left ?? Number.MAX_SAFE_INTEGER;
+      const right = b.seconds_left ?? Number.MAX_SAFE_INTEGER;
+      return left - right;
+    });
+  } else if (sort === "orbs") {
+    copy.sort((a, b) => (b.reward.orbs ?? -1) - (a.reward.orbs ?? -1));
+  } else {
+    copy.sort((a, b) => b.progress - a.progress);
+  }
+  return copy;
+}
 
 export function QuestsPage() {
   const { data, isLoading, isFetching, isError, refetch } = useQuests();
   const connect = useConnectDiscord();
   const startDiscord = useStartDiscord();
-  const openInDiscord = useOpenInDiscord();
+  const acceptQuest = useAcceptQuest();
   const { data: silent } = useSilentMode();
   const enableSilent = useEnableSilentMode();
   const disableSilent = useDisableSilentMode();
   const startQuest = useStartQuest();
   const stopQuest = useStopQuest();
+  const startQueue = useStartQuestQueue();
+  const clearQueue = useClearQuestQueue();
+  const skipWatch = useSkipQuestWatch();
   const showFinished = useUiStore((state) => state.showFinished);
   const setShowFinished = useUiStore((state) => state.setShowFinished);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [kind, setKind] = useState<KindFilter>("all");
+  const [reward, setReward] = useState<RewardFilter>("all");
+  const [sort, setSort] = useState<Sort>("suggested");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const quests = data?.quests ?? NO_QUESTS;
+  const queue = data?.queue;
+  const queueIds = queue?.ids ?? [];
+  const watching = queue?.watching
+    ? (quests.find((quest) => quest.id === queue.watching) ?? null)
+    : null;
 
   const counts = useMemo(() => {
     const tally = { open: 0, running: 0, finished: 0 };
@@ -57,14 +145,40 @@ export function QuestsPage() {
   }, [quests]);
 
   const visible = useMemo(() => {
-    return quests.filter((quest) => {
+    const filtered = quests.filter((quest) => {
       const done = quest.action === "done";
       if (!showFinished && done) return false;
-      if (filter === "play") return quest.kind === "play";
-      if (filter === "watch") return quest.kind !== "play";
-      return true;
+      if (kind === "play" && quest.kind !== "play") return false;
+      if (kind === "watch" && quest.kind === "play") return false;
+      return matchesReward(quest.reward, reward);
     });
-  }, [quests, showFinished, filter]);
+    return sortQuests(filtered, sort);
+  }, [quests, showFinished, kind, reward, sort]);
+
+  const runnable = useMemo(() => visible.filter(isQueuable), [visible]);
+
+  // Derive the live selection during render: a quest can finish or leave
+  // Discord's list between polls, and a stale id must never be sent back.
+  const selectedLive = useMemo(() => {
+    if (selected.size === 0) return selected;
+    const live = new Set(runnable.map((quest) => quest.id));
+    return new Set([...selected].filter((id) => live.has(id)));
+  }, [selected, runnable]);
+
+  const allSelected =
+    runnable.length > 0 && runnable.every((quest) => selectedLive.has(quest.id));
+  const selectedOrdered = visible
+    .filter((quest) => selectedLive.has(quest.id) && isQueuable(quest))
+    .map((quest) => quest.id);
+
+  const toggleSelected = (questId: string, next: boolean) => {
+    setSelected((current) => {
+      const copy = new Set(current);
+      if (next) copy.add(questId);
+      else copy.delete(questId);
+      return copy;
+    });
+  };
 
   const connected = Boolean(data?.connected);
 
@@ -72,6 +186,7 @@ export function QuestsPage() {
     ? [
         counts.open + " open",
         counts.running ? counts.running + " running" : null,
+        queueIds.length ? queueIds.length + " queued" : null,
         counts.finished ? counts.finished + " finished" : null,
       ]
         .filter(Boolean)
@@ -89,15 +204,27 @@ export function QuestsPage() {
         title="Quests"
         subtitle={subtitle}
         actions={
-          <Button
-            size="sm"
-            variant="ghost"
-            busy={isFetching && !isLoading}
-            icon={<RefreshIcon size={13} />}
-            onClick={() => void refetch()}
-          >
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {typeof data?.orbs === "number" ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-[4px] bg-white/[0.05] px-2 py-1 text-[12px] font-semibold tabular-nums text-[#f5c451]"
+                title="Orb balance in your Discord account"
+              >
+                <OrbIcon size={12} />
+                {data.orbs.toLocaleString("en-US")}
+                <span className="font-normal text-subtle">orbs</span>
+              </span>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              busy={isFetching && !isLoading}
+              icon={<RefreshIcon size={13} />}
+              onClick={() => void refetch()}
+            >
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -129,14 +256,14 @@ export function QuestsPage() {
         <>
           <Toolbar>
             <div className="flex items-center gap-1" role="group" aria-label="Quest type">
-              {FILTERS.map((entry) => {
-                const active = filter === entry.id;
+              {KIND_FILTERS.map((entry) => {
+                const active = kind === entry.id;
                 return (
                   <button
                     key={entry.id}
                     type="button"
                     aria-pressed={active}
-                    onClick={() => setFilter(entry.id)}
+                    onClick={() => setKind(entry.id)}
                     className={
                       "h-6 rounded-[4px] px-2 text-[12px] font-medium transition-colors " +
                       (active
@@ -149,11 +276,38 @@ export function QuestsPage() {
                 );
               })}
             </div>
+
+            <span className="h-4 w-px bg-line-strong" />
+
+            <MenuButton
+              label="Filter"
+              value={REWARD_FILTER_LABEL[reward]}
+              active={reward !== "all"}
+              options={REWARD_FILTERS.map((entry) => ({
+                label: entry.label,
+                active: reward === entry.id,
+                action: () => setReward(entry.id),
+              }))}
+            />
+
+            <MenuButton
+              label="Sort"
+              value={SORTS.find((entry) => entry.id === sort)?.label ?? "Suggested"}
+              active={sort !== "suggested"}
+              options={SORTS.map((entry) => ({
+                label: entry.label,
+                active: sort === entry.id,
+                action: () => setSort(entry.id),
+              }))}
+            />
+
             <span className="text-[12px] text-subtle">
               {visible.length} shown
               {quests.length > visible.length ? " of " + quests.length : ""}
             </span>
+
             <div className="flex-1" />
+
             {silent && !silent.enabled ? (
               <Button
                 size="sm"
@@ -166,6 +320,7 @@ export function QuestsPage() {
                 Set up silent start
               </Button>
             ) : null}
+
             <Switch
               checked={showFinished}
               onChange={setShowFinished}
@@ -173,12 +328,101 @@ export function QuestsPage() {
             />
           </Toolbar>
 
+          {(runnable.length > 0 || queueIds.length > 0) && (
+            <div className="flex items-center gap-3 border-b border-line bg-base/40 px-5 py-1.5">
+              {runnable.length > 0 ? (
+                <>
+                  <Checkbox
+                    checked={allSelected}
+                    onChange={(next) =>
+                      setSelected(
+                        next ? new Set(runnable.map((quest) => quest.id)) : new Set(),
+                      )
+                    }
+                    label={allSelected ? "Clear the selection" : "Select every quest that can run"}
+                  />
+                  <span className="text-[12px] text-subtle">
+                    {selectedLive.size
+                      ? selectedLive.size + " selected"
+                      : "Select quests to run them one after another"}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[12px] text-subtle" />
+              )}
+
+              <div className="flex-1" />
+
+              {watching ? (
+                <span
+                  className="max-w-[320px] truncate-1 text-[12px] text-[#b8bdff]"
+                  title={
+                    "Discord is crediting this video in the background. You can keep using Discord.\n" +
+                    watching.name
+                  }
+                >
+                  Watching the video in the background
+                </span>
+              ) : queueIds.length > 0 ? (
+                <span className="text-[12px] tabular-nums text-[#b8bdff]">
+                  {queue?.active
+                    ? "Running 1 of " + queueIds.length
+                    : queueIds.length + " queued"}
+                </span>
+              ) : null}
+
+              {watching ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  busy={skipWatch.isPending}
+                  onClick={() => skipWatch.mutate()}
+                  title="Move on without waiting for this video to finish."
+                >
+                  Skip video
+                </Button>
+              ) : null}
+
+              {queueIds.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  busy={clearQueue.isPending}
+                  icon={<TrashIcon size={12} />}
+                  onClick={() => clearQueue.mutate()}
+                  title="Stop the queue. The quest that is already running keeps running."
+                >
+                  Clear queue
+                </Button>
+              ) : null}
+
+              {runnable.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={selectedOrdered.length === 0}
+                  busy={startQueue.isPending}
+                  onClick={() =>
+                    startQueue.mutate(selectedOrdered, {
+                      onSuccess: (result) => {
+                        if (result.ok) setSelected(new Set());
+                      },
+                    })
+                  }
+                  title="Run these quests back to back. Unaccepted quests are accepted first; video quests are credited in the background."
+                >
+                  Start selected
+                </Button>
+              ) : null}
+            </div>
+          )}
+
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
             {visible.length === 0 ? (
               <EmptyState
                 title={
                   quests.length
-                    ? "Nothing matches this filter"
+                    ? "Nothing matches these filters"
                     : "No quests offered right now"
                 }
                 description={
@@ -188,7 +432,14 @@ export function QuestsPage() {
                 }
                 action={
                   quests.length ? (
-                    <Button onClick={() => setFilter("all")}>Show all</Button>
+                    <Button
+                      onClick={() => {
+                        setKind("all");
+                        setReward("all");
+                      }}
+                    >
+                      Clear filters
+                    </Button>
                   ) : null
                 }
               />
@@ -197,7 +448,11 @@ export function QuestsPage() {
                 <QuestRow
                   key={quest.id}
                   quest={quest}
+                  selected={selectedLive.has(quest.id)}
+                  selectable={isQueuable(quest)}
+                  watching={queue?.watching === quest.id}
                   busy={pendingId === quest.id}
+                  onSelect={(next) => toggleSelected(quest.id, next)}
                   onStart={() =>
                     withPending(quest, () =>
                       startQuest.mutate(quest.id, {
@@ -212,7 +467,14 @@ export function QuestsPage() {
                       }),
                     )
                   }
-                  onOpen={() => openInDiscord.mutate(quest.id)}
+                  onAccept={() =>
+                    withPending(quest, () =>
+                      acceptQuest.mutate(quest.id, {
+                        onSettled: () => setPendingId(null),
+                      }),
+                    )
+                  }
+                  onWatch={() => startQueue.mutate([quest.id])}
                 />
               ))
             )}
@@ -220,5 +482,63 @@ export function QuestsPage() {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * A toolbar menu button. The popup is anchored to the button, so it opens
+ * under the control the user pressed rather than at the pointer.
+ */
+function MenuButton({
+  label,
+  value,
+  active,
+  options,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  options: { label: string; active: boolean; action: () => void }[];
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={() => {
+          const rect = ref.current?.getBoundingClientRect();
+          if (!rect) return;
+          setAnchor(anchor ? null : { x: rect.left, y: rect.bottom + 4 });
+        }}
+        className={
+          "inline-flex h-6 items-center gap-1 rounded-[4px] px-2 text-[12px] font-medium transition-colors " +
+          (active || anchor
+            ? "bg-active text-ink"
+            : "text-subtle hover:bg-hover hover:text-ink")
+        }
+        title={label + ": " + value}
+      >
+        <span className="text-faint">{label}</span>
+        {value}
+        <ChevronDownIcon size={11} />
+      </button>
+      {anchor ? (
+        <Menu
+          x={anchor.x}
+          y={anchor.y}
+          onClose={() => setAnchor(null)}
+          items={options.map((option) => ({
+            label: option.label,
+            icon: option.active ? <CheckIcon size={12} /> : <span className="w-3" />,
+            action: option.action,
+          }))}
+        />
+      ) : null}
+    </>
   );
 }

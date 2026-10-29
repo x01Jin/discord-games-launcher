@@ -14,17 +14,41 @@ request stays on this machine.
 | Quest kind | What the row offers |
 | --- | --- |
 | Play on desktop | **Run**. Adds the game to your library if needed, then starts its dummy process. |
-| Watch video | **Watch**. Opens the video in Discord, which does the counting. |
+| Watch video | **Watch**. Discord credits the video while the app reports its progress, so no player window opens. |
 | Phone only | Nothing. Discord counts these in the mobile app only. |
 
 Discord counts progress only for quests you accepted in the client. An
-unaccepted quest shows **Accept first**, which opens Discord's quest page. The
-row turns into **Run** on its own within about 20 seconds of accepting.
+unaccepted quest shows **Accept**, which accepts it through Discord without
+opening a window. The row turns into **Run** on its own within about 20 seconds.
 
 Rows show the artwork, the game and its process name, the reward (Orbs or an
 item), the time left in amber inside the last day, and the progress bar once
-counting starts. The toolbar filters by All, Play, or Watch, and a switch shows
-finished and expired quests.
+counting starts. The header shows your current orb balance, which Discord loads
+once you have opened its quest page at least once.
+
+The toolbar filters by All, Play, or Watch and by reward type (Orbs, avatar
+decorations, in-game items), sorts by suggested order, expiry, orbs, or
+progress, and keeps a switch for finished and expired quests.
+
+### Running several quests
+
+Every unfinished play or video quest has a checkbox, accepted or not. Tick the
+ones you want and press **Start selected**: the queue accepts each quest that
+was never accepted, runs play quests one after another, and credits video quests
+in the background without touching the Discord window. The bar above the list
+names what is running or which video is playing, with **Skip video** and
+**Clear queue**. Pressing Watch on a single row queues that one quest the same
+way.
+
+### Quest options
+
+Settings has two switches under Quest runs:
+
+- Hide activity turns Discord's own "Playing" status off while a dummy game
+  runs, then puts your previous setting back.
+- Play session tail keeps a dummy process alive for part of the configured
+  minutes after the quest target is reached, so the last minutes are seen by
+  Discord's scan. 0 stops as soon as the target is reached.
 
 Discord sometimes offers the same game in two quests. One dummy process
 finishes both, and the row says how many other quests share it.
