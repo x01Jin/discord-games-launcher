@@ -58,6 +58,7 @@ Read from the running Discord client, never from the REST API. Details in
 | `start_quest(quest_id)`| string ID  | `{ok, message}` - accepts the quest when needed, then starts a heartbeat run; queues the quest when another play run is active |
 | `stop_quest(quest_id)` | string ID  | `{ok, message}` - ends the play run or the video wait, no library effect                             |
 | `accept_quest(quest_id)` | string | `{ok, message}` - enrolls in a quest through the running client                 |
+| `claim_quest_reward(quest_id)` | string | `{ok, message, needs_captcha}` - claims a finished reward; a captcha opens Discord's quest page and brings the window forward |
 | `start_quest_queue(quest_ids?)` | string ID list (opt) | `{ok, message}` - queues unfinished play and video quests, accepting them first |
 | `clear_quest_queue()` | -          | `{ok, cleared}` - empties both lanes and stops waiting on a video                                   |
 | `skip_quest_watch()`  | -          | `{ok, message}` - stops waiting for the video and starts the next queued video                      |
@@ -75,9 +76,10 @@ can show the reason. A successful read also carries `orbs` (integer or null),
 `prefs`, and `queue` (`{ids, active, watching}`), so one query covers the
 header, the options panel, and the queue bar.
 
-Each quest carries `kind` (`play`, `watch`, `watch_mobile`), `enrolled`, and an
-`action` (`run`, `stop`, `open`, `done`, `unsupported`), plus `queued` and a
-reward object with the orb counts and reward labels.
+Each quest carries `kind` (`play`, `watch`, `watch_mobile`), `enrolled`, `claimed`,
+`claimable`, and an `action` (`run`, `stop`, `open`, `claim`, `done`,
+`unsupported`), plus `queued` and a reward object with the orb counts and reward
+labels.
 `start_quest` refuses a watch quest by name (there is no game to run) and
 accepts an unaccepted play quest before starting it, so the UI and the backend
 cannot disagree about what is runnable. A second play quest started while one is
@@ -118,10 +120,11 @@ the service compares them against the list the client returned.
 
 The backend dispatches a `window` CustomEvent named `dcgl` with a
 `library_changed` detail whenever library, running, quest, or stats state
-changes. The frontend subscribes once (`useDcglEvents`) and invalidates the
-library, catalogue, stats, and quest queries. Mutation results (start, stop,
-add, remove, repair, quest start) arrive as the direct return value and surface
-as a single toast.
+changes, and a `quests_changed` detail when a quest run starts or finishes
+(`QuestService.on_change`). The frontend subscribes once (`useDcglEvents`) and
+invalidates the library, catalogue, stats, and quest queries. Mutation results
+(start, stop, add, remove, repair, claim, quest start) arrive as the direct
+return value and surface as a single toast.
 
 Polling is limited to two backstops: stats every 20 s, because a dummy process
 can exit on its own and no event reports it, and the quest list every 20 s

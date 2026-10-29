@@ -27,6 +27,7 @@ from launcher.discord_native import DiscordNative
 from launcher.dummy_generator import DummyGenerator
 from launcher.game_manager import GameManager
 from launcher.logger import GameLauncherLogger
+from launcher.notifications import Notifier
 from launcher.process_manager import ProcessManager
 from launcher.quests import QuestService
 
@@ -206,6 +207,7 @@ def initialize_components():
         game_manager,
         native=DiscordNative(logger=logger),
         logger=logger,
+        notifier=Notifier(logger=logger),
     )
 
     return game_manager, quest_service, logger

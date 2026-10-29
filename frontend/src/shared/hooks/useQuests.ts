@@ -62,6 +62,31 @@ export function useStopQuest() {
   return useQuestMutation((questId) => bridge.stop_quest(questId));
 }
 
+/**
+ * Claim a finished quest's reward. When Discord wants a captcha, the backend
+ * has already brought its quest page forward, so the toast says what to do
+ * rather than repeating the button.
+ */
+export function useClaimQuest() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: (questId: string) => bridge.claim_quest_reward(questId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      if (result.ok) {
+        pushToast(result.message, "success");
+      } else if (result.needs_captcha) {
+        pushToast(result.message, "info");
+      } else {
+        pushToast(result.message, "error");
+      }
+    },
+    onError: () => pushToast("Could not claim the reward.", "error"),
+  });
+}
+
 /** Start several accepted play quests one after another. */
 export function useStartQuestQueue() {
   const queryClient = useQueryClient();

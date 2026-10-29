@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from launcher import prefs as quest_prefs
-from launcher.discord_native import DiscordNative, DiscordNativeError
+from launcher.discord_native import DiscordNative, DiscordNativeError, QuestApiError
 from launcher.game_manager import GameManager
 from launcher.rpc_activity import DiscordRpcActivity, RpcError
 
@@ -144,10 +144,15 @@ class QuestService:
         prefs_path: Path | None = None,
         monitor: bool = True,
         activity: DiscordRpcActivity | None = None,
+        notifier=None,
     ):
         self.manager = game_manager
         self.native = native or DiscordNative(logger=logger)
         self._rpc = activity or DiscordRpcActivity(logger=logger)
+        self.notifier = notifier
+        # Set by the bridge: pushes "quests_changed" so the page updates the
+        # moment a run finishes instead of waiting for its next poll.
+        self.on_change = None
         self.logger = logger
         self.ttl = ttl
         self.prefs_path = prefs_path
@@ -162,6 +167,8 @@ class QuestService:
         self._playing: str | None = None
         self._playing_app: int | None = None
         self._playing_exe = ""
+        self._playing_name = ""
+        self._playing_reward: str | None = None
         self._playing_target = 0
         self._playing_at = 0.0
         self._beat_next = 0.0
@@ -172,6 +179,8 @@ class QuestService:
         self._queue: list[str] = []
         # The video quest the queue is crediting progress for.
         self._watching: str | None = None
+        self._watching_name = ""
+        self._watching_reward: str | None = None
         self._watching_at = 0.0
         self._watch_seconds = 0.0
         self._watch_last = 0.0
@@ -349,6 +358,9 @@ class QuestService:
             target > 0 and progress >= target
         )
         expired = seconds_left is not None and seconds_left <= 0
+        # A finished quest still owes its reward until Discord records the claim.
+        claimed = bool(quest.get("claimedAt"))
+        claimable = completed and not claimed
 
         # Discord only credits a quest the account has accepted. A run before
         # that posts heartbeats nobody counts, which reads as "the app did
@@ -372,7 +384,10 @@ class QuestService:
 
         # What the row's button does, decided here so the UI never has to infer
         # capability from a task key.
-        if completed or expired:
+        if completed and not claimed:
+            # Finished, reward still on the table: the row offers Claim.
+            action = "claim"
+        elif completed or expired:
             action = "done"
         elif not playable and not watchable:
             action = "mobile"
@@ -422,6 +437,8 @@ class QuestService:
             "in_library": in_library,
             "is_running": False,
             "state": state,
+            "claimed": claimed,
+            "claimable": claimable,
         }
 
     # -- control ----------------------------------------------------------
@@ -519,12 +536,15 @@ class QuestService:
             self._playing = quest_id
             self._playing_app = app_id
             self._playing_exe = executable
+            self._playing_name = name or str(quest.get("game_name") or "")
+            self._playing_reward = self._reward_label(quest)
             self._playing_target = max(0, target)
             self._playing_at = now
             self._beat_next = now + PLAY_BEAT_SECONDS
             self._activity_shown = activity
         self.invalidate()
         self._start_monitor()
+        self._changed()
         self._log(
             "info",
             (
@@ -533,7 +553,39 @@ class QuestService:
                 else f"Crediting the play quest {name!r} with heartbeats"
             ),
         )
-        return True, f"Showing {name} as playing" if activity else f"Crediting {name}"
+        # The activity is set; whether Discord shows it is decided by the
+        # account's own status and activity switch, so say so while the user
+        # is looking at the row instead of leaving them to wonder.
+        note = self._visibility_note() if activity else ""
+        if not activity:
+            return True, f"Crediting {name}"
+        return True, f"Showing {name} as playing{note}"
+
+    def _visibility_note(self) -> str:
+        """A short reason an activity run may be invisible, or an empty string."""
+        state = getattr(self.native, "presence_state", None)
+        if state is None:
+            return ""
+        try:
+            values = state()
+        except (DiscordNativeError, OSError, ValueError):
+            return ""
+        if not isinstance(values, dict):
+            return ""
+        status = str(values.get("status") or "").lower()
+        if status == "invisible":
+            self._log(
+                "warning",
+                "Discord status is Invisible, so the playing activity is not shown to anyone",
+            )
+            return " · your Discord status is Invisible, so no one sees it"
+        if values.get("show_current_game") is False:
+            self._log(
+                "warning",
+                "Game activity is off in Discord, so the playing activity is not shown",
+            )
+            return " · game activity is off in Discord's settings"
+        return ""
 
     def _enqueue(self, quest_id: str) -> bool:
         with self._run_lock:
@@ -560,6 +612,38 @@ class QuestService:
             return False, f"Discord would not accept that quest: {exc}"
         self.invalidate()
         return True, "Quest accepted"
+
+    def claim_reward(self, quest_id: str) -> tuple[bool, str, bool]:
+        """Claim a finished quest's reward.
+
+        Returns (ok, message, needs_user_action). Discord answers a claim with a
+        captcha challenge when it wants one solved; that is not a failure the
+        app can work around, so it comes back flagged and the caller hands the
+        user to Discord's own claim button.
+        """
+        quest = self._find(quest_id)
+        if quest is None:
+            return False, "That quest is no longer in Discord's list", False
+        if quest.get("claimed"):
+            return True, "That reward is already claimed", False
+        if not quest.get("claimable"):
+            return False, "That quest is not finished yet", False
+        try:
+            self.native.claim_quest_reward(quest_id)
+        except QuestApiError as exc:
+            if getattr(exc, "captcha", False):
+                return (
+                    False,
+                    "Discord wants a captcha. Finish it in the Discord window to claim.",
+                    True,
+                )
+            return False, f"Discord would not claim that reward: {exc}", False
+        except (DiscordNativeError, OSError) as exc:
+            return False, f"Discord would not claim that reward: {exc}", False
+        self.invalidate()
+        self._log("info", f"Claimed the reward for {quest.get('name')!r}")
+        self._changed()
+        return True, "Reward claimed", False
 
     def stop_quest(self, quest_id: str) -> tuple[bool, str]:
         with self._run_lock:
@@ -604,8 +688,13 @@ class QuestService:
         with self._run_lock:
             self._playing = None
             self._playing_app = None
+            self._playing_exe = ""
+            self._playing_name = ""
+            self._playing_reward = None
             self._activity_shown = False
             self._watching = None
+            self._watching_name = ""
+            self._watching_reward = None
             self._queue.clear()
             self._play_ready_at = 0.0
             self._watch_seconds = 0.0
@@ -689,6 +778,10 @@ class QuestService:
         if completed:
             # The beat that crossed the target already credited the time, so
             # there is no terminal beat to send.
+            with self._run_lock:
+                name = self._playing_name
+                reward = self._playing_reward
+            self._notify_finished(name, reward)
             self._stop_playing("Quest finished, starting the next one", close=False)
 
     def _hide_activity(self) -> None:
@@ -713,6 +806,8 @@ class QuestService:
             self._playing = None
             self._playing_app = None
             self._playing_exe = ""
+            self._playing_name = ""
+            self._playing_reward = None
             self._playing_target = 0
             self._playing_at = 0.0
             self._beat_next = 0.0
@@ -738,6 +833,7 @@ class QuestService:
             self._play_ready_at = 0.0
         self.invalidate()
         self._log("info", message)
+        self._changed()
         self._pump()
 
     def _check_watch(self, now: float) -> None:
@@ -785,6 +881,10 @@ class QuestService:
         except (TypeError, ValueError):
             return
         if quest.get("completedAt") or (target > 0 and progress >= target):
+            with self._run_lock:
+                name = self._watching_name
+                reward = self._watching_reward
+            self._notify_finished(name, reward)
             self._stop_watching(quest_id, "Video quest finished, starting the next one")
 
     def _watch_step(self, now: float) -> None:
@@ -809,6 +909,10 @@ class QuestService:
             self._log("warning", f"Could not report video progress: {exc}")
             return
         if result.get("completed"):
+            with self._run_lock:
+                name = self._watching_name
+                reward = self._watching_reward
+            self._notify_finished(name, reward)
             self._stop_watching(quest_id, "Video quest finished, starting the next one")
 
     def _stop_watching(self, quest_id: str, message: str) -> None:
@@ -816,12 +920,15 @@ class QuestService:
             if self._watching != quest_id:
                 return
             self._watching = None
+            self._watching_name = ""
+            self._watching_reward = None
             self._watch_seconds = 0.0
             self._watch_last = 0.0
             self._watch_next = 0.0
             self._watch_checked_at = 0.0
         self.invalidate()
         self._log("info", message)
+        self._changed()
         self._pump()
 
 
@@ -832,6 +939,35 @@ class QuestService:
             getattr(self.logger, level)(message)
         except (AttributeError, OSError):
             pass
+
+    # -- events ------------------------------------------------------------
+    def _changed(self) -> None:
+        """Tell the UI this run started, finished, or moved on."""
+        if self.on_change is None:
+            return
+        try:
+            self.on_change()
+        except Exception as exc:  # noqa: BLE001 - a push must never break a run
+            self._log("warning", f"Could not push the quest change: {exc}")
+
+    @staticmethod
+    def _reward_label(quest: dict[str, Any]) -> str | None:
+        """The reward as the row shows it: orbs first, else its name."""
+        reward = quest.get("reward") or {}
+        orbs = reward.get("orbs")
+        if isinstance(orbs, int) and not isinstance(orbs, bool) and orbs > 0:
+            return f"{orbs:,} Orbs"
+        label = reward.get("label")
+        return str(label) if label else None
+
+    def _notify_finished(self, name: str, reward: str | None) -> None:
+        """One toast per finished quest, and never more than one per quest."""
+        if self.notifier is None:
+            return
+        try:
+            self.notifier.quest_finished(name, reward)
+        except Exception as exc:  # noqa: BLE001 - a toast is not worth a traceback
+            self._log("warning", f"Could not announce the finished quest: {exc}")
 
     # -- queue -------------------------------------------------------------
     # One game quest and one video quest run at a time. The two lanes are
@@ -986,6 +1122,8 @@ class QuestService:
             if quest_id in self._queue:
                 self._queue.remove(quest_id)
             self._watching = quest_id
+            self._watching_name = str(quest.get("name") or "")
+            self._watching_reward = self._reward_label(quest)
             self._watching_at = now
             # First progress post after one player-sized beat.
             self._watch_seconds = 0.0
@@ -998,6 +1136,7 @@ class QuestService:
             "info",
             f"Watching the video quest {quest.get('name')!r} in the background",
         )
+        self._changed()
         return True
 
     def _start_playing(self) -> bool:

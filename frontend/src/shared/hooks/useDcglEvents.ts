@@ -4,7 +4,8 @@ import type { DcglEventDetail } from "../api-client";
 
 function isDcglDetail(value: unknown): value is DcglEventDetail {
   if (typeof value !== "object" || value === null) return false;
-  return (value as { type?: unknown }).type === "library_changed";
+  const type = (value as { type?: unknown }).type;
+  return type === "library_changed" || type === "quests_changed";
 }
 
 /**

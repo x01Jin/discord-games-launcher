@@ -58,12 +58,29 @@ in their own lanes, both always on screen, and each row can be moved up or down
 or removed, so the next quest in a lane is whatever you put first. **Clear
 queue** stops the video and empties the queue but leaves a running game alone.
 
+### Finished quests and rewards
+
+A quest that finishes on its own posts a Windows notification with its name and
+reward, so a queue can be left running while you are doing something else.
+
+The reward does not land on its own. A finished quest whose reward is still
+unclaimed shows **Claim** instead of Done, and pressing it claims the reward
+through the running client. Discord sometimes answers a claim with a captcha.
+That challenge can only be solved inside Discord, so the client is brought to
+the front on its quest page and you finish it there; the app catches up on the
+next read.
+
 ### Quest options
 
 Under Quest runs, **Play activity** picks what Discord shows while a quest runs.
 **Show activity** (the default) puts the game on your profile; **Private** shows
 nothing. Neither one opens a game or touches your Playing status elsewhere, and
 both earn the same quest time.
+
+Discord shows that activity only while its own settings allow it: the account
+status has to be anything but **Invisible**, and **Display current activity as a
+status message** has to be on in Activity Privacy. When one of them is holding
+the game back, the toast that appears on Run names it.
 
 **Pause between quests** (0 to 30 minutes, default 2) spaces runs out. After a
 quest finishes on its own, the next queued one waits a random part of that pause,

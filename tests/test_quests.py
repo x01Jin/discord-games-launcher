@@ -36,6 +36,8 @@ class FakeNative:
         self.accepted = []
         self.progress_posts = []
         self.heartbeats = []
+        self.claims = []
+        self.claim_error = None
         self.credited = {}
         self.heartbeat_error = None
 
@@ -72,6 +74,12 @@ class FakeNative:
             "credited": self.credited.get(quest_id),
         }
 
+    def claim_quest_reward(self, quest_id):
+        self.claims.append(str(quest_id))
+        if self.claim_error:
+            raise self.claim_error
+        return {"ok": True, "status": 200, "enrolled": True, "completed": True}
+
 
 def quest(
     quest_id="1",
@@ -81,6 +89,7 @@ def quest(
     target=900,
     progress=0,
     completed=False,
+    claimed=False,
     expires="2999-01-01T00:00:00+00:00",
     orbs=700,
     kind="play",
@@ -100,6 +109,7 @@ def quest(
         "progress": progress,
         "enrolledAt": "2026-01-01T00:00:00+00:00" if enrolled else None,
         "completedAt": "2026-01-01T00:00:00+00:00" if completed else None,
+        "claimedAt": "2026-01-01T00:00:00+00:00" if claimed else None,
         "expiresAt": expires,
         "tile": "quests/1/tile.png",
         "hero": "PLACEHOLDER",
@@ -144,7 +154,7 @@ def cached_game(database):
     return database
 
 
-def make_service(game_manager, native, ttl=20.0, prefs_path=None, rpc=None):
+def make_service(game_manager, native, ttl=20.0, prefs_path=None, rpc=None, notifier=None):
     # monitor=False keeps the background tail thread out of the tests; the
     # tick itself is exercised directly. The settings file is always a scratch
     # one, because a real settings.json would leak its options into every test.
@@ -157,6 +167,7 @@ def make_service(game_manager, native, ttl=20.0, prefs_path=None, rpc=None):
         prefs_path=prefs_path,
         monitor=False,
         activity=rpc or FakeRpc(),
+        notifier=notifier,
     )
     return service
 
@@ -642,6 +653,33 @@ def test_activity_mode_shows_the_game_and_still_posts_a_heartbeat(
     assert service._activity_shown is True
 
 
+def test_an_invisible_status_is_named_when_the_game_starts(
+    game_manager, cached_game, tmp_path
+):
+    native = FakeNative(payload=payload(quest()))
+    native.presence_state = lambda: {"status": "invisible", "show_current_game": True}
+    service = activity_service(game_manager, native, tmp_path)
+
+    ok, message = service.start_quest("1")
+
+    assert ok is True
+    assert "Invisible" in message
+    assert service._rpc.shows == [(100, "Test Quest")]
+
+
+def test_game_activity_switched_off_is_named_when_the_game_starts(
+    game_manager, cached_game, tmp_path
+):
+    native = FakeNative(payload=payload(quest()))
+    native.presence_state = lambda: {"status": "online", "show_current_game": False}
+    service = activity_service(game_manager, native, tmp_path)
+
+    ok, message = service.start_quest("1")
+
+    assert ok is True
+    assert "game activity is off" in message
+
+
 def test_activity_mode_withdraws_the_game_on_stop(
     game_manager, cached_game, tmp_path
 ):
@@ -1019,3 +1057,144 @@ def test_shutdown_closes_the_session(game_manager, cached_game):
 
     assert service._playing is None
     assert native.heartbeats[-1][3] is True
+
+
+# ---------------------------------------------------------------------------
+# claiming rewards
+# ---------------------------------------------------------------------------
+
+
+class FakeNotifier:
+    """Records what would have gone to the Action Center."""
+
+    def __init__(self):
+        self.finished = []
+
+    def quest_finished(self, name, reward=None):
+        self.finished.append((name, reward))
+
+
+def test_a_finished_quest_offers_claim(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(completed=True, progress=900)))
+    entry = make_service(game_manager, native).list_quests()["quests"][0]
+
+    assert entry["state"] == "completed"
+    assert entry["claimed"] is False
+    assert entry["claimable"] is True
+    assert entry["action"] == "claim"
+
+
+def test_a_claimed_quest_reads_done(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(completed=True, claimed=True)))
+    entry = make_service(game_manager, native).list_quests()["quests"][0]
+
+    assert entry["claimed"] is True
+    assert entry["claimable"] is False
+    assert entry["action"] == "done"
+
+
+def test_claim_reward_claims_through_the_client(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(completed=True, progress=900)))
+    service = make_service(game_manager, native)
+
+    ok, message, captcha = service.claim_reward("1")
+
+    assert ok is True
+    assert message == "Reward claimed"
+    assert captcha is False
+    assert native.claims == ["1"]
+
+
+def test_a_captcha_comes_back_as_user_action(game_manager, cached_game):
+    from launcher.discord_native import QuestApiError
+
+    native = FakeNative(payload=payload(quest(completed=True, progress=900)))
+    native.claim_error = QuestApiError("Captcha required", captcha=True)
+    service = make_service(game_manager, native)
+
+    ok, message, captcha = service.claim_reward("1")
+
+    assert ok is False
+    assert captcha is True
+    assert "captcha" in message.lower()
+
+
+def test_claim_refuses_a_quest_that_is_not_finished(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(progress=300, target=900)))
+    service = make_service(game_manager, native)
+
+    ok, message, captcha = service.claim_reward("1")
+
+    assert ok is False
+    assert captcha is False
+    assert message == "That quest is not finished yet"
+    assert native.claims == []
+
+
+def test_claim_is_idempotent_when_discord_already_recorded_it(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(completed=True, claimed=True)))
+    service = make_service(game_manager, native)
+
+    ok, message, _captcha = service.claim_reward("1")
+
+    assert ok is True
+    assert "already claimed" in message
+    assert native.claims == []
+
+
+# ---------------------------------------------------------------------------
+# notifications
+# ---------------------------------------------------------------------------
+
+
+def test_finishing_a_play_quest_posts_a_notification(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("1", target=100)))
+    notifier = FakeNotifier()
+    service = make_service(game_manager, native, notifier=notifier)
+    service.start_quest("1")
+    native.credited["1"] = 100
+
+    service._monitor_tick(service._beat_next + 0.1)
+
+    assert notifier.finished == [("Test Quest", "700 Orbs")]
+    assert service._playing is None
+
+
+def test_finishing_a_video_quest_posts_a_notification(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("2", kind="watch", target=60, orbs=200)))
+    notifier = FakeNotifier()
+    service = make_service(game_manager, native, notifier=notifier)
+    service.start_queue(["2"])
+
+    def completed_progress(quest_id, timestamp):
+        native.progress_posts.append((str(quest_id), timestamp))
+        return {"ok": True, "status": 200, "completed": True, "progress": None}
+
+    native.send_video_progress = completed_progress
+    service._monitor_tick(service._watch_next + 0.1)
+
+    assert notifier.finished == [("Test Quest", "200 Orbs")]
+
+
+def test_a_stopped_quest_does_not_notify(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("1", target=900)))
+    notifier = FakeNotifier()
+    service = make_service(game_manager, native, notifier=notifier)
+    service.start_quest("1")
+
+    service.stop_quest("1")
+
+    assert notifier.finished == []
+
+
+def test_a_finished_quest_pushes_the_new_state(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("1", target=100)))
+    service = make_service(game_manager, native)
+    pushes = []
+    service.on_change = lambda: pushes.append("changed")
+    service.start_quest("1")
+    native.credited["1"] = 100
+
+    service._monitor_tick(service._beat_next + 0.1)
+
+    assert pushes == ["changed", "changed"]

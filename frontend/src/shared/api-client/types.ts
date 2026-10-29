@@ -91,6 +91,7 @@ export type QuestAction =
   | "open"
   | "mobile"
   | "done"
+  | "claim"
   | "unsupported";
 
 export interface QuestReward {
@@ -134,8 +135,17 @@ export interface QuestGame {
   in_library: boolean;
   is_running: boolean;
   state: QuestState;
+  /** Discord recorded the reward as claimed. */
+  claimed: boolean;
+  /** Finished, and the reward is still unclaimed: the row offers Claim. */
+  claimable: boolean;
   /** Waiting in the start queue, behind a quest that is still running. */
   queued: boolean;
+}
+
+/** A claim Discord answers with a captcha challenge: solve it in the client. */
+export interface ClaimResult extends MutResult {
+  needs_captcha?: boolean;
 }
 
 /** Options that change how a run behaves. Stored in settings.json. */
@@ -230,7 +240,9 @@ export interface ClearQueueResult {
   cleared: number;
 }
 
-export type DcglEventDetail = { type: "library_changed" };
+export type DcglEventDetail =
+  | { type: "library_changed" }
+  | { type: "quests_changed" };
 
 export interface PywebviewApi {
   list_games(limit: number, offset: number): Promise<ListGamesResult>;
@@ -255,6 +267,7 @@ export interface PywebviewApi {
   open_quest_in_discord(quest_id: string): Promise<MutResult>;
   start_quest(quest_id: string): Promise<MutResult>;
   accept_quest(quest_id: string): Promise<MutResult>;
+  claim_quest_reward(quest_id: string): Promise<ClaimResult>;
   stop_quest(quest_id: string): Promise<MutResult>;
   start_quest_queue(quest_ids: string[]): Promise<MutResult>;
   clear_quest_queue(): Promise<ClearQueueResult>;

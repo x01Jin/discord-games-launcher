@@ -7,13 +7,68 @@ methods on ``window.pywebview.api``. State changes push through
 
 import os
 import sqlite3
+import sys
 from collections.abc import Callable
 from typing import Any
 
-from launcher import discord_setup
+from launcher import discord_native, discord_setup
 from launcher import prefs as quest_prefs
 from launcher.discord_native import DiscordNativeError
 from launcher.game_manager import GameManager, GameManagerError
+
+
+def _focus_discord() -> bool:
+    """Bring the Discord window to the front.
+
+    A captcha can only be solved inside Discord, so a claim that needs one ends
+    with the user looking at the client instead of at a toast telling them to
+    go find it. Windows refuses foreground changes from a background process
+    without an input edge, so the restore is best effort.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetWindowThreadProcessId.argtypes = [
+            wintypes.HWND,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+
+        pids = {proc.pid for proc in discord_native.running_processes()}
+        if not pids:
+            return False
+
+        found: list[int] = []
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def visit(hwnd, _lparam):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if (
+                pid.value in pids
+                and user32.IsWindowVisible(hwnd)
+                and user32.GetWindowTextLengthW(hwnd) > 0
+            ):
+                found.append(hwnd)
+            return True
+
+        user32.EnumWindows(callback_type(visit), 0)
+        if not found:
+            return False
+        # The first visible titled window is the main client, not a popout.
+        user32.ShowWindow(found[0], 9)  # SW_RESTORE
+        user32.SetForegroundWindow(found[0])
+        return True
+    except (OSError, AttributeError, ValueError) as exc:
+        print(f"[dcgl] Could not focus Discord: {exc}", file=sys.stderr)
+        return False
 
 
 class Bridge:
@@ -23,6 +78,10 @@ class Bridge:
         self.game_manager = game_manager
         self.quest_service = quest_service
         self.push: Callable[[dict[str, Any]], None] | None = None
+        if quest_service is not None:
+            # A run starting or finishing repaints the quest page at once
+            # instead of waiting for its next twenty-second poll.
+            quest_service.on_change = lambda: self._emit({"type": "quests_changed"})
 
     # -- internal helpers ------------------------------------------------
     def _emit(self, event: dict[str, Any]) -> None:
@@ -340,7 +399,30 @@ class Bridge:
             os.startfile("discord://-/quest-home")
         except (OSError, AttributeError) as e:
             return {"ok": False, "message": f"Could not open Discord: {e}"}
+        _focus_discord()
         return {"ok": True, "message": "Opened Discord on the quest page"}
+
+    def claim_quest_reward(self, quest_id: str) -> dict[str, Any]:
+        """Claim a finished quest, handing a captcha to the Discord window."""
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(quest_id, str) or not quest_id.strip():
+            return {"ok": False, "message": "Invalid quest id"}
+        try:
+            ok, message, captcha = self.quest_service.claim_reward(quest_id.strip())
+        except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
+            return {"ok": False, "message": f"Failed to claim the reward: {e}"}
+        if captcha:
+            # Discord's own claim button carries the challenge, so put the user
+            # in front of it rather than leaving them to find the page.
+            try:
+                os.startfile("discord://-/quest-home")
+            except (OSError, AttributeError):
+                pass
+            _focus_discord()
+        if ok:
+            self._emit({"type": "quests_changed"})
+        return {"ok": ok, "message": message, "needs_captcha": captcha}
 
     def start_discord(self) -> dict[str, Any]:
         """Launch Discord with quest reading enabled; never restarts it."""

@@ -20,6 +20,7 @@ interface Props {
   onStart: () => void;
   onStop: () => void;
   onWatch: () => void;
+  onClaim: () => void;
 }
 
 const KIND_LABEL: Record<QuestGame["kind"], string> = {
@@ -38,6 +39,7 @@ export function QuestRow({
   onStart,
   onStop,
   onWatch,
+  onClaim,
 }: Props) {
   const showProgress =
     quest.target_seconds > 0 &&
@@ -160,7 +162,9 @@ export function QuestRow({
           }
           title={quest.expires_at ?? undefined}
         >
-          {quest.action === "done" ? "—" : formatTimeLeft(quest.seconds_left)}
+          {quest.action === "done" || quest.action === "claim"
+            ? "—"
+            : formatTimeLeft(quest.seconds_left)}
         </span>
 
         <div className="flex w-[104px] justify-end">
@@ -170,6 +174,7 @@ export function QuestRow({
             onStart={onStart}
             onStop={onStop}
             onWatch={onWatch}
+            onClaim={onClaim}
           />
         </div>
       </div>
@@ -183,8 +188,21 @@ function QuestAction({
   onStart,
   onStop,
   onWatch,
-}: Pick<Props, "quest" | "busy" | "onStart" | "onStop" | "onWatch">) {
+  onClaim,
+}: Pick<Props, "quest" | "busy" | "onStart" | "onStop" | "onWatch" | "onClaim">) {
   switch (quest.action) {
+    case "claim":
+      return (
+        <Button
+          variant="success"
+          size="sm"
+          busy={busy}
+          onClick={onClaim}
+          title="Claim the reward. If Discord asks for a captcha, its window comes forward so you can solve it there."
+        >
+          Claim
+        </Button>
+      );
     case "stop":
       return (
         <Button

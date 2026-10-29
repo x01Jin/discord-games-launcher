@@ -43,6 +43,7 @@ discord-games-launcher/
 │   ├── dummy_generator.py  # Dummy executable generation
 │   ├── game_manager.py     # Game operations and repair
 │   ├── logger.py           # Logging setup
+│   ├── notifications.py    # Windows toast for a finished quest
 │   ├── prefs.py            # Quest options stored in settings.json
 │   ├── process_manager.py  # Process lifecycle and detection
 │   ├── quests.py           # Quest list, run modes, queue and watch runs

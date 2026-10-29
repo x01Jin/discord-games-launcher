@@ -213,7 +213,8 @@ export function RunningPage() {
                       onSettled: () => setPendingId(null),
                     });
                   }}
-                    onWatch={noop}
+                  onWatch={noop}
+                  onClaim={noop}
                 />
               ))}
             </>

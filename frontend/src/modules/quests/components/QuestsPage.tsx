@@ -18,6 +18,7 @@ import {
   Switch,
 } from "../../../shared/components/primitives";
 import {
+  useClaimQuest,
   useClearQuestQueue,
   useConnectDiscord,
   useDisableSilentMode,
@@ -115,6 +116,7 @@ export function QuestsPage() {
   const disableSilent = useDisableSilentMode();
   const startQuest = useStartQuest();
   const stopQuest = useStopQuest();
+  const claimQuest = useClaimQuest();
   const startQueue = useStartQuestQueue();
   const clearQueue = useClearQuestQueue();
   const skipWatch = useSkipQuestWatch();
@@ -134,11 +136,18 @@ export function QuestsPage() {
     : null;
 
   const counts = useMemo(() => {
-    const tally = { open: 0, running: 0, finished: 0 };
+    const tally = { open: 0, running: 0, finished: 0, claimable: 0 };
     for (const quest of quests) {
       if (quest.state === "running") tally.running += 1;
-      if (quest.action === "done") tally.finished += 1;
-      else tally.open += 1;
+      if (quest.action === "done") {
+        tally.finished += 1;
+      } else if (quest.action === "claim") {
+        // Finished, but the reward is still on the table.
+        tally.finished += 1;
+        tally.claimable += 1;
+      } else {
+        tally.open += 1;
+      }
     }
     return tally;
   }, [quests]);
@@ -186,6 +195,7 @@ export function QuestsPage() {
         counts.open + " open",
         counts.running ? counts.running + " running" : null,
         queueIds.length ? queueIds.length + " queued" : null,
+        counts.claimable ? counts.claimable + " to claim" : null,
         counts.finished ? counts.finished + " finished" : null,
       ]
         .filter(Boolean)
@@ -467,6 +477,13 @@ export function QuestsPage() {
                     )
                   }
                   onWatch={() => startQueue.mutate([quest.id])}
+                  onClaim={() =>
+                    withPending(quest, () =>
+                      claimQuest.mutate(quest.id, {
+                        onSettled: () => setPendingId(null),
+                      }),
+                    )
+                  }
                 />
               ))
             )}

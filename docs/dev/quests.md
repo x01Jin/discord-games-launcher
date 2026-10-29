@@ -251,7 +251,8 @@ backend decides both so the UI never has to infer capability from a task key.
 | `run`         | Run             | Play quest inside its window, not running |
 | `stop`        | Stop            | Its play run or video wait is active      |
 | `open`        | Watch           | Video quest, credited in the background   |
-| `done`        | Done / Expired  | Finished or past its end date             |
+| `claim`       | Claim           | Finished, and `claimedAt` is still empty  |
+| `done`        | Done / Expired  | Finished and claimed, or past its end date |
 | `unsupported` | Unsupported     | Play quest with no application id         |
 
 Sort order is running, ready, expired, unresolved, completed; inside a state,
@@ -341,8 +342,51 @@ reads to decide when the quest is done.
 Video progress is accumulated from the monotonic clock between posts
 (`_watch_step`), capped at 15 s per step, and the timestamp sent is that sum.
 Discord credits it as watch time, so the video plays in Discord's own sense
-without a player window, a quest page, or any focus change. `claim_quest_reward()`
-exists for the same API surface but the queue does not claim on its own.
+without a player window, a quest page, or any focus change.
+
+`claim_quest_reward()` claims a reward the account already earned. A claim is
+not always accepted: Discord answers some accounts with a captcha challenge
+(`captcha_key` / `captcha_sitekey` in the error body) and only the client's own
+claim button can drive it. `QuestApiError` carries that as `.captcha`, and
+`QuestService.claim_reward()` returns it as `needs_user_action`, at which point
+the bridge opens `discord://-/quest-home` and brings the Discord window forward
+with `_focus_discord()`. The queue never claims on its own; only the row's
+button does.
+
+## Notifications
+
+A run that finishes by itself posts a Windows toast naming the quest and its
+reward (`launcher/notifications.py`). Both lanes notify: a play quest when the
+beat that crosses the target comes back, a video quest when its progress post
+reports the target reached. A manual Stop does not, because the user already
+knows.
+
+The toast is built as XML here and handed to Windows PowerShell 5.1 as one
+base64 `-EncodedCommand`, launched with `CREATE_NO_WINDOW`. That is the only
+PowerShell on a stock Windows that resolves the WinRT notification types;
+PowerShell 7 fails to find `[Windows.UI.Notifications.ToastNotificationManager]`.
+The app id (`DCGL.DiscordGamesLauncher`) is not registered with the Start Menu,
+which Windows accepts for desktop toasts: verified by showing one and reading it
+back from `ToastNotificationManager.History`.
+
+Anything that goes wrong is logged and swallowed. A missing `powershell.exe`
+costs a warning line, never a stalled run.
+
+## Why a run can be visible but not shown
+
+Setting the activity is not the same as Discord displaying it. Two account
+settings gate the display, both read on demand from `UserSettingsProtoStore`
+(`presence_state()`):
+
+- `status.status` set to `invisible` broadcasts no presence at all.
+- `status.showCurrentGame` off stops the client reporting any activity.
+
+`start_quest()` checks both right after the activity is set and appends the
+reason to its message, which the page shows as a toast. Verified against a live
+client in this state: `LocalActivityStore.getActivities()` held
+`{name: "Roblox", type: 0}` while the run was in flight, with the account
+Invisible, so the activity itself was correct and the profile showed nothing.
+
 
 ## Quest options
 
