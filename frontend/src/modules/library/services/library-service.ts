@@ -16,6 +16,9 @@ export const libraryService = {
   remove(gameId: string) {
     return bridge.remove_from_library(gameId);
   },
+  removeMany(gameIds: string[]) {
+    return bridge.remove_many(gameIds);
+  },
   repair() {
     return bridge.repair_library();
   },

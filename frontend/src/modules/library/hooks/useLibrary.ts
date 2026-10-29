@@ -51,6 +51,23 @@ export function useStopAll() {
   });
 }
 
+export function useRemoveGames() {
+  const qc = useQueryClient();
+  const pushToast = useUiStore((s) => s.pushToast);
+  return useMutation({
+    mutationFn: (ids: string[]) => libraryService.removeMany(ids),
+    onSuccess: (r) => {
+      invalidate(qc);
+      pushToast(r.message, r.failed === 0 ? "success" : "error");
+    },
+    onError: () =>
+      pushToast(
+        "Could not remove the games. Check the backend connection and try again.",
+        "error",
+      ),
+  });
+}
+
 export function useRepairLibrary() {
   const qc = useQueryClient();
   const pushToast = useUiStore((s) => s.pushToast);

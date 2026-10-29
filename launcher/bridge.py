@@ -215,6 +215,32 @@ class Bridge:
             self._emit({"type": "library_changed"})
         return {"ok": ok, "message": message}
 
+    def remove_many(self, game_ids: list[int | str]) -> dict[str, Any]:
+        removed, failed = 0, 0
+        ids: list[int] = []
+        for g in game_ids or []:
+            parsed = self._parse_game_id(g)
+            if parsed is None:
+                failed += 1
+            else:
+                ids.append(parsed)
+        for gid in ids:
+            try:
+                ok, _message = self.game_manager.remove_from_library(gid)
+            except (GameManagerError, sqlite3.Error, OSError, ValueError):
+                failed += 1
+                continue
+            if ok:
+                removed += 1
+            else:
+                failed += 1
+        if removed:
+            self._emit({"type": "library_changed"})
+        parts = [f"Removed {removed} game(s)"]
+        if failed:
+            parts.append(f"{failed} failed")
+        return {"removed": removed, "failed": failed, "message": ", ".join(parts)}
+
     def repair_library(self) -> dict[str, Any]:
         try:
             summary = self.game_manager.repair_library()

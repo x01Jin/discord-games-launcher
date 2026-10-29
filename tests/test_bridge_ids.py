@@ -114,6 +114,33 @@ def test_library_mutations_round_trip_string_ids():
     print("  PASSED")
 
 
+def test_remove_many_removes_selected_and_counts_failures():
+    """Batch removal accepts frontend string IDs and reports per-game results."""
+    print("Testing batch library removal...")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        bridge = _make_bridge(Path(tmpdir))
+        sid = str(SNOWFLAKE)
+        assert bridge.add_to_library(sid)["ok"]
+
+        # One real game, one unparseable id, and one already-gone game.
+        result = bridge.remove_many([sid, "nope", sid])  # type: ignore[list-item]
+        assert result["removed"] == 1, result
+        assert result["failed"] == 2, result
+        assert result["message"] == "Removed 1 game(s), 2 failed"
+        assert bridge.get_library()["games"] == []
+
+        empty = bridge.remove_many([])
+        assert empty == {"removed": 0, "failed": 0, "message": "Removed 0 game(s)"}
+
+        # A missing row must not raise; removal of an absent game is a failure.
+        absent = bridge.remove_many([sid])
+        assert absent["removed"] == 0
+        assert absent["failed"] == 1
+
+    print("  PASSED")
+
+
 def test_strict_id_parsing_rejects_coercible_junk():
     """Bools, floats, and non-numeric strings fail closed, never truncate."""
     print("Testing strict ID parsing...")

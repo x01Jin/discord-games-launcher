@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   useLibraryGames,
   useRemoveGame,
+  useRemoveGames,
   useRepairLibrary,
   useStopAll,
   useToggleGame,
@@ -17,6 +18,7 @@ import {
   LibraryIcon,
   RefreshIcon,
   StopIcon,
+  TrashIcon,
   WrenchIcon,
 } from "../../../shared/components/icons";
 import { formatCount } from "../../../shared/lib/format";
@@ -28,11 +30,14 @@ export function LibraryPage() {
   const toggle = useToggleGame();
   const stopAll = useStopAll();
   const remove = useRemoveGame();
+  const removeGames = useRemoveGames();
   const repair = useRepairLibrary();
   const setPage = useUiStore((state) => state.setPage);
 
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [confirmRepair, setConfirmRepair] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [confirmRemoveMany, setConfirmRemoveMany] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<{
     id: string;
     name: string;
@@ -41,6 +46,19 @@ export function LibraryPage() {
   const games = data?.games ?? [];
   const running = games.filter((game) => game.is_running).length;
   const backendError = data?.error;
+
+  // Selection is derived: ids that left the library (removed here or by repair)
+  // stop counting without an effect writing state back.
+  const present = new Set(games.map((game) => game.game_id));
+  const selected = picked.filter((id) => present.has(id));
+
+  const toggleRow = (id: string) => {
+    setPicked((current) =>
+      current.includes(id)
+        ? current.filter((existing) => existing !== id)
+        : [...current, id],
+    );
+  };
 
   const startToggle = (gameId: string, isRunning: boolean) => {
     setPendingId(gameId);
@@ -83,7 +101,14 @@ export function LibraryPage() {
           icon={<LibraryIcon size={28} />}
           title="Nothing in the library yet"
           description="Add a game from the catalogue, or run one straight from a quest. A fake process per game is all Discord needs to see."
-          action={<Button onClick={() => setPage("quests")}>Browse quests</Button>}
+          action={
+            <Button
+              icon={<LibraryIcon size={13} />}
+              onClick={() => setPage("catalogue")}
+            >
+              Browse catalogue
+            </Button>
+          }
         />
       );
     }
@@ -94,6 +119,8 @@ export function LibraryPage() {
             key={game.game_id}
             game={game}
             busy={pendingId === game.game_id}
+            selected={selected.includes(game.game_id)}
+            onSelect={() => toggleRow(game.game_id)}
             onToggle={() => startToggle(game.game_id, game.is_running)}
             onRemove={() => setConfirmRemove({ id: game.game_id, name: game.name })}
           />
@@ -149,10 +176,42 @@ export function LibraryPage() {
 
       {games.length > 0 && !isLoading ? (
         <Toolbar>
-          <span className="text-[12px] text-subtle">
-            A running game keeps its dummy process alive until you stop it.
-            Removing one stops it and deletes its files.
-          </span>
+          {selected.length > 0 ? (
+            <>
+              <span className="text-[12px] text-muted">
+                {selected.length} selected
+              </span>
+              <div className="flex-1" />
+              <Button
+                size="sm"
+                variant="danger"
+                busy={removeGames.isPending}
+                icon={<TrashIcon size={12} />}
+                onClick={() => setConfirmRemoveMany(true)}
+              >
+                Remove {selected.length === 1 ? "game" : "games"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
+                Clear
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="text-[12px] text-subtle">
+                Tick rows to remove several at once. A running game keeps its
+                dummy process alive until you stop it; removing one stops it and
+                deletes its files.
+              </span>
+              <div className="flex-1" />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setPicked(games.map((game) => game.game_id))}
+              >
+                Select all
+              </Button>
+            </>
+          )}
         </Toolbar>
       ) : null}
 
@@ -189,6 +248,43 @@ export function LibraryPage() {
               }}
             >
               Repair library
+            </Button>
+          </>
+        }
+      />
+
+      <Dialog
+        open={confirmRemoveMany}
+        title={
+          "Remove " + selected.length + (selected.length === 1 ? " game?" : " games?")
+        }
+        onClose={() => setConfirmRemoveMany(false)}
+        description={
+          <>
+            {selected.length === 1 ? "The game leaves" : "The games leave"} your
+            library and{" "}
+            {selected.length === 1 ? "its files are" : "their files are"} deleted.
+            Running games are stopped first. You can add them again from the
+            catalogue.
+          </>
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmRemoveMany(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              busy={removeGames.isPending}
+              onClick={() => {
+                const ids = selected;
+                setConfirmRemoveMany(false);
+                // Drop ids that are no longer in the list; failures stay ticked.
+                setPicked(ids);
+                removeGames.mutate(ids);
+              }}
+            >
+              Remove {selected.length === 1 ? "game" : "games"}
             </Button>
           </>
         }

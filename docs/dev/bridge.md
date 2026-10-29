@@ -28,6 +28,7 @@ fixes itself on the next poll.
 | `add_many(game_ids)`           | string ID list | `{added, failed, message}`                                                          |
 | `get_library()`                | -              | `{games}` with running flags                                                        |
 | `remove_from_library(game_id)` | string ID      | `{ok, message}`                                                                     |
+| `remove_many(game_ids)`        | string ID list | `{removed, failed, message}` - stops and deletes each game, counting the misses      |
 | `repair_library()`             | -              | `{ok, message, summary}`                                                            |
 | `start_game(game_id)`          | string ID      | `{ok, message}`; starts immediately, emits `library_changed`                        |
 | `stop_game(game_id)`           | string ID      | `{ok, message}`                                                                     |

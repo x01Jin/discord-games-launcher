@@ -36,6 +36,12 @@ export interface AddManyResult {
   message: string;
 }
 
+export interface RemoveManyResult {
+  removed: number;
+  failed: number;
+  message: string;
+}
+
 export interface LibraryResult {
   games: LibraryGame[];
   error?: string;
@@ -236,6 +242,7 @@ export interface PywebviewApi {
   stop_game(game_id: string): Promise<MutResult>;
   stop_all_games(): Promise<StopAllResult>;
   remove_from_library(game_id: string): Promise<MutResult>;
+  remove_many(game_ids: string[]): Promise<RemoveManyResult>;
   repair_library(): Promise<RepairResult>;
   sync_catalogue(): Promise<SyncResult>;
   get_stats(): Promise<StatsResult>;

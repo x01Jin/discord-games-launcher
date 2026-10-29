@@ -3,16 +3,30 @@ import type { LibraryGame } from "../../../shared/api-client";
 import { GameArt } from "../../../shared/components/GameArt";
 import { Menu, type MenuItem } from "../../../shared/components/Menu";
 import { MoreIcon, PlayIcon, StopIcon, TrashIcon } from "../../../shared/components/icons";
-import { Button, IconButton, StatusDot } from "../../../shared/components/primitives";
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  StatusDot,
+} from "../../../shared/components/primitives";
 
 interface Props {
   game: LibraryGame;
   busy: boolean;
+  selected: boolean;
+  onSelect: (next: boolean) => void;
   onToggle: () => void;
   onRemove: () => void;
 }
 
-export function LibraryRow({ game, busy, onToggle, onRemove }: Props) {
+export function LibraryRow({
+  game,
+  busy,
+  selected,
+  onSelect,
+  onToggle,
+  onRemove,
+}: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   const items: MenuItem[] = [
@@ -31,6 +45,11 @@ export function LibraryRow({ game, busy, onToggle, onRemove }: Props) {
 
   return (
     <div className="row-skip flex items-center gap-3 border-b border-line px-5 py-2.5 transition-colors duration-100 hover:bg-hover">
+      <Checkbox
+        checked={selected}
+        onChange={onSelect}
+        label={"Select " + game.name + " for removal"}
+      />
       <GameArt name={game.name} gameId={game.game_id} iconHash={game.icon_hash} size={36} />
 
       <div className="min-w-0 flex-1">

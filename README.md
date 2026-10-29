@@ -59,6 +59,7 @@ Your games, with the state Discord sees.
 
 - Each row shows running or stopped and the exact process name.
 - Start and Stop on the row, plus a menu to remove.
+- Tick rows to remove several games at once, or Select all; removal asks first.
 - Removal stops the process, deletes the copied executable and its folder, and drops the database entry.
 - Repair rebuilds the dummy files for every game, for when a file went missing.
 

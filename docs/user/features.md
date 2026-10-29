@@ -110,9 +110,14 @@ The Library holds the games you added, each with its running state and the
 exact process name Discord compares against.
 
 Start and Stop sit on the row. The three-dot menu offers Start, Stop, and
-Remove, and Remove asks before it deletes files. Refresh reloads the list,
-Repair rebuilds the dummy files for every game (useful after antivirus removed
-one), and Stop all ends every running game.
+Remove, and Remove asks before it deletes files. Tick the checkboxes to select
+several games at once and remove them with one confirm, or use **Select all**;
+removal stops a running game first. Refresh reloads the list, Repair rebuilds
+the dummy files for every game (useful after antivirus removed one), and Stop
+all ends every running game.
+
+An empty library offers **Browse catalogue**, which jumps to the view where
+games are added.
 
 The library survives a restart of the app. Adding a game is instant because only
 the dummy executable is copied, not a real game.
