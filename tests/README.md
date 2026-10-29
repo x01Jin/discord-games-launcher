@@ -37,6 +37,7 @@ pytest tests/test_quests.py -k heartbeat -v
 | `test_quests.py` | Quest states, executable resolution, heartbeat and video runs, queue, prefs |
 | `test_repair.py` | Candidate refresh, repair composition, generator ownership |
 | `test_startup_cleanup.py` | Stale runtime rows, orphaned directories, missing executables, orphaned icons |
+| `test_updates.py` | Version comparison and GitHub release lookup |
 
 Fixtures and helpers are described in [docs/dev/testing.md](../docs/dev/testing.md).
 

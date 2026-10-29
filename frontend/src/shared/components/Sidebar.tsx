@@ -1,12 +1,15 @@
 import type { ReactNode } from "react";
 import logoUrl from "../../assets/dcgl.png";
+import { bridge } from "../api-client";
 import { useQuests, useQuestStatus } from "../hooks/useQuests";
+import { useAppInfo, useUpdateStatus } from "../hooks/useUpdates";
 import { useStats } from "../hooks/useStats";
 import { formatCount } from "../lib/format";
 import { useUiStore, type Page } from "../store/ui-store";
 import {
   CatalogueIcon,
   DiscordIcon,
+  GithubIcon,
   LibraryIcon,
   PlayIcon,
   QuestsIcon,
@@ -103,6 +106,10 @@ export function Sidebar() {
         })}
       </div>
 
+      <div className="shrink-0 px-3 py-2">
+        <ProjectLink />
+      </div>
+
       <div className="shrink-0 border-t border-line px-3 py-2.5">
         <div className="flex items-center gap-2 text-[12px] text-subtle">
           <DiscordIcon size={14} />
@@ -119,6 +126,34 @@ export function Sidebar() {
         <ClientState />
       </div>
     </aside>
+  );
+}
+
+function ProjectLink() {
+  const { data: info } = useAppInfo();
+  const { data: update } = useUpdateStatus();
+  const version = info?.version ?? "";
+  const available = Boolean(update?.update_available);
+  const target = available ? "latest" : "repo";
+  const title = available
+    ? "Version " + (update?.latest ?? "") + " is available"
+    : "Open the GitHub repository";
+
+  return (
+    <button
+      type="button"
+      onClick={() => void bridge.open_project_page(target)}
+      title={title}
+      className="flex w-full items-center gap-2 text-left text-[12px] text-subtle transition-colors hover:text-ink"
+    >
+      <GithubIcon size={14} />
+      <span className="flex-1 truncate">{version ? "v" + version : "GitHub"}</span>
+      {available ? (
+        <span className="shrink-0 rounded-[3px] bg-warning/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
+          Update available
+        </span>
+      ) : null}
+    </button>
   );
 }
 

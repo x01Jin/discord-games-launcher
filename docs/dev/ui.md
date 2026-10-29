@@ -16,6 +16,7 @@ App
 │   ├── brand
 │   ├── nav: Quests / Running / Catalogue / Library  (counts where useful)
 │   ├── Settings  (pinned above the client state)
+│   ├── project row: GitHub icon, current version, update chip
 │   └── client state: Discord connection, running fakes
 ├── main (bg-canvas)
 │   ├── PageHeader    (title, subtitle, actions)
@@ -25,6 +26,12 @@ App
 ```
 
 The last visited page is remembered in `localStorage` (`dcgl.page`).
+
+The project row below Settings shows the GitHub icon and the running version. It
+opens the repository when clicked. `check_for_update` runs at mount and hourly;
+when GitHub has a newer release the row adds an amber `Update` chip and the click
+opens the latest release instead. The check runs in the backend, so a blocked
+GitHub API costs nothing but the version row still renders.
 
 ## Theme
 

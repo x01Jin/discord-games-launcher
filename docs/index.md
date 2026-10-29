@@ -51,7 +51,8 @@ discord-games-launcher/
 │   ├── prefs.py            # Quest options stored in settings.json
 │   ├── process_manager.py  # Process lifecycle and detection
 │   ├── quests/              # Quest list, run modes, queue and watch runs
-│   └── rpc_activity.py     # Game activity over Discord's rich presence pipe
+│   ├── rpc_activity.py     # Game activity over Discord's rich presence pipe
+│   └── updates.py         # GitHub release check and app version
 ├── frontend/          # React UI
 │   └── src/
 │       ├── App.tsx    # Shell, routing, page layout

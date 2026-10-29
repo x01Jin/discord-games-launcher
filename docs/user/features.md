@@ -146,6 +146,13 @@ Rows and cards use the artwork Discord serves for the game; when a game has no
 picture, or you are offline, the first letter of its name fills in instead. The
 palette is Discord's dark set with one accent colour, scaled by Windows.
 
+## Version and updates
+
+The row below Settings shows the current version and a GitHub icon. Clicking it
+opens the repository. The app checks GitHub's latest release at start and once an
+hour; when a newer version exists, an amber **Update** chip appears and the row
+opens that release instead.
+
 ## Limits
 
 - Windows only. Discord detects games differently on macOS and Linux.

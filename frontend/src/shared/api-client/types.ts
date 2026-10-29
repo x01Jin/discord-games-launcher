@@ -232,7 +232,23 @@ export type DcglEventDetail =
   | { type: "library_changed" }
   | { type: "quests_changed" };
 
+export interface AppInfo {
+  version: string;
+  repo_url: string;
+  release_url: string;
+}
+
+export interface UpdateStatus extends AppInfo {
+  latest: string | null;
+  update_available: boolean;
+  error: string | null;
+}
+
 export interface PywebviewApi {
+  get_app_info(): Promise<AppInfo>;
+  check_for_update(force?: boolean): Promise<UpdateStatus>;
+  open_project_page(target?: "repo" | "latest"): Promise<MutResult>;
+
   list_games(limit: number, offset: number): Promise<ListGamesResult>;
   search_games(query: string, limit: number): Promise<SearchGamesResult>;
   add_to_library(game_id: string): Promise<MutResult>;

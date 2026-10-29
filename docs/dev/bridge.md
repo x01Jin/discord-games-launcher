@@ -10,6 +10,18 @@ frontend accessor (`shared/api-client/bridge.ts`) waits for the specific method.
 A query fired on first paint then does not call `undefined` and record a failure
 that fixes itself on the next poll.
 
+## App
+
+| Method | Input | Returns |
+| --- | --- | --- |
+| `get_app_info()` | - | `{version, repo_url, release_url}` |
+| `check_for_update(force?)` | bool (opt) | `{version, latest, update_available, repo_url, release_url, error}`; cached for one hour |
+| `open_project_page(target?)` | `"repo"` or `"latest"` | `{ok, message}`; opens the repository or the latest release in the default browser |
+
+The version comes from `launcher/__init__.py`. `check_for_update` asks GitHub's
+latest release endpoint and compares the tag against that version. A failed
+check returns the current version with `error` set and `update_available: false`.
+
 ## Catalogue and library
 
 | Method | Input | Returns |

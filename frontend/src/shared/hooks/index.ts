@@ -10,4 +10,5 @@ export {
   useStopQuest,
 } from "./useQuests";
 export { useStats } from "./useStats";
+export { useAppInfo, useUpdateStatus } from "./useUpdates";
 export { useVirtualRows } from "./useVirtualRows";

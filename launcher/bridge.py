@@ -1,10 +1,11 @@
 
 import os
 import sqlite3
+import webbrowser
 from collections.abc import Callable
 from typing import Any
 
-from launcher import discord_setup
+from launcher import discord_setup, updates
 from launcher import prefs as quest_prefs
 from launcher.discord_native import DiscordNativeError
 from launcher.discord_window import _focus_discord, claim_in_client
@@ -60,6 +61,23 @@ class Bridge:
             "icon_hash": game.icon_hash,
             "win_exes": [e.get("name", "") for e in win_exes if e.get("name")],
             "in_library": in_library,
+        }
+
+    def get_app_info(self) -> dict[str, Any]:
+        return updates.app_info()
+
+    def check_for_update(self, force: bool = False) -> dict[str, Any]:
+        return updates.check(force=bool(force))
+
+    def open_project_page(self, target: str = "repo") -> dict[str, Any]:
+        url = updates.RELEASES_URL if target == "latest" else updates.REPO_URL
+        try:
+            opened = webbrowser.open(url, new=2)
+        except (OSError, webbrowser.Error) as e:
+            return {"ok": False, "message": str(e)}
+        return {
+            "ok": bool(opened),
+            "message": "Opened GitHub" if opened else "Could not open a browser",
         }
 
     def list_games(self, limit: int = 200, offset: int = 0) -> dict[str, Any]:
