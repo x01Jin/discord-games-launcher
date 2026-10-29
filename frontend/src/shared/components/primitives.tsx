@@ -212,7 +212,7 @@ export function Switch({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={
-          "relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150 " +
+          "relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150 after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] " +
           (checked ? "bg-accent" : "bg-white/15 hover:bg-white/20")
         }
       >
@@ -258,7 +258,8 @@ export function Checkbox({
         onChange(!checked);
       }}
       className={[
-        "inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors duration-100",
+        "relative inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors duration-100",
+        "after:absolute after:-inset-1.5 after:content-['']",
         checked
           ? "border-accent bg-accent text-white"
           : "border-line-strong bg-transparent text-transparent hover:border-muted hover:text-muted/40",
@@ -296,7 +297,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
       {icon ? <div className="text-faint">{icon}</div> : null}
       <div className="space-y-1">
         <p className="text-[14px] font-semibold text-ink">{title}</p>

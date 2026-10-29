@@ -20,7 +20,7 @@ owns its own header, toolbar, and scroll region.
 App
 ├── Sidebar (228px, bg-base)
 │   ├── brand
-│   ├── nav: Quests / Catalogue / Library  (counts)
+│   ├── nav: Quests / Running / Catalogue / Library  (counts where useful)
 │   ├── Settings  (pinned above the client state)
 │   └── client state: Discord connection, running fakes
 ├── main (bg-canvas)
@@ -83,10 +83,14 @@ The default view. It reads the quest list from the running Discord client (see
   button while the launch argument is not installed. The count shows how many
   rows are visible, plus the total only when the filter hides some.
 - Rows: checkbox (only on rows that can be queued), art (video thumbnail for
-  watch quests), quest name, kind label, game and process name, reward chip,
-  time left (amber inside 24 h), progress bar once enrolled, and one action
-  chosen by the backend: Run, Stop, Accept, Watch (green), Phone, Done, or
-  Unsupported. A queued row shows a Queued chip; the video that is being
+  watch quests), quest name, one metadata line, reward chip, time left (amber
+  inside 24 h), progress bar once enrolled, and one action chosen by the
+  backend: Run, Stop, Accept, Watch (green), Phone, Done, or Unsupported. The
+  metadata line joins the kind label (non-play quests), the game name when it
+  adds something to the title, and the executable, with no repeated words: a
+  play quest on "Call of Duty: Modern Warfare 4" reads `sp26-cod.exe`. A
+  quest credited by another quest's session shows a Credited chip. A queued row
+  shows a Queued chip; the video that is being
   credited shows an accent Watching chip and its action becomes Stop, so the
   wait can be ended from the row. A quest credited by another quest's game run
   on the same application shows a Credited chip, and its Stop ends that shared
@@ -141,8 +145,8 @@ Games and videos in flight, plus what comes next.
 ## Library
 
 - Header: game count, running count, Refresh, Repair, Stop all.
-- Rows: art, name, running state, process name, Start/Stop, and a menu
-  with Start/Stop and Remove.
+- Rows: art, name, a second line with a state dot, the process name, and
+  Running or Stopped, Start/Stop, and a menu with Start/Stop and Remove.
 - The Repair button opens a confirmation dialog that says the deletion is permanent
   (see [Library Maintenance](./library-maintenance.md)).
 - Rows refresh from the backend `library_changed` event; there is no polling
@@ -150,7 +154,10 @@ Games and videos in flight, plus what comes next.
 
 ## Settings
 
-Three panels, no state of their own beyond one dialog flag.
+Three panels in one centered column capped at 880 px inside the page body, so
+a wide window gets equal gutters rather than a short strip of content beside a
+large empty pane. On a narrow window the column fills the body. No state of
+their own beyond one dialog flag.
 
 - Discord client: the channel and version from `status()`, and where the
   loopback endpoint is: `Port 9222` when connected, "Running without it" when
@@ -198,7 +205,14 @@ the connection line and the page never disagree and the client is probed once.
 ## Accessibility
 
 - Nav items expose `aria-current`; dialogs use `role="dialog"` with
-  `aria-modal` and move focus to the panel.
+  `aria-modal`, move focus to the panel, and keep Tab inside it.
+- Menus move focus to their first item on open, cycle with Arrow Up/Down,
+  Home, and End, and close on Escape with focus back on the button that opened
+  them.
+- Checkboxes and switches keep a visible 16 px box but accept clicks in a
+  larger area around it. Helper text uses the subtle grey rather than the
+  faint one, which stays above 4.5:1 on raised panels.
+- Axe-core 4.10.2 reports no WCAG 2 A or AA violations on any page.
 - Rows are real buttons or checkboxes, reachable by Tab, with visible
   `:focus-visible` rings in the accent colour.
 - Progress bars carry `aria-valuenow` and an accessible label.

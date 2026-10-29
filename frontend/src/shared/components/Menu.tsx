@@ -41,10 +41,40 @@ export function Menu({ x, y, items, onClose }: Props) {
       if (event.key === "Escape") {
         event.stopPropagation();
         onClose();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const buttons = Array.from(
+        ref.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not([disabled])",
+        ) ?? [],
+      );
+      if (buttons.length === 0) return;
+      event.preventDefault();
+      const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? buttons.length - 1
+            : event.key === "ArrowDown"
+              ? (current + 1) % buttons.length
+              : (current - 1 + buttons.length) % buttons.length;
+      buttons[next]?.focus();
+    };
+    const opener = document.activeElement as HTMLElement | null;
+    window.addEventListener("keydown", onKey);
+    ref.current
+      ?.querySelector<HTMLButtonElement>("button:not([disabled])")
+      ?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      // Give focus back to the button that opened the menu, unless the chosen
+      // item opened something else that already took it.
+      if (opener?.isConnected && document.activeElement === document.body) {
+        opener.focus();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   // Rendered at the document root: list rows use content-visibility, which
@@ -80,7 +110,7 @@ export function Menu({ x, y, items, onClose }: Props) {
               "flex w-full items-center gap-2 px-3 py-[7px] text-left text-[13px]",
               item.danger
                 ? "text-[#ff8f8f] hover:bg-danger hover:text-white"
-                : "text-muted hover:bg-accent hover:text-white",
+                : "text-muted hover:bg-hover hover:text-ink",
               "disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted",
             ].join(" ")}
           >

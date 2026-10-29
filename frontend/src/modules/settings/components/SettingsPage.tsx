@@ -39,7 +39,7 @@ function Panel({
         <div className="min-w-0">
           <h2 className="text-[13px] font-semibold text-ink">{title}</h2>
           {description ? (
-            <p className="mt-1 max-w-[480px] text-[12px] leading-[18px] text-subtle">
+            <p className="mt-1 text-[12px] leading-[18px] text-subtle">
               {description}
             </p>
           ) : null}
@@ -73,7 +73,7 @@ function LauncherRow({ launcher }: { launcher: SilentLauncher }) {
           {launcher.patched ? "Patched" : "Original"}
         </Chip>
       </div>
-      <p className="mt-1 truncate text-[11px] text-faint" title={launcher.location}>
+      <p className="mt-1 truncate text-[11px] text-subtle" title={launcher.location}>
         {launcher.location}
       </p>
       <code className="mt-1 block whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-subtle">
@@ -154,7 +154,7 @@ export function SettingsPage() {
       />
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[680px] flex-col gap-3 px-5 py-5">
+        <div className="mx-auto flex w-full max-w-[880px] flex-col gap-3 px-5 py-5">
           <Panel
             title="Discord client"
             description="Quests are read from the running client over a loopback endpoint, so the request stays on this machine."
@@ -168,9 +168,9 @@ export function SettingsPage() {
             description="How a dummy game behaves while it earns quest time. Both settings are saved on this machine and apply to the next run."
           >
             <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[12px] text-muted">Hide activity</p>
-                <p className="mt-0.5 max-w-[400px] text-[11px] leading-4 text-faint">
+                <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
                   Turn off Discord's own "Playing" status while a quest runs.
                   Your previous setting comes back when the run ends.
                 </p>
@@ -184,9 +184,9 @@ export function SettingsPage() {
             </div>
 
             <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[12px] text-muted">Play session tail</p>
-                <p className="mt-0.5 max-w-[400px] text-[11px] leading-4 text-faint">
+                <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
                   Keep the game running for a random slice of these minutes
                   after the target is reached, so a session does not stop on the
                   exact second. 0 stops immediately.
@@ -206,7 +206,7 @@ export function SettingsPage() {
                   className="h-7 w-14 rounded-[4px] border border-line-strong bg-base px-2 text-right text-[12px] tabular-nums text-ink outline-none focus:border-accent"
                   aria-label="Play session tail in minutes"
                 />
-                <span className="text-[11px] text-faint">min</span>
+                <span className="text-[12px] text-subtle">min</span>
               </label>
             </div>
           </Panel>
@@ -278,7 +278,7 @@ export function SettingsPage() {
               </p>
             )}
 
-            <p className="mt-2.5 text-[11px] leading-4 text-faint">
+            <p className="mt-2.5 text-[12px] leading-[18px] text-subtle">
               Removing the patch restores the exact command lines these entries
               had before. A Discord that is already open keeps the endpoint it
               started with until it is closed.

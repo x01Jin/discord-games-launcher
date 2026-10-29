@@ -46,9 +46,6 @@ export function Sidebar() {
       id: "catalogue",
       label: "Catalogue",
       icon: <CatalogueIcon size={16} />,
-      count: stats.data
-        ? stats.data.cached_games - stats.data.games_no_win_exes
-        : undefined,
       hint: "Games Discord can detect",
     },
     {

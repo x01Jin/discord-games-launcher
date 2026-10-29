@@ -100,6 +100,26 @@ def _quest_done(quest: dict[str, Any] | None) -> bool:
     return target > 0 and progress >= target
 
 
+def _accepted_on_application(
+    index: dict[str, dict[str, Any]], app_id: int | None
+) -> set[str]:
+    """Play quests Discord credits whenever that game runs.
+
+    The account accepted them, so they accrue progress whether or not the app
+    queued them. They keep the session open so the user does not have to start
+    the same game a second time for a quest they never selected.
+    """
+    if app_id is None:
+        return set()
+    return {
+        quest_id
+        for quest_id, quest in index.items()
+        if _application_id(quest.get("applicationId")) == app_id
+        and quest.get("kind") == "play"
+        and quest.get("enrolledAt")
+    }
+
+
 def derive_executable_name(game_name: str) -> str:
     """Best-effort executable name for a quest app missing from the cache.
 
@@ -240,30 +260,23 @@ class QuestService:
             self._decorate(quest, games.get(_application_id(quest.get("applicationId"))), learner)
             for quest in raw_quests
         ]
-        # Several quests can point at one game (one offer per region). Discord
-        # credits all of them while the game runs once, so the UI has to say so
-        # instead of showing what look like duplicates.
-        shared: dict[str, int] = {}
-        for quest in quests:
-            app = quest.get("application_id")
-            if app:
-                shared[app] = shared.get(app, 0) + 1
         with self._run_lock:
             queued = list(self._queue)
             active_ids = list(self._quest_apps.values())
             watching = self._watching
+            # The quest that started the process is not riding: only the extra
+            # quests credited by the same session are.
             riding = {
                 quest_id
                 for app_id, quest_ids in self._riders.items()
                 if app_id in self._quest_apps
                 for quest_id in quest_ids
+                if quest_id != self._quest_apps.get(app_id)
             }
         if watching is not None:
             queued.insert(0, watching)
         queued_set = set(queued)
         for quest in quests:
-            app = quest.get("application_id")
-            quest["shares_game_with"] = max(0, shared[app] - 1) if app else 0
             quest["queued"] = quest.get("id") in queued_set
             # A quest riding on another quest's game is already being credited,
             # so its row offers Stop instead of starting a duplicate process.
@@ -712,10 +725,11 @@ class QuestService:
             for app_id in apps:
                 if app_id in self._tails:
                     continue
-                # One process can credit several quests at once, so it only
-                # earns its tail once every quest riding on it is finished.
+                # One process credits every accepted quest on its game, so it
+                # only earns its tail once all of them are finished.
                 riders = self._riders.get(app_id) or {self._quest_apps.get(app_id, "")}
-                if not all(_quest_done(index.get(quest_id)) for quest_id in riders):
+                holding = riders | _accepted_on_application(index, app_id)
+                if not all(_quest_done(index.get(quest_id)) for quest_id in holding):
                     continue
                 # Between 40% and 100% of the configured tail, per run.
                 seconds = random.uniform(0.4, 1.0) * max(0, tail_minutes) * 60.0

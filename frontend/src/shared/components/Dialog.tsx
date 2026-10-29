@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { CloseIcon } from "./icons";
 import { IconButton } from "./primitives";
 
@@ -28,6 +28,7 @@ export function Dialog({
   danger = false,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +36,32 @@ export function Dialog({
       if (event.key === "Escape") {
         event.stopPropagation();
         onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), ' +
+            'select:not([disabled]), textarea:not([disabled]), ' +
+            '[tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === panel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -61,13 +88,14 @@ export function Dialog({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         tabIndex={-1}
         style={{ width, animation: "dcgl-rise 140ms ease-out" }}
         className="max-w-full rounded-[8px] bg-raised shadow-2xl outline-none"
       >
         <div className="flex items-start justify-between gap-4 px-5 pt-5">
           <h2
+            id={titleId}
             className={
               "text-[16px] font-semibold " + (danger ? "text-[#ff8f8f]" : "text-ink")
             }

@@ -187,11 +187,11 @@ export function CataloguePage() {
               Clear
             </Button>
           </>
-        ) : (
+        ) : games.length > 0 ? (
           <span className="text-[12px] text-subtle">
             Select rows to add several at once
           </span>
-        )}
+        ) : null}
       </Toolbar>
 
       {body}

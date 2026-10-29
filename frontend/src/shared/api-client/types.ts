@@ -128,7 +128,6 @@ export interface QuestGame {
   process_name: string | null;
   in_library: boolean;
   is_running: boolean;
-  shares_game_with: number;
   /** Another quest's game session is already crediting this one. */
   riding: boolean;
   state: QuestState;

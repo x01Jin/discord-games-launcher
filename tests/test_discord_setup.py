@@ -147,6 +147,17 @@ def test_launcher_patched_flag_matches_the_command_line():
     assert plain.patched is False
 
 
+def test_summary_reports_the_port_already_on_the_entries(monkeypatch):
+    launcher = Launcher(
+        "Start menu",
+        "x",
+        SHORTCUT_TARGET,
+        with_switch("", SHORTCUT_TARGET, port=9222),
+    )
+    monkeypatch.setattr(discord_setup, "discover", lambda: [launcher])
+    assert discord_setup.summary()["port"] == 9222
+
+
 def test_summary_shape_without_touching_the_machine(monkeypatch):
     monkeypatch.setattr(discord_setup, "discover", list)
     state = discord_setup.summary()

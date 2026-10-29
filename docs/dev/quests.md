@@ -100,6 +100,10 @@ restart after every manual launch, `launcher/discord_setup.py` adds
 | Desktop        | the user's and the Public desktop                                          |
 | Taskbar        | the pinned `Discord.lnk`                                                   |
 
+The default port is 9223. The Settings page reports the port the entries
+actually carry, so a machine already patched to 9222 shows 9222 rather than
+the default.
+
 Squirrel launches Discord from shortcuts as
 `Update.exe --processStart Discord.exe`, so the flag goes into
 `--process-start-args "--remote-debugging-port=9223"` instead of being appended
@@ -188,8 +192,9 @@ catalogue cache:
   The next catalogue sync overwrites that row with real data.
 
 Two quests can point at the same application (Discord ships one offer per
-region). Running the game once credits all of them, so each row reports
-`shares_game_with` instead of looking like a duplicate.
+region). Running the game once credits all of them: the first row shows
+Running, the others show Credited while that session is alive, and the session
+lasts until the last of them is finished.
 
 ## States and actions
 

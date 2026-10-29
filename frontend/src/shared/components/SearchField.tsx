@@ -41,7 +41,7 @@ export function SearchField({
             ref.current?.blur();
           }
         }}
-        className="h-full w-full bg-transparent pl-8 pr-8 text-[13px] text-ink placeholder:text-faint focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+        className="h-full w-full bg-transparent pl-8 pr-8 text-[13px] text-ink placeholder:text-subtle focus:outline-none [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button

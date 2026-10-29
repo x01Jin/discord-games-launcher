@@ -512,9 +512,21 @@ def summary(port: int = SILENT_PORT) -> dict[str, Any]:
     """Cheap view of the launcher state, safe to poll."""
     launchers = discover()
     patched = [launcher for launcher in launchers if launcher.patched]
+    patched_ports = {
+        found for found in (_port_of(launcher.arguments) for launcher in patched) if found is not None
+    }
+    # Report the port the entries actually carry, so the UI never names one port
+    # while every command line starts Discord with another.
+    active_port = (
+        next(iter(patched_ports))
+        if patched
+        and len(patched) == len(launchers)
+        and len(patched_ports) == 1
+        else port
+    )
     marker = _read_marker()
     return {
-        "port": port,
+        "port": active_port,
         "enabled": bool(launchers) and len(patched) == len(launchers),
         "wanted": bool(marker.get("enabled")),
         "patched": len(patched),

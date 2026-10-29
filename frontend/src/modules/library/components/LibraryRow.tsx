@@ -3,7 +3,7 @@ import type { LibraryGame } from "../../../shared/api-client";
 import { GameArt } from "../../../shared/components/GameArt";
 import { Menu, type MenuItem } from "../../../shared/components/Menu";
 import { MoreIcon, PlayIcon, StopIcon, TrashIcon } from "../../../shared/components/icons";
-import { Button, IconButton } from "../../../shared/components/primitives";
+import { Button, IconButton, StatusDot } from "../../../shared/components/primitives";
 
 interface Props {
   game: LibraryGame;
@@ -34,22 +34,25 @@ export function LibraryRow({ game, busy, onToggle, onRemove }: Props) {
       <GameArt name={game.name} gameId={game.game_id} iconHash={game.icon_hash} size={36} />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate-1 text-[13px] font-medium text-ink" title={game.name}>
-            {game.name}
-          </p>
+        <p className="truncate-1 text-[13px] font-medium text-ink" title={game.name}>
+          {game.name}
+        </p>
+        <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-subtle">
+          <StatusDot tone={game.is_running ? "success" : "neutral"} />
+          <span className="truncate" title={game.process_name}>
+            {game.process_name}
+          </span>
+          <span aria-hidden="true" className="shrink-0 text-faint">
+            ·
+          </span>
           <span
             className={
-              "shrink-0 text-[11px] font-medium " +
-              (game.is_running ? "text-success" : "text-faint")
+              "shrink-0 " + (game.is_running ? "text-success" : "")
             }
           >
             {game.is_running ? "Running" : "Stopped"}
           </span>
         </div>
-        <p className="truncate-1 text-[12px] leading-4 text-subtle" title={game.process_name}>
-          {game.process_name}
-        </p>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

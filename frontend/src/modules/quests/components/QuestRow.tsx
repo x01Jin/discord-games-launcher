@@ -50,6 +50,15 @@ export function QuestRow({
     typeof quest.seconds_left === "number" &&
     quest.seconds_left > 0 &&
     quest.seconds_left < 86_400;
+  // The title is often the game name too, so only repeat it when it differs.
+  const meta =
+    [
+      quest.kind === "play" ? "" : KIND_LABEL[quest.kind],
+      quest.game_name && quest.game_name !== quest.name ? quest.game_name : "",
+      quest.process_name,
+    ]
+      .filter(Boolean)
+      .join(" · ") || KIND_LABEL[quest.kind];
 
   return (
     <div
@@ -115,25 +124,9 @@ export function QuestRow({
               Not accepted
             </Chip>
           ) : null}
-          {quest.shares_game_with > 0 ? (
-            <Chip
-              tone="accent"
-              title={
-                quest.shares_game_with +
-                " other quest(s) reward this same game. Discord credits all of " +
-                "them while it runs once."
-              }
-            >
-              +{quest.shares_game_with} more
-            </Chip>
-          ) : null}
         </div>
-        <p className="truncate-1 text-[12px] leading-4 text-subtle">
-          {KIND_LABEL[quest.kind]}
-          {quest.kind === "play" && quest.game_name ? " · " + quest.game_name : ""}
-          {quest.process_name ? (
-            <span className="text-faint"> · {quest.process_name}</span>
-          ) : null}
+        <p className="truncate-1 text-[12px] leading-4 text-subtle" title={meta}>
+          {meta}
         </p>
 
         {showProgress ? (

@@ -150,7 +150,7 @@ export function QuestConnectPanel({
             <StatusDot tone={status.running ? "success" : "neutral"} />
             {status.running ? "Running" : "Stopped"}
             {status.version ? (
-              <span className="text-faint">
+              <span className="text-subtle">
                 {status.channel} {status.version}
               </span>
             ) : null}
@@ -167,7 +167,7 @@ export function QuestConnectPanel({
             <StatusDot tone={setupDone ? "success" : "neutral"} />
             {setupDone ? "on" : "off"}
             {silent && (silent.total ?? 0) > 0 ? (
-              <span className="text-faint">
+              <span className="text-subtle">
                 {silent.patched ?? 0} of {silent.total ?? 0} launch entries
               </span>
             ) : null}

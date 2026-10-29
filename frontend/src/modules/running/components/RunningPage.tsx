@@ -203,7 +203,7 @@ export function RunningPage() {
                 <p className="text-[11px] font-bold uppercase tracking-[0.02em] text-subtle">
                   Now
                 </p>
-                <span className="text-[11px] text-faint">
+                <span className="text-[11px] text-subtle">
                   {running.length} active
                 </span>
               </div>
@@ -234,7 +234,7 @@ export function RunningPage() {
             <p className="text-[11px] font-bold uppercase tracking-[0.02em] text-subtle">
               Up next
             </p>
-            <span className="text-[11px] text-faint">
+            <span className="text-[11px] text-subtle">
               {pending.length ? pending.length + " waiting" : "empty"}
             </span>
           </div>
@@ -246,7 +246,7 @@ export function RunningPage() {
             </p>
           ) : (
             <>
-              <p className="px-5 pb-2 text-[11px] text-faint">
+              <p className="px-5 pb-2 text-[11px] text-subtle">
                 Each lane runs top to bottom on its own. A video starts while a
                 game keeps running.
               </p>
@@ -260,12 +260,12 @@ export function RunningPage() {
                       <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-subtle">
                         {lane.label}
                       </p>
-                      <span className="text-[11px] text-faint">
+                      <span className="text-[11px] text-subtle">
                         {lane.items.length}
                       </span>
                     </div>
                     {lane.items.length === 0 ? (
-                      <p className="px-3 py-3 text-[11px] text-faint">{lane.empty}</p>
+                      <p className="px-3 py-3 text-[11px] text-subtle">{lane.empty}</p>
                     ) : (
                       lane.items.map((quest, index) => (
                         <QueueRow
@@ -311,7 +311,7 @@ function QueueRow({
 }) {
   return (
     <div className="row-skip flex items-center gap-2 border-b border-line px-3 py-2 transition-colors duration-100 last:border-b-0 hover:bg-hover">
-      <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-faint">
+      <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-subtle">
         {index + 1}
       </span>
       <GameArt

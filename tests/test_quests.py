@@ -249,19 +249,6 @@ def test_missing_application_id_is_unresolved(game_manager):
     assert entry["state"] == "unresolved"
 
 
-def test_shared_game_count(game_manager, cached_game):
-    native = FakeNative(
-        payload=payload(
-            quest("1", name="A"),
-            quest("2", name="B"),
-            quest("3", name="C", app_id="999"),
-        )
-    )
-    listing = make_service(game_manager, native).list_quests()
-    counts = {q["name"]: q["shares_game_with"] for q in listing["quests"]}
-    assert counts == {"A": 1, "B": 1, "C": 0}
-
-
 def test_list_quests_is_cached_and_invalidated(game_manager, cached_game):
     native = FakeNative(payload=payload(quest()))
     service = make_service(game_manager, native, ttl=60.0)
@@ -964,7 +951,7 @@ def test_queued_quests_on_one_game_share_a_single_process(
     assert service._riders[100] == {"1", "2"}
     listing = service.list_quests()
     by_id = {quest["id"]: quest for quest in listing["quests"]}
-    assert by_id["1"]["riding"] is True
+    assert by_id["1"]["riding"] is False
     assert by_id["2"]["riding"] is True
     assert by_id["2"]["action"] == "stop"
 
@@ -1005,6 +992,39 @@ def test_tail_waits_for_every_quest_on_the_same_game(
     service._monitor_tick(1130.5)
     assert stopped == [100]
     assert service._riders == {}
+
+
+def test_tail_waits_for_an_accepted_quest_that_was_never_queued(
+    game_manager, cached_game, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(game_manager.process_mgr, "is_running", lambda app_id: True)
+    stopped = []
+    monkeypatch.setattr(
+        game_manager, "stop_game", lambda gid: (stopped.append(gid), (True, "stopped"))[1]
+    )
+    monkeypatch.setattr("launcher.quests.random.uniform", lambda low, high: high)
+    monkeypatch.setattr(game_manager, "start_game", lambda gid: (True, "started"))
+    native = FakeNative(
+        payload=payload(
+            quest("1", name="First", progress=100, target=900),
+            quest("2", name="Second", progress=100, target=900),
+        )
+    )
+    service = make_service(game_manager, native, prefs_path=tmp_path / "s.json")
+    service.start_quest("1")
+
+    service._monitor_tick(1000.0)
+    # Quest 1 is done but quest 2 was never queued. The account accepted it,
+    # so the running game is crediting it and the session stays up.
+    assert service._tails == {}
+    assert stopped == []
+
+    native.payload = payload(
+        quest("1", name="First", progress=900, target=900),
+        quest("2", name="Second", progress=900, target=900),
+    )
+    service._monitor_tick(1010.0)
+    assert service._tails == {100: 1010.0 + 120.0}
 
 
 def test_stopping_a_shared_session_clears_the_riders(

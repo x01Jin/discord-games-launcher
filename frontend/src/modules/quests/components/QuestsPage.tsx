@@ -523,7 +523,7 @@ function MenuButton({
         }
         title={label + ": " + value}
       >
-        <span className="text-faint">{label}</span>
+        <span className="text-subtle">{label}</span>
         {value}
         <ChevronDownIcon size={11} />
       </button>
