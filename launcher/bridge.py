@@ -421,6 +421,30 @@ class Bridge:
             return {"ok": False, "message": f"Could not skip the video: {e}"}
         return {"ok": ok, "message": message}
 
+    def reorder_quest_queue(self, quest_ids: list[str] | None = None) -> dict[str, Any]:
+        """Put the pending queue in the order the user dragged it into."""
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(quest_ids, (list, tuple)):
+            return {"ok": False, "message": "Invalid queue order"}
+        try:
+            ok, message = self.quest_service.reorder_queue(list(quest_ids))
+        except (OSError, ValueError, TypeError) as e:
+            return {"ok": False, "message": f"Could not reorder the queue: {e}"}
+        return {"ok": ok, "message": message}
+
+    def remove_from_quest_queue(self, quest_id: str) -> dict[str, Any]:
+        """Drop one quest from the pending queue."""
+        if self.quest_service is None:
+            return {"ok": False, "message": "Quest support is unavailable in this build."}
+        if not isinstance(quest_id, str) or not quest_id.strip():
+            return {"ok": False, "message": "Invalid quest id"}
+        try:
+            ok, message = self.quest_service.drop_queue_item(quest_id.strip())
+        except (OSError, ValueError, TypeError) as e:
+            return {"ok": False, "message": f"Could not update the queue: {e}"}
+        return {"ok": ok, "message": message}
+
     def get_quest_prefs(self) -> dict[str, Any]:
         if self.quest_service is None:
             return {"ok": False, "prefs": quest_prefs.DEFAULTS}

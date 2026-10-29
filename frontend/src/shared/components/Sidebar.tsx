@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import logoUrl from "../../assets/dcgl.png";
-import { useQuestStatus } from "../hooks/useQuests";
+import { useQuests, useQuestStatus } from "../hooks/useQuests";
 import { useStats } from "../hooks/useStats";
 import { formatCount } from "../lib/format";
 import { useUiStore, type Page } from "../store/ui-store";
@@ -8,6 +8,7 @@ import {
   CatalogueIcon,
   DiscordIcon,
   LibraryIcon,
+  PlayIcon,
   QuestsIcon,
   SettingsIcon,
 } from "./icons";
@@ -26,9 +27,21 @@ export function Sidebar() {
   const page = useUiStore((state) => state.page);
   const setPage = useUiStore((state) => state.setPage);
   const stats = useStats();
+  const { data: questsData } = useQuests();
+  const activeQuests =
+    (questsData?.quests ?? []).filter((quest) => quest.state === "running").length +
+    // queue.ids starts with the video the queue is watching, when there is one.
+    (questsData?.queue?.ids.length ?? 0);
 
   const entries: NavEntry[] = [
     { id: "quests", label: "Quests", icon: <QuestsIcon size={16} />, hint: "Offers from the running client" },
+    {
+      id: "running",
+      label: "Running",
+      icon: <PlayIcon size={16} />,
+      count: activeQuests || undefined,
+      hint: "Games and videos in progress, plus the queue",
+    },
     {
       id: "catalogue",
       label: "Catalogue",

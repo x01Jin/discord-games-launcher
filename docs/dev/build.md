@@ -29,7 +29,7 @@ A missing input stops the build with the command that produces it, instead of a 
 `launcher/__init__.py` holds the version:
 
 ```python
-__version__ = "3.2.0"
+__version__ = "3.3.1"
 ```
 
 `main.py` imports it as `APP_VERSION` for the startup banner, and `dcgl.spec` reads it to generate `build/version_info.txt`, which becomes the Windows version resource. Explorer Properties shows that number under FileVersion and ProductVersion. Bump it in one place and rebuild; nothing else needs editing.

@@ -87,11 +87,15 @@ The default view. It reads the quest list from the running Discord client (see
   time left (amber inside 24 h), progress bar once enrolled, and one action
   chosen by the backend: Run, Stop, Accept, Watch (green), Phone, Done, or
   Unsupported. A queued row shows a Queued chip; the video that is being
-  credited shows an accent Watching chip, and its Watch button is disabled.
+  credited shows an accent Watching chip and its action becomes Stop, so the
+  wait can be ended from the row. A quest credited by another quest's game run
+  on the same application shows a Credited chip, and its Stop ends that shared
+  session.
 - Selection: every unfinished play or video quest gets a checkbox, accepted or
-  not. Start selected accepts the quests that need it, runs play quests one at a
-  time, and credits video quests in the background, moving on when each one
-  completes. The queue bar names what is running or which video is playing, with
+  not. Start selected accepts the quests that need it and queues them in two
+  lanes: games run one after another, videos are credited in the background.
+  The lanes do not block each other, so a video starts while a game keeps
+  running. The queue bar names what is running or which video is playing, with
   Skip video and Clear queue.
 - Accept: shown for a play quest that was never accepted. It enrolls through the
   running client without opening a window; the row turns into Run once the
@@ -101,6 +105,25 @@ The default view. It reads the quest list from the running Discord client (see
   the three steps of the setup; with the setup done but the client still
   started before it, the panel says one restart finishes it. The copy is short
   because the panel sits in a ~530 px column.
+
+## Running
+
+Games and videos in flight, plus what comes next.
+
+- Header: subtitle counts games, the video, and queued quests separately;
+  Refresh and Clear queue (which stops the video and empties the queue, leaving
+  a running game alone).
+- Now: the video being credited and every running game, as full quest rows with
+  Stop. A video row carries the Watching chip, and quests sharing one game
+  process show Running plus Credited.
+- Up next: the queued quests grouped into their two lanes, Videos and Games,
+  both always shown with a count, so an empty lane says so instead of
+  disappearing. Each row has its position, art, name, kind, reward chip,
+  progress, and Move up / Move down / Remove. Moving a row reorders that lane
+  only. The Now section is not split: the video and the games run together.
+- Empty states: Discord not connected (with Open Quests) and nothing moving
+  (with Open Quests). The sidebar entry shows the count of active plus queued
+  quests.
 
 ## Catalogue
 

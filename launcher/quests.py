@@ -63,25 +63,41 @@ def _asset_url(path: Any) -> str | None:
     return ASSET_BASE + path.lstrip("/")
 
 
-def _completed_applications(payload: dict[str, Any]) -> set[int]:
-    """Application ids whose desktop-play quest reached its target."""
-    done: set[int] = set()
+def _quest_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Quest payload keyed by quest id."""
+    index: dict[str, dict[str, Any]] = {}
     for quest in payload.get("quests") or []:
         if not isinstance(quest, dict):
             continue
-        if quest.get("kind") != "play":
-            continue
-        app_id = _application_id(quest.get("applicationId"))
-        if app_id is None:
-            continue
-        try:
-            target = int(quest.get("target") or 0)
-            progress = int(quest.get("progress") or 0)
-        except (TypeError, ValueError):
-            continue
-        if target > 0 and progress >= target:
-            done.add(app_id)
-    return done
+        quest_id = quest.get("id")
+        if isinstance(quest_id, str) and quest_id:
+            index[quest_id] = quest
+    return index
+
+
+def _quest_done(quest: dict[str, Any] | None) -> bool:
+    """True when a quest stops holding a game session open.
+
+    A quest that is gone from Discord, finished, or no longer credits play time
+    cannot be helped by leaving the process alive, so it counts as done.
+    """
+    if quest is None:
+        return True
+    if quest.get("kind") != "play":
+        return True
+    if quest.get("state") in ("completed", "expired"):
+        return True
+    if quest.get("completedAt"):
+        return True
+    expires_at = _parse_time(quest.get("expiresAt"))
+    if expires_at is not None and expires_at <= datetime.now(timezone.utc):
+        return True
+    try:
+        target = int(quest.get("target") or 0)
+        progress = int(quest.get("progress") or 0)
+    except (TypeError, ValueError):
+        return False
+    return target > 0 and progress >= target
 
 
 def derive_executable_name(game_name: str) -> str:
@@ -135,6 +151,9 @@ class QuestService:
         # hide-activity switch know when the last one ends.
         self._run_lock = threading.Lock()
         self._quest_apps: dict[int, str] = {}
+        # One game session credits every quest pointing at that application, so
+        # each running app keeps the set of quest ids it is working on.
+        self._riders: dict[int, set[str]] = {}
         self._tails: dict[int, float] = {}
         self._queue: list[str] = []
         # The video quest the queue is crediting progress for.
@@ -233,6 +252,12 @@ class QuestService:
             queued = list(self._queue)
             active_ids = list(self._quest_apps.values())
             watching = self._watching
+            riding = {
+                quest_id
+                for app_id, quest_ids in self._riders.items()
+                if app_id in self._quest_apps
+                for quest_id in quest_ids
+            }
         if watching is not None:
             queued.insert(0, watching)
         queued_set = set(queued)
@@ -240,6 +265,15 @@ class QuestService:
             app = quest.get("application_id")
             quest["shares_game_with"] = max(0, shared[app] - 1) if app else 0
             quest["queued"] = quest.get("id") in queued_set
+            # A quest riding on another quest's game is already being credited,
+            # so its row offers Stop instead of starting a duplicate process.
+            quest["riding"] = quest.get("id") in riding
+            if quest.get("riding"):
+                quest["action"] = "stop"
+            # A video in flight has no game process behind it, so the row would
+            # still offer Watch. The queue owns it; offer Stop instead.
+            if watching is not None and quest.get("id") == watching:
+                quest["action"] = "stop"
         quests.sort(key=_sort_key)
 
         return {
@@ -430,6 +464,18 @@ class QuestService:
         if app_id is None:
             return False, "Discord did not send an application id for that quest"
 
+        with self._run_lock:
+            primary = self._quest_apps.get(app_id)
+        if primary is not None or self.manager.process_mgr.is_running(app_id):
+            # A second launch of the same executable shows up as a second
+            # identical game in Discord's activity and earns nothing extra.
+            # One session credits every quest that points at the application.
+            self._add_rider(app_id, quest_id, primary)
+            return True, (
+                "That game is already running, so this quest is credited by "
+                "the same session"
+            )
+
         if not quest.get("in_library"):
             try:
                 registered = self._ensure_registered(app_id, quest)
@@ -463,6 +509,11 @@ class QuestService:
         return True, "Quest accepted"
 
     def stop_quest(self, quest_id: str) -> tuple[bool, str]:
+        with self._run_lock:
+            watching = self._watching
+        if watching is not None and quest_id == watching:
+            self._stop_watching(quest_id, "Stopped watching the video")
+            return True, "Stopped watching the video"
         quest = self._find(quest_id)
         if quest is None:
             return False, "That quest is no longer in Discord's list"
@@ -542,13 +593,28 @@ class QuestService:
     def _track_start(self, app_id: int, quest_id: str) -> None:
         with self._run_lock:
             self._quest_apps[app_id] = str(quest_id)
+            self._riders[app_id] = {str(quest_id)}
             self._tails.pop(app_id, None)
         self._hide_activity()
         self._start_monitor()
 
+    def _add_rider(self, app_id: int, quest_id: str, primary: str | None) -> None:
+        """Credit one more quest from a game session that is already running."""
+        with self._run_lock:
+            self._quest_apps.setdefault(app_id, str(primary or quest_id))
+            riders = self._riders.setdefault(app_id, set())
+            if primary:
+                riders.add(str(primary))
+            riders.add(str(quest_id))
+            self._tails.pop(app_id, None)
+        self._hide_activity()
+        self._start_monitor()
+        self.invalidate()
+
     def _track_stop(self, app_id: int) -> None:
         with self._run_lock:
             self._quest_apps.pop(app_id, None)
+            self._riders.pop(app_id, None)
             self._tails.pop(app_id, None)
             idle = not self._quest_apps
         if idle:
@@ -560,6 +626,7 @@ class QuestService:
         with self._run_lock:
             self._watching = None
             self._queue.clear()
+            self._riders.clear()
             self._watch_seconds = 0.0
             self._watch_last = 0.0
             self._watch_next = 0.0
@@ -625,6 +692,7 @@ class QuestService:
             for app_id in list(self._quest_apps):
                 if app_id not in apps:
                     self._quest_apps.pop(app_id, None)
+                    self._riders.pop(app_id, None)
                     self._tails.pop(app_id, None)
             idle = not self._quest_apps
 
@@ -639,10 +707,15 @@ class QuestService:
         except (DiscordNativeError, OSError):
             return
 
-        completed = _completed_applications(payload)
+        index = _quest_index(payload)
         with self._run_lock:
             for app_id in apps:
-                if app_id in self._tails or app_id not in completed:
+                if app_id in self._tails:
+                    continue
+                # One process can credit several quests at once, so it only
+                # earns its tail once every quest riding on it is finished.
+                riders = self._riders.get(app_id) or {self._quest_apps.get(app_id, "")}
+                if not all(_quest_done(index.get(quest_id)) for quest_id in riders):
                     continue
                 # Between 40% and 100% of the configured tail, per run.
                 seconds = random.uniform(0.4, 1.0) * max(0, tail_minutes) * 60.0
@@ -747,6 +820,7 @@ class QuestService:
             return
         with self._run_lock:
             self._quest_apps.pop(app_id, None)
+            self._riders.pop(app_id, None)
         self.invalidate()
         self._log("info", f"Quest session ended: {message if not ok else 'stopped'}")
 
@@ -759,8 +833,8 @@ class QuestService:
             pass
 
     # -- queue -------------------------------------------------------------
-    # Discord only credits one running game at a time, so selected quests run
-    # in order: the next one starts when the previous one stops.
+    # Discord credits one running game and one video at a time; the two are
+    # independent lanes, each run in the order the quests were selected.
     def start_queue(self, quest_ids: list[str]) -> tuple[bool, str]:
         if not isinstance(quest_ids, (list, tuple)):
             return False, "Invalid quest selection"
@@ -830,53 +904,138 @@ class QuestService:
         self._stop_watching(quest_id, "Skipped the waiting video")
         return True, "Skipped the video and moved on"
 
-    def _pump(self) -> None:
-        """Start the next queued quest when nothing is running or waiting."""
-        while True:
-            with self._run_lock:
-                if self._quest_apps or self._watching is not None or not self._queue:
-                    return
-                quest_id = self._queue[0]
+    def reorder_queue(self, quest_ids: list[str]) -> tuple[bool, str]:
+        """Put the pending queue in the given order.
+
+        Only ids already in the queue are taken, in the order given; anything
+        the caller left out keeps its place at the end. The quest that is
+        running or being watched is not part of the queue and cannot move.
+        """
+        if not isinstance(quest_ids, (list, tuple)):
+            return False, "Invalid queue order"
+        with self._run_lock:
+            current = list(self._queue)
+            if not current:
+                return False, "The queue is empty"
+            order: list[str] = []
+            for raw in quest_ids:
+                if not isinstance(raw, str):
+                    continue
+                quest_id = raw.strip()
+                if quest_id in current and quest_id not in order:
+                    order.append(quest_id)
+            if not order:
+                return False, "That order named no queued quest"
+            order.extend(quest_id for quest_id in current if quest_id not in order)
+            if order == current:
+                return True, "The queue is already in that order"
+            self._queue[:] = order
+        return True, "Queue reordered"
+
+    def drop_queue_item(self, quest_id: str) -> tuple[bool, str]:
+        """Take one quest out of the pending queue without clearing the rest."""
+        with self._run_lock:
+            if quest_id not in self._queue:
+                return False, "That quest is not waiting in the queue"
+            self._queue.remove(quest_id)
+            left = len(self._queue)
+        return True, f"Removed it from the queue, {left} left"
+
+    def _next_queued(self, kind: str, skip: str | None = None) -> str | None:
+        """First pending quest of one kind, keeping the caller's order."""
+        with self._run_lock:
+            pending = list(self._queue)
+        for quest_id in pending:
+            if quest_id == skip:
+                continue
             quest = self._find(quest_id)
-            if quest is not None and quest.get("kind") == "watch":
-                if not quest.get("enrolled"):
-                    try:
-                        self.native.accept_quest(quest_id)
-                    except (DiscordNativeError, OSError) as exc:
-                        self._log(
-                            "warning", f"Queued video quest could not be accepted: {exc}"
-                        )
-                now = time.monotonic()
+            if quest is not None and quest.get("kind") == kind:
+                return quest_id
+        return None
+
+    def _pump(self) -> None:
+        """Start the next queued quest in each lane.
+
+        Discord credits one game and one video at a time, but the two lanes are
+        independent: a video starts while a game keeps running, and the next
+        game starts as soon as the previous one stops.
+        """
+        self._start_watching()
+        self._start_playing()
+
+    def _start_watching(self) -> bool:
+        with self._run_lock:
+            if self._watching is not None:
+                return False
+        quest_id = self._next_queued("watch")
+        if quest_id is None:
+            return False
+        quest = self._find(quest_id) or {}
+        if not quest.get("enrolled"):
+            try:
+                self.native.accept_quest(quest_id)
+            except (DiscordNativeError, OSError) as exc:
+                self._log("warning", f"Queued video quest could not be accepted: {exc}")
+        now = time.monotonic()
+        with self._run_lock:
+            if quest_id in self._queue:
+                self._queue.remove(quest_id)
+            self._watching = quest_id
+            self._watching_at = now
+            # First progress post after one player-sized beat.
+            self._watch_seconds = 0.0
+            self._watch_last = now
+            self._watch_next = now + random.uniform(7.0, 9.5)
+            self._watch_checked_at = now
+        self.invalidate()
+        self._start_monitor()
+        self._log(
+            "info",
+            f"Watching the video quest {quest.get('name')!r} in the background",
+        )
+        return True
+
+    def _start_playing(self) -> bool:
+        while True:
+            quest_id = self._next_queued("play")
+            if quest_id is None:
+                return False
+            quest = self._find(quest_id) or {}
+            app_id = _application_id(quest.get("application_id"))
+            with self._run_lock:
+                busy = bool(self._quest_apps)
+                primary = self._quest_apps.get(app_id) if app_id is not None else None
+            if primary is not None:
+                # The game for this quest is already running for another quest.
+                # Discord credits both at once, so it joins that session.
+                self._add_rider(app_id, quest_id, primary)
                 with self._run_lock:
-                    if self._queue and self._queue[0] == quest_id:
-                        self._queue.pop(0)
-                    self._watching = quest_id
-                    self._watching_at = now
-                    # First progress post after one player-sized beat.
-                    self._watch_seconds = 0.0
-                    self._watch_last = now
-                    self._watch_next = now + random.uniform(7.0, 9.5)
-                    self._watch_checked_at = now
-                self.invalidate()
-                self._start_monitor()
+                    if quest_id in self._queue:
+                        self._queue.remove(quest_id)
                 self._log(
                     "info",
-                    f"Watching the video quest {quest.get('name')!r} in the background",
+                    f"Crediting {quest.get('name')!r} on the running "
+                    f"{quest.get('game_name')!r} session",
                 )
-                return
+                continue
+            if busy:
+                # One game at a time: a different game has to wait.
+                return False
             try:
                 ok, message = self.start_quest(quest_id)
             except (DiscordNativeError, OSError, ValueError) as exc:
                 ok, message = False, str(exc)
             if ok:
                 with self._run_lock:
-                    if self._queue and self._queue[0] == quest_id:
-                        self._queue.pop(0)
-                return
-            # Leave the id at the head so the next tick retries. Draining the
-            # queue against a disconnected client would lose the selection.
+                    if quest_id in self._queue:
+                        self._queue.remove(quest_id)
+                # Keep going: other queued quests for the same application can
+                # join the session instead of waiting for a second launch.
+                continue
+            # Leave the id queued so the next tick retries. Draining the queue
+            # against a disconnected client would lose the selection.
             self._log("warning", f"Queued quest did not start: {message}")
-            return
+            return False
 
 class LibState:
     """Per-request library membership cache.

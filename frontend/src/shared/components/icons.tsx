@@ -104,6 +104,18 @@ export const ChevronDownIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ArrowUpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </Svg>
+);
+
+export const ArrowDownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 5v14M6 13l6 6 6-6" />
+  </Svg>
+);
+
 export const MoreIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="5.5" r="1.6" fill="currentColor" stroke="none" />

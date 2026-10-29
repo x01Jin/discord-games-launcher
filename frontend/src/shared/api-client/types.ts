@@ -129,6 +129,8 @@ export interface QuestGame {
   in_library: boolean;
   is_running: boolean;
   shares_game_with: number;
+  /** Another quest's game session is already crediting this one. */
+  riding: boolean;
   state: QuestState;
   /** Waiting in the start queue, behind a quest that is still running. */
   queued: boolean;
@@ -251,6 +253,8 @@ export interface PywebviewApi {
   start_quest_queue(quest_ids: string[]): Promise<MutResult>;
   clear_quest_queue(): Promise<ClearQueueResult>;
   skip_quest_watch(): Promise<MutResult>;
+  reorder_quest_queue(quest_ids: string[]): Promise<MutResult>;
+  remove_from_quest_queue(quest_id: string): Promise<MutResult>;
   get_quest_prefs(): Promise<QuestPrefsResult>;
   set_quest_prefs(values: Partial<QuestPrefs>): Promise<QuestPrefsResult>;
 

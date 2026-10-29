@@ -91,6 +91,14 @@ export function QuestRow({
               Queued
             </Chip>
           ) : null}
+          {quest.riding && !watching ? (
+            <Chip
+              tone="success"
+              title="The game run for another quest already credits this one, so only one process is running."
+            >
+              Credited
+            </Chip>
+          ) : null}
           {quest.kind === "watch" ? (
             <Chip title="This one has to be watched inside Discord">Video</Chip>
           ) : null}
@@ -200,7 +208,20 @@ function QuestAction({
   switch (quest.action) {
     case "stop":
       return (
-        <Button variant="secondary" size="sm" busy={busy} icon={<StopIcon size={11} />} onClick={onStop}>
+        <Button
+          variant="secondary"
+          size="sm"
+          busy={busy}
+          icon={<StopIcon size={11} />}
+          onClick={onStop}
+          title={
+            quest.kind === "watch"
+              ? "Stop watching this video. The queue moves on to the next quest."
+              : quest.riding
+                ? "Stop the shared game session. Every quest credited by this process stops with it."
+                : "Stop the game session."
+          }
+        >
           Stop
         </Button>
       );

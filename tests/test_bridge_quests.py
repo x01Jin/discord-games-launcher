@@ -156,6 +156,38 @@ def test_skip_quest_watch_delegates(game_manager, quest_payload, tmp_path, monke
     assert result["message"] == "Skipped the video"
 
 
+def test_reorder_quest_queue_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    calls = []
+    monkeypatch.setattr(
+        bridge.quest_service,
+        "reorder_queue",
+        lambda ids: (calls.append(ids), (True, "Queue reordered"))[1],
+    )
+    result = bridge.reorder_quest_queue(["b", "a"])
+    assert result["ok"] is True
+    assert calls == [["b", "a"]]
+
+
+def test_reorder_quest_queue_rejects_bad_input(game_manager, quest_payload):
+    bridge, _native = make_bridge(game_manager, quest_payload)
+    assert bridge.reorder_quest_queue("a")["ok"] is False
+
+
+def test_remove_from_quest_queue_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
+    bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
+    calls = []
+    monkeypatch.setattr(
+        bridge.quest_service,
+        "drop_queue_item",
+        lambda qid: (calls.append(qid), (True, "Removed"))[1],
+    )
+    result = bridge.remove_from_quest_queue("quest-1")
+    assert result["ok"] is True
+    assert calls == ["quest-1"]
+    assert bridge.remove_from_quest_queue("")["ok"] is False
+
+
 def test_accept_quest_delegates(game_manager, quest_payload, tmp_path, monkeypatch):
     bridge, _native = make_bridge(game_manager, quest_payload, prefs_path=tmp_path / "s.json")
     calls = []

@@ -14,6 +14,8 @@ A Windows app that makes Discord report a game as playing by running a dummy pro
 | --- | --- |
 | [![Library listing games and whether their dummy process is running](docs/images/library.png)](docs/images/library.png) | [![Settings showing the Discord client state and the launch patch entries](docs/images/settings.png)](docs/images/settings.png) |
 
+[![Running view with the video being credited, a running game, and the queue of what runs next](docs/images/running.png)](docs/images/running.png)
+
 ## How it works
 
 Discord scans running processes about every 15 seconds and matches executable names against its own game database. The launcher supplies what that scan expects:
@@ -28,7 +30,9 @@ Discord then shows "Playing <game>" for as long as the process runs.
 
 The Quests view lists what Discord pays for right now: desktop play quests, watch quests, and phone watch quests. Each row carries the game, its executable, the reward, the time left, and the one button that fits the quest state (Run, Stop, Watch, or Accept).
 
-The header shows your current orb balance next to the quest counts. Sort by suggested order, expiry, orbs, or progress, filter by reward and quest type, and tick the rows you want: Start selected accepts the quests you never accepted, runs the play quests one after another, and credits each video quest in the background. Discord keeps running normally the whole time.
+The header shows your current orb balance next to the quest counts. Sort by suggested order, expiry, orbs, or progress, filter by reward and quest type, and tick the rows you want: Start selected accepts the quests you never accepted, runs the play quests one after another, and credits each video quest in the background. Games and videos run in separate lanes, so a video starts while a game keeps running, and two quests for the same game share one process instead of opening two. Discord keeps running normally the whole time.
+
+The Running view shows what is in flight: the video being credited, running games, and the queue. Move a queued quest up or down, remove it, or stop a video from its row before it finishes.
 
 Quests are read out of the running client over loopback, so the request never leaves this machine.
 

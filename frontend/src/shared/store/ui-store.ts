@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Page = "quests" | "catalogue" | "library" | "settings";
+export type Page = "quests" | "running" | "catalogue" | "library" | "settings";
 export type ToastKind = "info" | "success" | "error";
 
 export interface Toast {
@@ -10,7 +10,7 @@ export interface Toast {
 }
 
 const PAGE_KEY = "dcgl.page";
-const PAGES: Page[] = ["quests", "catalogue", "library", "settings"];
+const PAGES: Page[] = ["quests", "running", "catalogue", "library", "settings"];
 
 function initialPage(): Page {
   try {

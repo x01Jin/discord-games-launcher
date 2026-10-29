@@ -1,6 +1,7 @@
 import { CataloguePage } from "./modules/catalogue";
 import { LibraryPage } from "./modules/library";
 import { QuestsPage } from "./modules/quests";
+import { RunningPage } from "./modules/running";
 import { SettingsPage } from "./modules/settings";
 import { Sidebar, Toasts } from "./shared/components";
 import { useDcglEvents } from "./shared/hooks";
@@ -16,6 +17,8 @@ function App() {
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {page === "quests" ? (
           <QuestsPage />
+        ) : page === "running" ? (
+          <RunningPage />
         ) : page === "catalogue" ? (
           <CataloguePage />
         ) : page === "library" ? (

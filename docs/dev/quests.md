@@ -225,24 +225,45 @@ process is alive.
 
 ## Queue
 
-Start selected (`start_quest_queue`) runs the selection in list order, and the
-queue lives in the service so it survives a page change.
+Start selected (`start_quest_queue`) keeps the selection in one queue, and the
+queue lives in the service so it survives a page change. The queue is pumped in
+two independent lanes, the same split the reference userscript uses (one game
+runner and a separate video runner):
 
 - Play quests start through `start_quest()` and run one at a time. A monitor
-  thread wakes every `MONITOR_INTERVAL` (10 s) and starts the next quest once
-  the previous process has exited or its tail has ended.
+  thread wakes every `MONITOR_INTERVAL` (10 s) and starts the next queued game
+  once the previous process has exited or its tail has ended.
 - Video quests are watched in the background, without opening a Discord window.
   The queue accepts the quest if needed, then posts `video-progress` from here
   (see below) every 7 to 9.5 s until the client reports `completedAt` or a
-  progress that reached the target. A watch gives up after
+  progress that reached the target. One video is posted at a time, and it does
+  not wait for a running game: a video starts while a game keeps running, and
+  the next game starts while a video is in flight. A watch gives up after
   `WATCH_TIMEOUT_SECONDS` (30 min). The monitor thread runs every 2 s while a
   video is in flight, and re-reads the full quest payload at most every
-  `WATCH_REFRESH_SECONDS` (15 s). Skip video (`skip_quest_watch`) stops waiting
-  and moves on; Clear queue empties the queue and drops the wait. A quest that is
-  already being watched is not queued again by pressing Watch twice.
-- A quest that fails to start stays at the head and is retried on the next tick.
+  `WATCH_REFRESH_SECONDS` (15 s).
+- Stop on a row whose video is in flight calls `stop_quest()`, which ends the
+  wait instead of greying the action out. Skip video (`skip_quest_watch`) does
+  the same from the queue bar. Clear queue (`clear_quest_queue`) empties both
+  lanes and drops the wait. A quest that is already being watched is not queued
+  again by pressing Watch twice.
+- Reordering and removal work on the pending ids. `reorder_queue()` takes the
+  order given and keeps unlisted ids at the end; `drop_queue_item()` removes
+  one. The Running view moves ids within their own lane, so a video never
+  changes where a game sits in its lane.
+- A game that fails to start stays queued and is retried on the next tick.
   Anything that cannot be queued is skipped at enqueue time, and the message
   names both counts.
+- Two quests can point at the same Discord application (Modern Warfare 4 is
+  offered twice on some accounts). One process credits all of them: the service
+  keeps `_quest_apps` (application id to the quest that started it) and
+  `_riders` (application id to every quest id that session pays out). The first
+  start launches the executable; every later quest on that application calls
+  `_add_rider()` and is dropped from the queue with no second process.
+  `list_quests()` marks those rows `riding`, the row shows a Credited chip, and
+  Stop on any of them ends the shared session. The play-session tail waits until
+  `_quest_done()` is true for every rider, so the process stays alive until the
+  last quest on that game reaches its target.
 
 ## Accepting and video progress
 

@@ -35,10 +35,22 @@ progress, and keeps a switch for finished and expired quests.
 Every unfinished play or video quest has a checkbox, accepted or not. Tick the
 ones you want and press **Start selected**: the queue accepts each quest that
 was never accepted, runs play quests one after another, and credits video quests
-in the background without touching the Discord window. The bar above the list
-names what is running or which video is playing, with **Skip video** and
+in the background without touching the Discord window. Games and videos run in
+their own queue, so a video starts while a game keeps running. The bar above the
+list names what is running or which video is playing, with **Skip video** and
 **Clear queue**. Pressing Watch on a single row queues that one quest the same
 way.
+
+While a video is being credited its button reads **Stop**, and the Running view
+has the same Stop, so a mistaken watch does not have to run to the end.
+
+### Running
+
+The Running view lists what is in flight: the video being credited, every game
+that is running, and what comes next. Queued games and queued videos are listed
+in their own lanes, both always on screen, and each row can be moved up or down
+or removed, so the next quest in a lane is whatever you put first. **Clear
+queue** stops the video and empties the queue but leaves a running game alone.
 
 ### Quest options
 
@@ -51,7 +63,10 @@ Settings has two switches under Quest runs:
   Discord's scan. 0 stops as soon as the target is reached.
 
 Discord sometimes offers the same game in two quests. One dummy process
-finishes both, and the row says how many other quests share it.
+credits both, so you never get two identical windows: the first quest starts the
+game, the rest join that run and show a **Credited** chip. The process stays up
+until every quest on that game reaches its target. **Stop** on any of those rows
+ends the shared run, which stops all of them.
 
 ### Starting Discord through the launcher
 

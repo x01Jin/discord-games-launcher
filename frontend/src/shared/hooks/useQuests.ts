@@ -116,6 +116,36 @@ export function useSkipQuestWatch() {
   });
 }
 
+/** Put the pending queue in a new order, as shown on the Running page. */
+export function useReorderQuestQueue() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: (questIds: string[]) => bridge.reorder_quest_queue(questIds),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      if (!result.ok) pushToast(result.message, "error");
+    },
+    onError: () => pushToast("The backend did not answer. Try again.", "error"),
+  });
+}
+
+/** Drop one quest from the pending queue. */
+export function useRemoveFromQuestQueue() {
+  const queryClient = useQueryClient();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  return useMutation({
+    mutationFn: (questId: string) => bridge.remove_from_quest_queue(questId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["quests"] });
+      pushToast(result.message, result.ok ? "success" : "error");
+    },
+    onError: () => pushToast("The backend did not answer. Try again.", "error"),
+  });
+}
+
 /** Hide activity and the play session tail. Stored next to the database. */
 export function useSetQuestPrefs() {
   const queryClient = useQueryClient();
