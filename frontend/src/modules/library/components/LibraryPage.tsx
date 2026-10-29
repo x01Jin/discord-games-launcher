@@ -11,6 +11,7 @@ import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
 import { Dialog } from "../../../shared/components/Dialog";
 import {
   Button,
+  Checkbox,
   EmptyState,
   Skeleton,
 } from "../../../shared/components/primitives";
@@ -47,10 +48,9 @@ export function LibraryPage() {
   const running = games.filter((game) => game.is_running).length;
   const backendError = data?.error;
 
-  // Selection is derived: ids that left the library (removed here or by repair)
-  // stop counting without an effect writing state back.
   const present = new Set(games.map((game) => game.game_id));
   const selected = picked.filter((id) => present.has(id));
+  const allSelected = games.length > 0 && selected.length === games.length;
 
   const toggleRow = (id: string) => {
     setPicked((current) =>
@@ -100,7 +100,7 @@ export function LibraryPage() {
         <EmptyState
           icon={<LibraryIcon size={28} />}
           title="Nothing in the library yet"
-          description="Add a game from the catalogue, or run one straight from a quest. A fake process per game is all Discord needs to see."
+          description="Add a game from the catalogue."
           action={
             <Button
               icon={<LibraryIcon size={13} />}
@@ -176,12 +176,32 @@ export function LibraryPage() {
 
       {games.length > 0 && !isLoading ? (
         <Toolbar>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allSelected}
+              onChange={() =>
+                setPicked(allSelected ? [] : games.map((game) => game.game_id))
+              }
+              label="Select all"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setPicked(allSelected ? [] : games.map((game) => game.game_id))
+              }
+              className="text-[12px] text-subtle transition-colors hover:text-ink"
+            >
+              Select all
+            </button>
+          </div>
+          {selected.length > 0 ? (
+            <span className="text-[12px] text-muted">
+              {selected.length} selected
+            </span>
+          ) : null}
+          <div className="flex-1" />
           {selected.length > 0 ? (
             <>
-              <span className="text-[12px] text-muted">
-                {selected.length} selected
-              </span>
-              <div className="flex-1" />
               <Button
                 size="sm"
                 variant="danger"
@@ -195,23 +215,7 @@ export function LibraryPage() {
                 Clear
               </Button>
             </>
-          ) : (
-            <>
-              <span className="text-[12px] text-subtle">
-                Tick rows to remove several at once. A running game keeps its
-                dummy process alive until you stop it; removing one stops it and
-                deletes its files.
-              </span>
-              <div className="flex-1" />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setPicked(games.map((game) => game.game_id))}
-              >
-                Select all
-              </Button>
-            </>
-          )}
+          ) : null}
         </Toolbar>
       ) : null}
 
@@ -279,7 +283,6 @@ export function LibraryPage() {
               onClick={() => {
                 const ids = selected;
                 setConfirmRemoveMany(false);
-                // Drop ids that are no longer in the list; failures stay ticked.
                 setPicked(ids);
                 removeGames.mutate(ids);
               }}
@@ -294,7 +297,7 @@ export function LibraryPage() {
         open={confirmRemove !== null}
         title={"Remove " + (confirmRemove?.name ?? "") + "?"}
         onClose={() => setConfirmRemove(null)}
-        description="The game leaves your library and its files are deleted. You can add it again from the catalogue."
+        description="The game and its files are deleted. You can add it again from the catalogue."
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmRemove(null)}>

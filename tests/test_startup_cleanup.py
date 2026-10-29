@@ -1,17 +1,8 @@
-"""Tests for GameManager.startup_cleanup.
-
-Covers stale runtime records, orphaned game directories, missing dummy
-executables, and orphaned cached icons.
-
-Usage:
-    pytest tests/test_startup_cleanup.py -v
-"""
 
 import sys
 import tempfile
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -23,7 +14,6 @@ from launcher.process_manager import ProcessManager
 
 
 def _make_manager(tmpdir: Path, template: Path | None = None) -> GameManager:
-    """Build a GameManager backed by temp dirs. Fake template unless given."""
     template_path = template
     if template_path is None:
         template_path = tmpdir / "DummyGame.exe"
@@ -52,7 +42,6 @@ def _cache_game(db: Database, game_id: int, name: str = "Test Game") -> None:
 
 
 def test_clears_stale_running_processes():
-    """Running rows from a previous run are dropped without touching processes."""
     print("Testing stale running cleanup...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -70,7 +59,6 @@ def test_clears_stale_running_processes():
 
 
 def test_removes_orphan_dirs_keeps_library_dirs():
-    """Game dirs without a library row are removed; library dirs are kept."""
     print("Testing orphan dir cleanup...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -97,7 +85,6 @@ def test_removes_orphan_dirs_keeps_library_dirs():
 
 
 def test_recreates_missing_library_exe():
-    """Library entries without an exe on disk get one recreated."""
     print("Testing missing exe recreation...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -124,7 +111,6 @@ def test_recreates_missing_library_exe():
 
 
 def test_missing_template_keeps_library_row():
-    """Without a template the row is kept and a warning is counted."""
     print("Testing missing template behavior...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -150,7 +136,6 @@ def test_missing_template_keeps_library_row():
 
 
 def test_purges_dangling_library_rows():
-    """Library rows gone from the cache are purged with their files."""
     print("Testing dangling row purge...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -181,7 +166,6 @@ def test_purges_dangling_library_rows():
 
 
 def test_dangling_purge_guarded_on_empty_cache():
-    """Nothing is purged when the cache itself is empty (fresh install)."""
     print("Testing empty-cache purge guard...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -204,7 +188,6 @@ def test_dangling_purge_guarded_on_empty_cache():
 
 
 def test_failed_purge_keeps_row_in_working_set():
-    """A failed row delete stays scheduled: dir + exe are restored."""
     print("Testing failed-purge containment...")
 
     import sqlite3
@@ -233,7 +216,6 @@ def test_failed_purge_keeps_row_in_working_set():
 
         assert summary["dangling_removed"] == 0
         assert summary["warnings"] >= 1
-        # Row survived, so step 4 restored its directory and executable.
         assert mgr.db.is_in_library(555)
         assert ghost_exe.exists()
 
@@ -241,7 +223,6 @@ def test_failed_purge_keeps_row_in_working_set():
 
 
 def test_recreated_exe_converges_row():
-    """A second cleanup right after is a no-op for the fixed row."""
     print("Testing recreate convergence...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -270,7 +251,6 @@ def test_recreated_exe_converges_row():
 
 
 def test_removes_stray_root_exes_keeps_sole_template():
-    """Stray exes at games root are removed; sole template copy is kept."""
     print("Testing stray root exe cleanup...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -286,7 +266,6 @@ def test_removes_stray_root_exes_keeps_sole_template():
         assert summary["root_exes_removed"] == 1
         assert not stray.exists()
 
-        # Root DummyGame.exe is kept only when it is the resolved template.
         root_template = games_dir / "DummyGame.exe"
         root_template.write_bytes(b"fake-exe")
         lonely = DummyGenerator(tmpdir / "games2", template_exe_path=root_template)
@@ -296,7 +275,6 @@ def test_removes_stray_root_exes_keeps_sole_template():
 
 
 def test_prunes_orphan_icons_keeps_cached():
-    """Icons for games no longer cached are removed; cached ones are kept."""
     print("Testing orphan icon cleanup...")
 
     with tempfile.TemporaryDirectory() as tmpdir:

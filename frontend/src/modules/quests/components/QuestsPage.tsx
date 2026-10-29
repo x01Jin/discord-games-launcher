@@ -1,21 +1,16 @@
-import { useMemo, useRef, useState } from "react";
-import type { QuestGame, QuestReward } from "../../../shared/api-client";
+import { useMemo, useState } from "react";
+import type { QuestGame } from "../../../shared/api-client";
 import {
-  CheckIcon,
-  ChevronDownIcon,
   OrbIcon,
   RefreshIcon,
   TrashIcon,
-  WrenchIcon,
 } from "../../../shared/components/icons";
-import { Menu } from "../../../shared/components/Menu";
-import { PageHeader, Toolbar } from "../../../shared/components/PageHeader";
+import { PageHeader } from "../../../shared/components/PageHeader";
 import {
   Button,
   Checkbox,
   EmptyState,
   Skeleton,
-  Switch,
 } from "../../../shared/components/primitives";
 import {
   useClaimQuest,
@@ -32,80 +27,12 @@ import {
   useStopQuest,
 } from "../../../shared/hooks/useQuests";
 import { useUiStore } from "../../../shared/store/ui-store";
+import { NO_QUESTS, isQueuable, matchesReward, sortQuests } from "../lib/filters";
+import type { KindFilter, RewardFilter, Sort } from "../lib/filters";
+import { useQuestSelection } from "../hooks/useQuestSelection";
 import { QuestConnectPanel } from "./QuestConnectPanel";
 import { QuestRow } from "./QuestRow";
-
-type KindFilter = "all" | "play" | "watch";
-type RewardFilter = "all" | "orbs" | "decoration" | "in_game";
-type Sort = "suggested" | "expiring" | "orbs" | "progress";
-
-const KIND_FILTERS: { id: KindFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "play", label: "Play" },
-  { id: "watch", label: "Watch" },
-];
-
-const REWARD_FILTERS: { id: RewardFilter; label: string }[] = [
-  { id: "all", label: "All rewards" },
-  { id: "orbs", label: "Orbs" },
-  { id: "decoration", label: "Avatar decoration" },
-  { id: "in_game", label: "In-game item" },
-];
-
-const SORTS: { id: Sort; label: string }[] = [
-  { id: "suggested", label: "Suggested" },
-  { id: "expiring", label: "Expiring soon" },
-  { id: "orbs", label: "Most orbs" },
-  { id: "progress", label: "Most progress" },
-];
-
-const REWARD_FILTER_LABEL: Record<RewardFilter, string> = {
-  all: "All rewards",
-  orbs: "Orbs",
-  decoration: "Avatar decoration",
-  in_game: "In-game item",
-};
-
-/** Stable empty list so the memos below do not re-run on every render. */
-const NO_QUESTS: QuestGame[] = [];
-
-/**
- * What the queue can take: play quests, which run as a faked game process, and
- * video quests, which are credited by progress posts. Unaccepted quests are
- * accepted by the queue itself, so enrollment state does not exclude one.
- */
-function isQueuable(quest: QuestGame) {
-  if (quest.queued) return false;
-  if (quest.kind === "play") return quest.action === "run";
-  if (quest.kind === "watch" || quest.kind === "watch_mobile") {
-    return quest.action === "open";
-  }
-  return false;
-}
-
-function matchesReward(reward: QuestReward, filter: RewardFilter) {
-  if (filter === "orbs") return typeof reward.orbs === "number";
-  if (filter === "decoration") return reward.avatar_decoration;
-  if (filter === "in_game") return reward.in_game;
-  return true;
-}
-
-function sortQuests(quests: QuestGame[], sort: Sort) {
-  if (sort === "suggested") return quests;
-  const copy = [...quests];
-  if (sort === "expiring") {
-    copy.sort((a, b) => {
-      const left = a.seconds_left ?? Number.MAX_SAFE_INTEGER;
-      const right = b.seconds_left ?? Number.MAX_SAFE_INTEGER;
-      return left - right;
-    });
-  } else if (sort === "orbs") {
-    copy.sort((a, b) => (b.reward.orbs ?? -1) - (a.reward.orbs ?? -1));
-  } else {
-    copy.sort((a, b) => b.progress - a.progress);
-  }
-  return copy;
-}
+import { QuestToolbar } from "./QuestToolbar";
 
 export function QuestsPage() {
   const { data, isLoading, isFetching, isError, refetch } = useQuests();
@@ -125,7 +52,6 @@ export function QuestsPage() {
   const [kind, setKind] = useState<KindFilter>("all");
   const [reward, setReward] = useState<RewardFilter>("all");
   const [sort, setSort] = useState<Sort>("suggested");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const quests = data?.quests ?? NO_QUESTS;
@@ -142,7 +68,6 @@ export function QuestsPage() {
       if (quest.action === "done") {
         tally.finished += 1;
       } else if (quest.action === "claim") {
-        // Finished, but the reward is still on the table.
         tally.finished += 1;
         tally.claimable += 1;
       } else {
@@ -165,28 +90,14 @@ export function QuestsPage() {
 
   const runnable = useMemo(() => visible.filter(isQueuable), [visible]);
 
-  // Derive the live selection during render: a quest can finish or leave
-  // Discord's list between polls, and a stale id must never be sent back.
-  const selectedLive = useMemo(() => {
-    if (selected.size === 0) return selected;
-    const live = new Set(runnable.map((quest) => quest.id));
-    return new Set([...selected].filter((id) => live.has(id)));
-  }, [selected, runnable]);
-
-  const allSelected =
-    runnable.length > 0 && runnable.every((quest) => selectedLive.has(quest.id));
-  const selectedOrdered = visible
-    .filter((quest) => selectedLive.has(quest.id) && isQueuable(quest))
-    .map((quest) => quest.id);
-
-  const toggleSelected = (questId: string, next: boolean) => {
-    setSelected((current) => {
-      const copy = new Set(current);
-      if (next) copy.add(questId);
-      else copy.delete(questId);
-      return copy;
-    });
-  };
+  const {
+    selectedLive,
+    allSelected,
+    selectedOrdered,
+    toggleSelected,
+    toggleAll,
+    setSelected,
+  } = useQuestSelection(runnable, visible);
 
   const connected = Boolean(data?.connected);
 
@@ -263,79 +174,21 @@ export function QuestsPage() {
         )
       ) : (
         <>
-          <Toolbar>
-            <div className="flex items-center gap-1" role="group" aria-label="Quest type">
-              {KIND_FILTERS.map((entry) => {
-                const active = kind === entry.id;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setKind(entry.id)}
-                    className={
-                      "h-6 rounded-[4px] px-2 text-[12px] font-medium transition-colors " +
-                      (active
-                        ? "bg-active text-ink"
-                        : "text-subtle hover:bg-hover hover:text-ink")
-                    }
-                  >
-                    {entry.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <span className="h-4 w-px bg-line-strong" />
-
-            <MenuButton
-              label="Filter"
-              value={REWARD_FILTER_LABEL[reward]}
-              active={reward !== "all"}
-              options={REWARD_FILTERS.map((entry) => ({
-                label: entry.label,
-                active: reward === entry.id,
-                action: () => setReward(entry.id),
-              }))}
-            />
-
-            <MenuButton
-              label="Sort"
-              value={SORTS.find((entry) => entry.id === sort)?.label ?? "Suggested"}
-              active={sort !== "suggested"}
-              options={SORTS.map((entry) => ({
-                label: entry.label,
-                active: sort === entry.id,
-                action: () => setSort(entry.id),
-              }))}
-            />
-
-            <span className="text-[12px] text-subtle">
-              {visible.length} shown
-              {quests.length > visible.length ? " of " + quests.length : ""}
-            </span>
-
-            <div className="flex-1" />
-
-            {silent && !silent.enabled ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                busy={enableSilent.isPending}
-                icon={<WrenchIcon size={12} />}
-                title="Add the local endpoint to the Discord shortcuts so future launches connect on their own. No restart needed."
-                onClick={() => enableSilent.mutate()}
-              >
-                Set up silent start
-              </Button>
-            ) : null}
-
-            <Switch
-              checked={showFinished}
-              onChange={setShowFinished}
-              label="Show finished"
-            />
-          </Toolbar>
+          <QuestToolbar
+            kind={kind}
+            onKind={setKind}
+            reward={reward}
+            onReward={setReward}
+            sort={sort}
+            onSort={setSort}
+            visibleCount={visible.length}
+            totalCount={quests.length}
+            silent={silent}
+            enabling={enableSilent.isPending}
+            onEnableSilent={() => enableSilent.mutate()}
+            showFinished={showFinished}
+            onShowFinished={setShowFinished}
+          />
 
           {(runnable.length > 0 || queueIds.length > 0) && (
             <div className="flex items-center gap-3 border-b border-line bg-base/40 px-5 py-1.5">
@@ -343,17 +196,13 @@ export function QuestsPage() {
                 <>
                   <Checkbox
                     checked={allSelected}
-                    onChange={(next) =>
-                      setSelected(
-                        next ? new Set(runnable.map((quest) => quest.id)) : new Set(),
-                      )
-                    }
+                    onChange={toggleAll}
                     label={allSelected ? "Clear the selection" : "Select every quest that can run"}
                   />
                   <span className="text-[12px] text-subtle">
                     {selectedLive.size
                       ? selectedLive.size + " selected"
-                      : "Select quests to run them one after another"}
+                      : "Select quests to run in order"}
                   </span>
                 </>
               ) : (
@@ -366,7 +215,7 @@ export function QuestsPage() {
                 <span
                   className="max-w-[320px] truncate-1 text-[12px] text-[#b8bdff]"
                   title={
-                    "Discord is crediting this video in the background. You can keep using Discord.\n" +
+                    "Discord is crediting this video. You can keep using Discord.\n" +
                     watching.name
                   }
                 >
@@ -399,7 +248,7 @@ export function QuestsPage() {
                   busy={clearQueue.isPending}
                   icon={<TrashIcon size={12} />}
                   onClick={() => clearQueue.mutate()}
-                  title="Stop the queue. The quest that is already running keeps running."
+                  title="Stop the queue. A running quest keeps running."
                 >
                   Clear queue
                 </Button>
@@ -418,7 +267,7 @@ export function QuestsPage() {
                       },
                     })
                   }
-                  title="Run these quests back to back. Unaccepted quests are accepted first; video quests are credited in the background."
+                  title="Run the selected quests in order."
                 >
                   Start selected
                 </Button>
@@ -436,8 +285,8 @@ export function QuestsPage() {
                 }
                 description={
                   quests.length
-                    ? "Try another filter, or turn on Show finished to review the completed ones."
-                    : "Discord is connected but is not offering you any play or watch quest yet. Check back after the next rotation."
+                    ? "Try another filter or turn on Show finished."
+                    : "Discord is not offering any play or watch quests right now."
                 }
                 action={
                   quests.length ? (
@@ -491,63 +340,5 @@ export function QuestsPage() {
         </>
       )}
     </section>
-  );
-}
-
-/**
- * A toolbar menu button. The popup is anchored to the button, so it opens
- * under the control the user pressed rather than at the pointer.
- */
-function MenuButton({
-  label,
-  value,
-  active,
-  options,
-}: {
-  label: string;
-  value: string;
-  active: boolean;
-  options: { label: string; active: boolean; action: () => void }[];
-}) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
-
-  return (
-    <>
-      <button
-        ref={ref}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        onClick={() => {
-          const rect = ref.current?.getBoundingClientRect();
-          if (!rect) return;
-          setAnchor(anchor ? null : { x: rect.left, y: rect.bottom + 4 });
-        }}
-        className={
-          "inline-flex h-6 items-center gap-1 rounded-[4px] px-2 text-[12px] font-medium transition-colors " +
-          (active || anchor
-            ? "bg-active text-ink"
-            : "text-subtle hover:bg-hover hover:text-ink")
-        }
-        title={label + ": " + value}
-      >
-        <span className="text-subtle">{label}</span>
-        {value}
-        <ChevronDownIcon size={11} />
-      </button>
-      {anchor ? (
-        <Menu
-          x={anchor.x}
-          y={anchor.y}
-          onClose={() => setAnchor(null)}
-          items={options.map((option) => ({
-            label: option.label,
-            icon: option.active ? <CheckIcon size={12} /> : <span className="w-3" />,
-            action: option.action,
-          }))}
-        />
-      ) : null}
-    </>
   );
 }

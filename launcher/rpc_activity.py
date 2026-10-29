@@ -1,15 +1,3 @@
-"""Show a game on the Discord profile through the client's own IPC pipe.
-
-Discord listens on the discord-ipc-0 pipe (and further instances) for the
-Rich Presence protocol that real games use: a handshake carrying the
-application id, then SET_ACTIVITY. Discord turns that into a local activity,
-the same one it builds when it detects a game by itself, and drops it when
-the pipe closes.
-
-The store patch the reference userscript uses needs RunningGameStore, which
-Discord 1.0.9265 no longer has. This pipe does still exist and needs no
-injected script, no debug port and no helper process.
-"""
 
 from __future__ import annotations
 
@@ -33,7 +21,7 @@ _OP_FRAME = 1
 
 
 class RpcError(Exception):
-    """Discord's IPC pipe refused a request or is not reachable."""
+    pass
 
 
 if os.name == "nt":
@@ -71,23 +59,17 @@ if os.name == "nt":
         ctypes.POINTER(wintypes.DWORD),
     ]
     _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-else:  # pragma: no cover - the app is Windows only
+else:
     _kernel32 = None
 
 
 class DiscordRpcActivity:
-    """Hold one activity open for as long as a quest run is crediting it."""
 
     def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger
         self._handle: int | None = None
 
-    @property
-    def active(self) -> bool:
-        return self._handle is not None
-
     def show(self, application_id: int | str, name: str) -> None:
-        """Put the game on the profile, replacing any activity already shown."""
         if _kernel32 is None:
             raise RpcError("Discord activity needs Windows")
         self.hide()
@@ -115,12 +97,10 @@ class DiscordRpcActivity:
         self._handle = handle
 
     def hide(self) -> None:
-        """Close the pipe, which is how Discord is told the game stopped."""
         handle, self._handle = self._handle, None
         if handle is not None:
             self._close(handle)
 
-    # -- pipe plumbing -----------------------------------------------------
     def _connect(self) -> int:
         last = 0
         for index in range(_MAX_INSTANCES):

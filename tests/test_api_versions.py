@@ -1,19 +1,9 @@
-"""Tests for Discord API version cascade, payload sanitizing, and sync reporting.
-
-Covers: latest-first version fallback, malformed-record skip counting,
-schema-drift warnings, fallback transition notices, and the extended
-sync result shapes (synced, count, skipped).
-
-Usage:
-    pytest tests/test_api_versions.py -v
-"""
 
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -40,7 +30,6 @@ def _make_client(tmpdir: Path, logger=None) -> tuple[Database, DiscordAPIClient]
 
 
 def _mock_http(payload=None, fail_urls=()) -> MagicMock:
-    """Build a mock httpx.Client class; URLs in fail_urls raise ConnectError."""
     mock_response = MagicMock()
     mock_response.json.return_value = payload
     mock_response.raise_for_status.return_value = None
@@ -74,7 +63,6 @@ def _good_game(game_id=12345, **overrides):
 
 
 def test_version_policy_defaults():
-    """Stable default is v10 and candidates are latest-first."""
     print("Testing version policy defaults...")
     assert STABLE_API_VERSION == "v10"
     assert API_VERSION_CANDIDATES[0] == STABLE_API_VERSION
@@ -83,7 +71,6 @@ def test_version_policy_defaults():
 
 
 def test_sanitize_valid_payload():
-    """Well-formed records pass through with normalized types."""
     print("Testing sanitize valid payload...")
     payload = [
         _good_game(1, id="777", extra_unknown_field="ignored"),
@@ -101,16 +88,15 @@ def test_sanitize_valid_payload():
 
 
 def test_sanitize_skips_malformed():
-    """Non-dict records and bad ids are skipped, never fatal."""
     print("Testing sanitize skips malformed...")
     payload = [
         _good_game(1),
         "not-a-dict",
         42,
         None,
-        _good_game(2, id=True),  # bool id rejected
-        _good_game(3, id="abc"),  # non-numeric id
-        _good_game(4, id=0),  # non-positive id
+        _good_game(2, id=True),
+        _good_game(3, id="abc"),
+        _good_game(4, id=0),
         {"name": "missing id"},
     ]
     clean, skipped, missing = DiscordAPIClient.sanitize_games(payload)
@@ -121,7 +107,6 @@ def test_sanitize_skips_malformed():
 
 
 def test_sanitize_rejects_non_list_payload():
-    """A non-list top-level payload raises instead of silently caching nothing."""
     print("Testing sanitize rejects non-list...")
     try:
         DiscordAPIClient.sanitize_games({"id": 1})
@@ -132,7 +117,6 @@ def test_sanitize_rejects_non_list_payload():
 
 
 def test_cascade_falls_back_to_stable():
-    """Latest-first cascade falls back when the newest version fails."""
     print("Testing version cascade fallback...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -155,7 +139,6 @@ def test_cascade_falls_back_to_stable():
 
 
 def test_cascade_prefers_last_working():
-    """Stored last-working version is tried first (fast path)."""
     print("Testing cascade prefers last working...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -187,7 +170,6 @@ def test_cascade_prefers_last_working():
 
 
 def test_cascade_all_fail():
-    """Every candidate failing raises a single aggregated error."""
     print("Testing cascade total failure...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -206,7 +188,6 @@ def test_cascade_all_fail():
 
 
 def test_sync_counts_skipped_end_to_end():
-    """sync_cache saves clean records and reports skipped ones."""
     print("Testing sync skip counting...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -223,7 +204,6 @@ def test_sync_counts_skipped_end_to_end():
 
 
 def test_drift_warning_on_alien_payload():
-    """Majority-missing executables triggers a drift warning."""
     print("Testing drift warning...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -239,11 +219,10 @@ def test_drift_warning_on_alien_payload():
 
 
 def test_save_games_never_aborts():
-    """Database layer skips garbage and reports the count."""
     print("Testing save_games guard...")
     with tempfile.TemporaryDirectory() as tmpdir:
         db = Database(Path(tmpdir) / "test.db")
-        skipped = db.save_games([_good_game(1), None, "x", {"no": "id"}])  # type: ignore[list-item] - deliberately malformed input
+        skipped = db.save_games([_good_game(1), None, "x", {"no": "id"}])
         assert skipped == 3, f"Expected 3 skipped, got {skipped}"
         assert len(db.get_all_games()) == 1
     print("  PASSED")
@@ -260,20 +239,14 @@ def _make_manager(tmpdir: Path, logger=None) -> GameManager:
 
 
 def test_note_api_version_transitions():
-    """Fallback notices fire once per transition, never per sync."""
     print("Testing version notice transitions...")
     with tempfile.TemporaryDirectory() as tmpdir:
         mgr = _make_manager(Path(tmpdir), logger=MagicMock())
-        # First run on newest: silent.
         assert mgr.note_api_version("v10") == ""
-        # Steady state: silent.
         assert mgr.note_api_version("v10") == ""
-        # Transition into fallback: notice.
         notice = mgr.note_api_version("v9")
         assert "fallback" in notice and "v9" in notice, notice
-        # Steady fallback: silent.
         assert mgr.note_api_version("v9") == ""
-        # Transition back: notice.
         notice = mgr.note_api_version("v10")
         assert "latest" in notice, notice
         print("  Transitions behave")
@@ -281,7 +254,6 @@ def test_note_api_version_transitions():
 
 
 def test_bridge_sync_message_reports_skipped_and_fallback():
-    """sync_catalogue message carries skipped counts and fallback notices."""
     print("Testing bridge sync message...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -302,7 +274,6 @@ def test_bridge_sync_message_reports_skipped_and_fallback():
             assert "skipped" in result["message"], result["message"]
             assert "fallback API (v10)" in result["message"], result["message"]
             print(f"  Message: {result['message']}")
-            # Second sync: steady state stays silent about fallback.
             result2 = bridge.sync_catalogue()
             assert "fallback" not in result2["message"], result2["message"]
             print("  Second sync silent")
@@ -310,7 +281,6 @@ def test_bridge_sync_message_reports_skipped_and_fallback():
 
 
 def test_bridge_sync_error_shape():
-    """Sync failure includes the skipped field for frontend safety."""
     print("Testing bridge sync error shape...")
     with tempfile.TemporaryDirectory() as tmpdir:
         mgr = _make_manager(Path(tmpdir))
@@ -325,7 +295,6 @@ def test_bridge_sync_error_shape():
 
 
 def run_all_tests():
-    """Run all API version tests."""
     print("\n" + "=" * 50)
     print("API VERSION MODULE TESTS")
     print("=" * 50 + "\n")
@@ -350,7 +319,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:  # noqa: BLE001 - runner must continue past failures
+        except Exception as e:
             print(f"  FAILED: {e}")
             import traceback
 

@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface VirtualWindow {
-  /** Attach to the scrolling element. */
+
   scroller: React.RefObject<HTMLDivElement | null>;
   start: number;
   end: number;
-  /** Height of the spacer above the rendered rows. */
+
   offsetTop: number;
-  /** Height of the full list, so the scrollbar is honest. */
+
   totalHeight: number;
 }
 
-/**
- * Fixed-height row windowing. The catalogue can hold thousands of rows; only
- * the ones the viewport can show are mounted.
- */
 export function useVirtualRows(
   count: number,
   rowHeight: number,

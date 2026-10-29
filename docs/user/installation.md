@@ -11,9 +11,8 @@
 ## Download
 
 Get the latest `dcgl.exe` from the [releases page](https://github.com/x01Jin/discord-games-launcher/releases) and put it
-wherever you keep programs.
-
-That one file is the whole app. There is no installer.
+wherever you keep programs. That one file is the whole app; there is no
+installer.
 
 ## First launch
 
@@ -40,8 +39,5 @@ That deletes the library, the game list, and the logs. If you enabled the launch
 patch for quests, remove it in Settings first; it lives in your Discord
 shortcuts and startup entry, not in this folder.
 
-## Next
-
-- [Getting started](./getting-started.md)
-- [Features](./features.md)
-- [Troubleshooting](./troubleshooting.md)
+Next: [Getting started](./getting-started.md), [Features](./features.md),
+[Troubleshooting](./troubleshooting.md).

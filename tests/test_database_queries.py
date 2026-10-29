@@ -1,4 +1,3 @@
-"""Tests for catalogue paging, bulk lookup, and the stats memo."""
 
 
 import pytest
@@ -90,7 +89,6 @@ def test_get_games_bulk(seeded):
 
 
 def test_get_games_bulk_chunks_large_lists(seeded, monkeypatch):
-    # 1200 ids over a 4-row table: the chunking path must not raise.
     found = seeded.get_games(list(range(1, 1201)))
     assert sorted(found) == [1, 2, 3, 4]
 
@@ -101,7 +99,6 @@ def test_ensure_game_row_inserts_only(seeded):
     assert row is not None and row.name == "Brand New"
     assert row.executables == [{"name": "new.exe", "os": "win32"}]
 
-    # A second call must not overwrite what the catalogue sync owns.
     seeded.ensure_game_row(900, "Renamed", None, [])
     assert seeded.get_game(900).name == "Brand New"
 
@@ -116,8 +113,6 @@ def test_stats_are_memoised_then_invalidated(seeded, monkeypatch):
     first = seeded.get_cache_stats()
     assert first["cached_games"] == 4
 
-    # Bypass the mutating helpers on purpose: the memo must be what holds the
-    # stale value, and an explicit write must clear it.
     seeded.save_games([{**GAMES[0], "id": 5, "name": "Epsilon"}])
     second = seeded.get_cache_stats()
     assert second["cached_games"] == 5

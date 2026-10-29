@@ -17,10 +17,6 @@ interface Props {
   onClose: () => void;
 }
 
-/**
- * Cursor-anchored menu. It flips against the viewport edges so a click near
- * the bottom or right of the window does not open a menu that runs off it.
- */
 export function Menu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
@@ -69,16 +65,12 @@ export function Menu({ x, y, items, onClose }: Props) {
       ?.focus();
     return () => {
       window.removeEventListener("keydown", onKey);
-      // Give focus back to the button that opened the menu, unless the chosen
-      // item opened something else that already took it.
       if (opener?.isConnected && document.activeElement === document.body) {
         opener.focus();
       }
     };
   }, [onClose]);
 
-  // Rendered at the document root: list rows use content-visibility, which
-  // clips anything fixed positioned inside them.
   return createPortal(
     <>
       <div

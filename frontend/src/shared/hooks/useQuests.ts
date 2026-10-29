@@ -8,17 +8,10 @@ import type {
 } from "../api-client";
 import { useUiStore } from "../store/ui-store";
 
-/**
- * The quest list, read from the running Discord client. One key, so the
- * sidebar, the page, and every mutation share one fetch.
- */
 export function useQuests() {
   return useQuery({
     queryKey: ["quests"],
     queryFn: () => bridge.get_quests(),
-    // While the client is missing or unreachable, look again often: Discord
-    // may be starting, or the user may have just opened it. Once quests are
-    // flowing, the client's own refresh cadence is the limit, so back off.
     refetchInterval: (query) => {
       const data = query.state.data as QuestsResult | undefined;
       return data?.connected ? 20_000 : 4_000;
@@ -28,7 +21,6 @@ export function useQuests() {
   });
 }
 
-/** Just the connection state, for chrome that stays mounted on every page. */
 export function useQuestStatus(): DiscordStatus | undefined {
   const { data } = useQuests();
   return (data as QuestsResult | undefined)?.status;
@@ -62,11 +54,6 @@ export function useStopQuest() {
   return useQuestMutation((questId) => bridge.stop_quest(questId));
 }
 
-/**
- * Claim a finished quest's reward. When Discord wants a captcha, the backend
- * has already brought its quest page forward, so the toast says what to do
- * rather than repeating the button.
- */
 export function useClaimQuest() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -77,7 +64,7 @@ export function useClaimQuest() {
       void queryClient.invalidateQueries({ queryKey: ["quests"] });
       if (result.ok) {
         pushToast(result.message, "success");
-      } else if (result.needs_captcha) {
+      } else if (result.needs_user_action) {
         pushToast(result.message, "info");
       } else {
         pushToast(result.message, "error");
@@ -87,7 +74,6 @@ export function useClaimQuest() {
   });
 }
 
-/** Start several accepted play quests one after another. */
 export function useStartQuestQueue() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -121,7 +107,6 @@ export function useClearQuestQueue() {
   });
 }
 
-/** Stop waiting on the video the queue opened in Discord. */
 export function useSkipQuestWatch() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -136,7 +121,6 @@ export function useSkipQuestWatch() {
   });
 }
 
-/** Put the pending queue in a new order, as shown on the Running page. */
 export function useReorderQuestQueue() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -151,7 +135,6 @@ export function useReorderQuestQueue() {
   });
 }
 
-/** Drop one quest from the pending queue. */
 export function useRemoveFromQuestQueue() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -166,7 +149,6 @@ export function useRemoveFromQuestQueue() {
   });
 }
 
-/** The pause between quests. Stored next to the database. */
 export function useSetQuestPrefs() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -181,10 +163,6 @@ export function useSetQuestPrefs() {
   });
 }
 
-/**
- * Enable quest reading. Restarts Discord only when it is already open without
- * the endpoint; a closed client is started with it instead.
- */
 export function useConnectDiscord() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -200,7 +178,6 @@ export function useConnectDiscord() {
   });
 }
 
-/** Start Discord with quest reading enabled, without touching a running one. */
 export function useStartDiscord() {
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -215,10 +192,6 @@ export function useStartDiscord() {
   });
 }
 
-/**
- * Bring Discord's quest page forward. Used for quests this app cannot finish
- * itself: watching a video, and accepting a play quest before it pays out.
- */
 export function useOpenInDiscord() {
   const pushToast = useUiStore((state) => state.pushToast);
 
@@ -230,13 +203,7 @@ export function useOpenInDiscord() {
     onError: () => pushToast("Could not open Discord.", "error"),
   });
 }
-/**
- * Which Windows launch entries carry the debug endpoint.
- *
- * This changes rarely (only when the user turns it on or off, or when a Discord
- * update rewrites the Run value), so it is cached for a minute and refreshed
- * when the connect panel mounts.
- */
+
 export function useSilentMode() {
   return useQuery({
     queryKey: ["silent-mode"],

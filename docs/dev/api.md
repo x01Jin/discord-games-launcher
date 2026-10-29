@@ -1,181 +1,78 @@
 # API
 
-## Discord API Client
-
-- Module: `launcher/api.py`
-- Class: `DiscordAPIClient`
-
-The API client handles all communication with Discord's applications API for fetching detectable games.
-
-## Endpoints
-
-### Discord API
+`DiscordAPIClient` in `launcher/api.py` talks to Discord's applications API for
+the detectable game list and downloads game icons.
 
 ```python
 DISCORD_API_BASE = "https://discord.com/api"
 STABLE_API_VERSION = "v10"
-API_VERSION_CANDIDATES = ("v10",)  # latest-first
+API_VERSION_CANDIDATES = ("v10",)
 DISCORD_CDN_URL = "https://cdn.discordapp.com/app-icons"
 ```
 
-The `applications/detectable` endpoint returns a list of all games/applications that Discord can detect as "Playing" status.
+`applications/detectable` returns every application Discord can show as
+"Playing". The client fetches 20,000+ records, keeps the Windows-executable
+ones, and caches the set in SQLite for seven days.
 
 ## Version policy
 
-v10 is the latest stable REST version. Candidates are ordered latest-first: prepend a newer version when Discord ships one and syncs start trying it automatically, cascading down through older entries to the stable default. The last-working version is remembered (`last_working_api_version` in `cache_metadata`) and tried first next sync; other candidates are probed with a short 10-second timeout so a dead version fails fast.
+v10 is the latest stable REST version. Candidates are ordered latest first:
+prepend a newer version when Discord ships one and syncs start trying it
+automatically, cascading down to the stable default. The last working version is
+remembered (`last_working_api_version` in `cache_metadata`) and tried first next
+time; other candidates are probed with a 10-second timeout so a dead version
+fails fast.
 
-`sync_cache()` returns `(was_synced, game_count, skipped_records)`. Malformed records are skipped and counted, so one bad record cannot kill a 20,000-game sync. Payloads missing `executables` across most records trigger a drift warning in the logs (the endpoint is undocumented, so upstream shape changes are the main risk).
+`sync_cache()` returns `(was_synced, game_count, skipped_records)`. Malformed
+records are skipped and counted, so one bad record cannot kill a 20,000-game
+sync. Payloads missing `executables` across most records trigger a drift warning
+in the logs, because the endpoint is undocumented and upstream shape changes are
+the main risk.
 
-## Class DiscordAPIClient
-
-### Initialization
+## Using the client
 
 ```python
-client = DiscordAPIClient(
-    database: Database,
-    cache_dir: Path,
-    timeout: float = 30.0
-)
+client = DiscordAPIClient(database, cache_dir, timeout=30.0, logger=None)
 ```
 
-Parameters:
+- `database` holds the cache.
+- `cache_dir` holds downloaded icons under `icons/`.
+- `timeout` bounds one HTTP request (default 30 s).
 
-- `database` - Database instance for caching
-- `cache_dir` - Directory for icon cache
-- `timeout` - HTTP request timeout in seconds (default: 30)
+| Method | Behavior |
+| --- | --- |
+| `sync_cache(force=False)` | `(was_synced, game_count, skipped_records)`; `force` syncs even when the cache is fresh |
+| `get_icon_url(game_id, icon_hash, size=128)` | CDN URL for one icon |
+| `download_icon(game_id, icon_hash, size=128)` | Saves `icons/{game_id}_{icon_hash}_{size}.png`, returns the path or None |
+| `get_best_win32_executables(executables)` | Static; Windows executables sorted best first |
+| `normalize_process_name(name)` | Static; strips any directory path |
 
-### Methods
+The frontend loads icons straight from the CDN (default size 64, see
+`frontend/src/shared/api-client/icons.ts`) and caches nothing locally. The
+backend icon cache (default size 128) exists for other consumers and is pruned
+of uncached games during library repair.
 
-#### sync_cache()
-
-Synchronizes the local cache with Discord API.
-
-```python
-def sync_cache(self, force: bool = False) -> tuple[bool, int, int]
-```
-
-Parameters:
-
-- `force` - Force sync even if cache is fresh
-
-Returns `(was_synced, game_count, skipped_records)`. `True` if sync was performed, `False` if the cache is up to date. Skipped counts malformed records that were dropped.
-
-Example:
+Raises `DiscordAPIError` when a request fails: connection problems, rate
+limiting, an invalid response, or a timeout.
 
 ```python
+from launcher.api import DiscordAPIClient, DiscordAPIError
+
 try:
     was_synced, count, skipped = client.sync_cache(force=False)
-    if was_synced:
-        print(f"Cache updated ({count} games, {skipped} skipped)")
-    else:
-        print("Cache is current")
 except DiscordAPIError as e:
     print(f"Sync failed: {e}")
 ```
 
-#### \_fetch_all_games()
+## Executable selection
 
-Internal method to fetch all games from Discord API.
+Discord matches process names strictly, and a launcher executable may not be
+detected at all, so each candidate is scored:
 
-```python
-def _fetch_all_games(self) -> List[Dict[str, Any]]
-```
-
-Returns: List of game dictionaries from Discord API
-
-Raises: `DiscordAPIError` on HTTP errors
-
-Rate Limiting: The Discord API endpoint does not require authentication and has reasonable rate limits for this use case.
-
-#### get_icon_url()
-
-Generates Discord CDN URL for a game icon.
-
-```python
-def get_icon_url(self, game_id: int, icon_hash: str, size: int = 128) -> str
-```
-
-Parameters:
-
-- `game_id` - Discord application ID
-- `icon_hash` - Icon hash from API
-- `size` - Icon size in pixels (default: 128)
-
-Returns: URL string for the icon
-
-Example:
-
-```python
-url = client.get_icon_url(356869127241072640, "a0c9d2c4...", size=256)
-# Returns: https://cdn.discordapp.com/app-icons/356869127241072640/a0c9d2c4....png?size=256
-```
-
-#### download_icon()
-
-Downloads and caches a game icon locally.
-
-```python
-def download_icon(
-    self, game_id: int, icon_hash: str, size: int = 128
-) -> Optional[Path]
-```
-
-Parameters:
-
-- `game_id` - Discord application ID
-- `icon_hash` - Icon hash from API
-- `size` - Icon size (default: 128)
-
-Returns: Path to cached icon file, or `None` if download failed
-
-Caching: Icons are stored in `cache_dir/icons/{game_id}_{icon_hash}_{size}.png`
-
-Note: The frontend loads icons straight from the CDN (default size 64, see `frontend/src/shared/api-client/icons.ts`) and caches nothing locally; this backend cache (default size 128) exists for non-UI consumers and is pruned of uncached games during library repair.
-
-Example:
-
-```python
-icon_path = client.download_icon(356869127241072640, "a0c9d2c4...")
-if icon_path:
-    print(f"Icon cached at: {icon_path}")
-```
-
-#### get_best_win32_executables()
-
-Get all Windows executables sorted by smart scoring for intelligent selection.
-
-```python
-@staticmethod
-def get_best_win32_executables(
-    executables: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]
-```
-
-Parameters:
-
-- `executables` - List of executable configurations from API
-
-Returns: Sorted list of Windows executable configs (best first)
-
-Executable Config Structure:
-
-```python
-{
-    "is_launcher": bool,           # CRITICAL: Discord ignores launchers!
-    "name": str,                   # Process name like "minecraft.exe"
-    "os": str,                     # "win32", "darwin", or "linux"
-    "arguments": List[str]         # Optional
-}
-```
-
-Scoring System:
-
-- Non-launcher: +1000 (CRITICAL - Discord ignores launchers!)
-- Shorter name: -10 per character (simpler is better)
-- No path separators: +50 (avoid "_retail_/bg3.exe")
-- No underscore prefix: +20 (avoid `_wow.exe`)
-
-Example:
+- Not a launcher: +1000. Discord ignores launchers.
+- Shorter name: -10 per character.
+- No path separator: +50 (avoid `_retail_/bg3.exe`).
+- No `_` prefix: +20 (avoid `_wow.exe`).
 
 ```python
 executables = [
@@ -183,84 +80,14 @@ executables = [
     {"name": "_retail_/wow-64.exe", "os": "win32", "is_launcher": False},
     {"name": "wow.exe", "os": "win32", "is_launcher": False},
 ]
-sorted_exes = DiscordAPIClient.get_best_win32_executables(executables)
-# Returns sorted list with "wow.exe" first (highest score)
 ```
 
-Why This Matters:
+An executable entry without a `name` falls back to the basename of its first
+argument. `normalize_process_name()` keeps only the filename
+(`_retail_/wow-64.exe` becomes `wow-64.exe`), while the full path is preserved
+on disk so the copied dummy keeps the relative layout Discord expects.
 
-Discord's detection is strict. A launcher executable may fail completely, while a shorter, non-prefixed path is much more reliable for detection.
-
-#### normalize_process_name()
-
-Normalizes process names that may contain path separators. Returns only the filename for Discord detection.
-
-```python
-@staticmethod
-def normalize_process_name(name: str) -> str
-```
-
-Parameters:
-
-- `name` - Raw process name from API (may include paths)
-
-Returns: Normalized executable filename for Discord detection
-
-Examples:
-
-```python
-# Handles cases like:
-DiscordAPIClient.normalize_process_name("_retail_/wow-64.exe")
-# Returns: "wow-64.exe"
-
-DiscordAPIClient.normalize_process_name("devil may cry 5/devilmaycry5.exe")
-# Returns: "devilmaycry5.exe"
-
-DiscordAPIClient.normalize_process_name("minecraft.exe")
-# Returns: "minecraft.exe"
-```
-
-Note: The full path is preserved in the filesystem for proper Discord detection (e.g., creating `_retail_/wow-64.exe`), but the normalized name is used for Discord's process lookup.
-
-## Exceptions
-
-### DiscordAPIError
-
-Raised when Discord API requests fail.
-
-```python
-class DiscordAPIError(Exception):
-    """Raised when Discord API request fails."""
-```
-
-Common Causes:
-
-- Network connectivity issues
-- Discord API rate limiting
-- Invalid responses
-- Timeout exceeded
-
-Handling:
-
-```python
-from launcher.api import DiscordAPIClient, DiscordAPIError
-
-try:
-    client = DiscordAPIClient(database, cache_dir)
-    client.sync_cache()
-except DiscordAPIError as e:
-    # Handle API errors specifically
-    print(f"API Error: {e}")
-except Exception as e:
-    # Handle other errors
-    print(f"Unexpected error: {e}")
-```
-
-## Response format
-
-### Game object
-
-Discord API returns game objects with this structure:
+## Payload shape
 
 ```json
 {
@@ -268,11 +95,7 @@ Discord API returns game objects with this structure:
   "name": "Minecraft",
   "aliases": ["Minecraft"],
   "executables": [
-    {
-      "is_launcher": false,
-      "name": "java.exe",
-      "os": "win32"
-    }
+    {"is_launcher": false, "name": "java.exe", "os": "win32"}
   ],
   "icon_hash": "a0c9d2c4e6f8g0h2i4j6k8l0m2n4o6p8q0r2s4t6u8v0w2x4",
   "themes": ["action", "fps", "multiplayer"],
@@ -280,70 +103,11 @@ Discord API returns game objects with this structure:
 }
 ```
 
-Fields:
+`id` is a snowflake-scale integer stored as INTEGER and serialized as a string
+on the bridge. `aliases`, `executables`, and `themes` are JSON arrays in the
+database.
 
-- `id` - Discord application ID (snowflake-scale integer, stored as INTEGER, serialized as a string on the bridge, see [Bridge](./bridge.md))
-- `name` - Display name of the game
-- `aliases` - Alternative names for the game
-- `executables` - List of executable configurations per platform
-- `icon_hash` - Icon hash for CDN lookup
-- `themes` - Game categories/tags
-- `isPublished` - Whether the game is published
+## Async methods
 
-## Async support
-
-The client includes async versions of fetch methods:
-
-```python
-async def _fetch_all_games_async(self) -> List[Dict[str, Any]]
-async def download_icon_async(self, game_id: int, icon_hash: str, size: int = 128) -> Optional[Path]
-```
-
-Note: These are currently not used in the main application but are available for future async implementations.
-
-## Testing
-
-`tests/test_api.py` covers:
-
-- Mocked API responses
-- Windows executable filtering
-- Process name normalization
-- Icon URL generation
-- Error handling scenarios
-
-## Usage example
-
-```python
-from pathlib import Path
-from launcher.api import DiscordAPIClient, DiscordAPIError
-from launcher.database import Database
-
-# Setup
-db = Database(Path("launcher.db"))
-cache_dir = Path("./cache")
-
-# Create client
-client = DiscordAPIClient(db, cache_dir, timeout=30.0)
-
-try:
-    # Sync cache
-    was_synced, count, skipped = client.sync_cache(force=False)
-
-    # Get game info
-    game = db.get_game(356869127241072640)
-    if game and game.icon_hash:
-        # Download icon
-        icon_path = client.download_icon(game.id, game.icon_hash, size=128)
-
-    # Get all Windows executables sorted by score
-    if game:
-        exes = client.get_best_win32_executables(game.executables)
-        if exes:
-            best_exe = exes[0]  # Highest score
-            normalized = client.normalize_process_name(best_exe['name'])
-            print(f"Best executable: {best_exe['name']}")
-            print(f"Normalized name: {normalized}")
-
-except DiscordAPIError as e:
-    print(f"API error: {e}")
-```
+`_fetch_all_games_async()` and `download_icon_async()` mirror the sync versions.
+Nothing in the app calls them yet.

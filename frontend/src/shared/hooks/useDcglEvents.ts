@@ -8,11 +8,6 @@ function isDcglDetail(value: unknown): value is DcglEventDetail {
   return type === "library_changed" || type === "quests_changed";
 }
 
-/**
- * Backend pushes arrive as a CustomEvent dispatched from Python. Anything that
- * changes library or quest state invalidates the matching caches, so nothing
- * on screen waits for its next poll.
- */
 export function useDcglEvents(): void {
   const queryClient = useQueryClient();
 

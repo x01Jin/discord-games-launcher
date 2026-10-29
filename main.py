@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
-"""Discord Games Launcher - Main Entry Point.
-
-Hosts the React frontend (frontend-dist/) in a native pywebview window
-with a DWM-styled dark frame. Python backend is exposed to the page
-through the Bridge js_api.
-"""
 
 import json
 import os
 import sys
 from pathlib import Path
 
-# Add project root to path for imports
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
@@ -33,7 +26,6 @@ from launcher.quests import QuestService
 
 APP_TITLE = "Discord Games Launcher"
 
-# DWM window attributes (verified against Win11 SDK docs)
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_USE_IMMERSIVE_DARK_MODE_WIN10 = 19
 _DWMWA_WINDOW_CORNER_PREFERENCE = 33
@@ -41,7 +33,7 @@ _DWMWA_BORDER_COLOR = 34
 _DWMWA_CAPTION_COLOR = 35
 _DWMWA_TEXT_COLOR = 36
 
-_FRAME_BG = 0x0014151C  # BGR for #14151c
+_FRAME_BG = 0x0014151C
 _FRAME_TEXT = 0x00FFFFFF
 
 
@@ -49,26 +41,19 @@ _INSTANCE_HANDLE = None
 
 
 def _focus_existing_window() -> None:
-    """Bring the copy that already owns the launcher to the front."""
     try:
         import ctypes
 
         user32 = ctypes.windll.user32
         hwnd = user32.FindWindowW(None, APP_TITLE)
         if hwnd:
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.ShowWindow(hwnd, 9)
             user32.SetForegroundWindow(hwnd)
     except (AttributeError, OSError):
         pass
 
 
 def _claim_single_instance() -> bool:
-    """Return False when another copy is already running.
-
-    Each copy runs its own quest service against the same Discord client, so
-    two copies post every heartbeat twice and both start the next queued
-    quest. A named mutex keeps one copy alive; the second just shows it.
-    """
     global _INSTANCE_HANDLE
     if os.name != "nt":
         return True
@@ -86,7 +71,7 @@ def _claim_single_instance() -> bool:
         handle = kernel32.CreateMutexW(None, False, "Local\\DiscordGamesLauncher")
         if not handle:
             return True
-        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+        if ctypes.get_last_error() == 183:
             kernel32.CloseHandle(handle)
             _focus_existing_window()
             return False
@@ -97,11 +82,6 @@ def _claim_single_instance() -> bool:
 
 
 def _report_fatal(message: str) -> None:
-    """Show a dialog when a windowed build dies before the log is readable.
-
-    Frozen builds run without a console, so a traceback on stdout reaches
-    nobody; without this the window never appears and the user sees nothing.
-    """
     if not getattr(sys, "frozen", False) or os.name != "nt":
         return
     try:
@@ -118,7 +98,6 @@ def _report_fatal(message: str) -> None:
 
 
 def _dwm_set(hwnd: int, attr: int, value: int) -> bool:
-    """Set one DWMWA attribute; False instead of raising on failure."""
     try:
         import ctypes
 
@@ -132,11 +111,6 @@ def _dwm_set(hwnd: int, attr: int, value: int) -> bool:
 
 
 def _apply_native_frame_style(window: webview.Window) -> None:
-    """Dark native frame, applied once the native handle exists.
-
-    Keeps 100% native behavior (resize, Aero Snap, shadow, rounded
-    corners): only tint and dark mode are customized, never geometry.
-    """
     if os.name != "nt":
         return
     native = window.native
@@ -151,11 +125,10 @@ def _apply_native_frame_style(window: webview.Window) -> None:
     _dwm_set(hwnd, _DWMWA_CAPTION_COLOR, _FRAME_BG)
     _dwm_set(hwnd, _DWMWA_TEXT_COLOR, _FRAME_TEXT)
     _dwm_set(hwnd, _DWMWA_BORDER_COLOR, _FRAME_BG)
-    _dwm_set(hwnd, _DWMWA_WINDOW_CORNER_PREFERENCE, 2)  # round
+    _dwm_set(hwnd, _DWMWA_WINDOW_CORNER_PREFERENCE, 2)
 
 
 def _resolve_frontend_url() -> str:
-    """Dev-server URL if requested, else the bundled production build."""
     dev_url = os.environ.get("DCGL_FRONTEND_URL")
     if dev_url:
         return dev_url
@@ -170,7 +143,6 @@ def _resolve_frontend_url() -> str:
 
 
 def initialize_components():
-    """Initialize all backend components."""
     app_data_dir = Path(user_data_dir("discord-games-launcher", appauthor=False))
     db_path = app_data_dir / "launcher.db"
     cache_dir = app_data_dir / "cache"
@@ -200,7 +172,7 @@ def initialize_components():
     try:
         repair = game_manager.repair_library(startup=True)
         print(f"Library repair: {repair}")
-    except Exception as e:  # noqa: BLE001 - repair must never block startup
+    except Exception as e:
         print(f"Library repair skipped: {e}")
 
     quest_service = QuestService(
@@ -214,13 +186,11 @@ def initialize_components():
 
 
 def _calculate_window_geometry() -> tuple[int, int, int, int]:
-    """Calculate window width, height, x, y for 75% of primary monitor, centered."""
     try:
         monitors = get_monitors()
         primary = next((m for m in monitors if m.is_primary), monitors[0])
         screen_w, screen_h = primary.width, primary.height
     except (StopIteration, IndexError, OSError):
-        # Fallback defaults
         screen_w, screen_h = 1920, 1080
 
     w = int(screen_w * 0.75)
@@ -228,14 +198,12 @@ def _calculate_window_geometry() -> tuple[int, int, int, int]:
     x = (screen_w - w) // 2
     y = (screen_h - h) // 2
 
-    # Clamp to reasonable minimums
     w = max(w, 900)
     h = max(h, 600)
     return w, h, x, y
 
 
 def main():
-    """Main application entry point."""
     print(f"Discord Games Launcher v{APP_VERSION}")
     print("=" * 40)
 
@@ -288,7 +256,7 @@ def main():
         print("Ready!")
         webview.start(debug=bool(os.environ.get("DCGL_DEBUG")))
 
-    except Exception as e:  # noqa: BLE001 - last resort: report anything before exit
+    except Exception as e:
         print(f"Fatal error: {e}")
         import traceback
 

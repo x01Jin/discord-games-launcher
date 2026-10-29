@@ -1,10 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { CheckIcon, SpinnerIcon } from "./icons";
 
-/* --------------------------------------------------------------------------
- * Button
- * ----------------------------------------------------------------------- */
-
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "success";
 type ButtonSize = "sm" | "md";
 
@@ -89,10 +85,6 @@ export function IconButton({
   );
 }
 
-/* --------------------------------------------------------------------------
- * Chip / status dot
- * ----------------------------------------------------------------------- */
-
 type ChipTone = "neutral" | "accent" | "success" | "warning" | "danger" | "orb";
 
 const CHIP_TONES: Record<ChipTone, string> = {
@@ -154,10 +146,6 @@ export function StatusDot({
   );
 }
 
-/* --------------------------------------------------------------------------
- * Progress
- * ----------------------------------------------------------------------- */
-
 export function ProgressBar({
   value,
   tone = "accent",
@@ -187,10 +175,6 @@ export function ProgressBar({
   );
 }
 
-/* --------------------------------------------------------------------------
- * Switch
- * ----------------------------------------------------------------------- */
-
 export function Switch({
   checked,
   onChange,
@@ -200,7 +184,7 @@ export function Switch({
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
-  /** The label is still exposed to assistive tech, just not drawn. */
+
   hideLabel?: boolean;
 }) {
   return (
@@ -227,10 +211,6 @@ export function Switch({
     </label>
   );
 }
-
-/* --------------------------------------------------------------------------
- * Checkbox
- * ----------------------------------------------------------------------- */
 
 export function Checkbox({
   checked,
@@ -272,10 +252,6 @@ export function Checkbox({
   );
 }
 
-/* --------------------------------------------------------------------------
- * Placeholders and empty states
- * ----------------------------------------------------------------------- */
-
 export function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div
@@ -311,10 +287,6 @@ export function EmptyState({
     </div>
   );
 }
-
-/* --------------------------------------------------------------------------
- * Layout helpers
- * ----------------------------------------------------------------------- */
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (

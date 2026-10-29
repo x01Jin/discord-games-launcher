@@ -5,7 +5,7 @@ interface Props {
   name: string;
   gameId?: string | null;
   iconHash?: string | null;
-  /** Quest artwork, used before the application icon when present. */
+
   artPath?: string | null;
   size?: number;
   className?: string;
@@ -18,7 +18,6 @@ function initials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-/** Stable hue per name, so fallback tiles are not all the same grey. */
 function hueFor(name: string): number {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) {
@@ -27,11 +26,6 @@ function hueFor(name: string): number {
   return hash;
 }
 
-/**
- * Square game art. The initials are drawn underneath and the artwork fades in
- * over them, so a slow or blocked CDN request leaves a readable tile instead
- * of an empty box. Sources degrade quest artwork, application icon, initials.
- */
 export function GameArt({
   name,
   gameId,
@@ -43,8 +37,6 @@ export function GameArt({
   const questArt = getQuestAssetUrl(artPath ?? null);
   const icon = gameId && iconHash ? getIconUrl(gameId, iconHash, 64) : null;
   const preferred = questArt ?? icon;
-  // Tracked by URL rather than a boolean: a changed source gets its own chance
-  // to load, without an effect that resets state after the fact.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
 

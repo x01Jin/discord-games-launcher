@@ -1,17 +1,3 @@
-# -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller build definition for dcgl.exe.
-
-Build the single-file executable users download:
-
-    pyinstaller --clean --noconfirm dcgl.spec
-
-For a folder build that starts faster while developing:
-
-    set DCGL_ONEFILE=0
-    pyinstaller --clean --noconfirm dcgl.spec
-
-The version comes from launcher/__init__.py, so bump it there and rebuild.
-"""
 
 import os
 import re
@@ -30,7 +16,6 @@ from PyInstaller.utils.win32.versioninfo import (
 ROOT = Path(SPECPATH).resolve()
 ONEFILE = os.environ.get("DCGL_ONEFILE", "1") != "0"
 
-# Fail with the fix, not with a PyInstaller traceback three minutes in.
 for required in (
     ROOT / "frontend-dist" / "index.html",
     ROOT / "templates" / "dist" / "DummyGame.exe",
@@ -51,10 +36,6 @@ VERSION = _match.group(1)
 _PARTS = [int(part) for part in VERSION.split(".")][:4]
 VERSION_PARTS = tuple(_PARTS + [0] * (4 - len(_PARTS)))
 
-# Windows shows this in the exe Properties, and the shell uses it for sorting.
-# PyInstaller re-reads this file with eval(), so it has to stay in the
-# documented plain-constructor form. repr() emits versioninfo.-prefixed
-# constructors that eval() cannot resolve.
 _version_file = ROOT / "build" / "version_info.txt"
 _version_file.parent.mkdir(parents=True, exist_ok=True)
 _version_file.write_text(
@@ -111,8 +92,6 @@ _common = dict(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    # UPX is not required and is not installed here; enabling it only prints
-    # a warning. Flip to True if you actually want UPX compression.
     upx=False,
     console=False,
     disable_windowed_traceback=False,

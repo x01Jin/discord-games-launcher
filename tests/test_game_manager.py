@@ -1,19 +1,9 @@
-"""Test script for Game Manager module.
-
-Tests high-level game management operations including library management,
-game search, and process control.
-
-Usage:
-    pytest tests/test_game_manager.py -v
-    python tests/test_game_manager.py  # Run basic tests
-"""
 
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -25,7 +15,6 @@ from launcher.process_manager import ProcessManager
 
 
 def test_game_manager_initialization():
-    """Test GameManager initialization with all components."""
     print("Testing GameManager initialization...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -49,7 +38,6 @@ def test_game_manager_initialization():
 
 
 def test_sync_games():
-    """Test syncing games from API."""
     print("Testing game sync...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -61,7 +49,6 @@ def test_sync_games():
         process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        # Mock API response
         mock_games = [
             {
                 "id": 12345,
@@ -98,14 +85,12 @@ def test_sync_games():
             mock_client.get.return_value = mock_response
             mock_client_class.return_value = mock_client
 
-            # Sync games
             was_synced, count, skipped = game_mgr.sync_games(force=True)
 
             assert was_synced is True, "Should perform sync"
             assert count == 2, f"Expected 2 games, got {count}"
             assert skipped == 0, f"Expected 0 skipped, got {skipped}"
 
-            # Verify games were cached
             all_games = game_mgr.get_all_games()
             assert len(all_games) == 2
 
@@ -115,7 +100,6 @@ def test_sync_games():
 
 
 def test_search_games():
-    """Test searching for games in cache."""
     print("Testing game search...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -127,7 +111,6 @@ def test_search_games():
         process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        # Add test games to cache
         test_games = [
             {
                 "id": 12345,
@@ -166,7 +149,6 @@ def test_search_games():
 
         db.save_games(test_games)
 
-        # Search for "Test" should find Test Game and Test Other
         results = game_mgr.search_games("Test", limit=10)
         assert len(results) == 2, f"Expected 2 results for 'Test', got {len(results)}"
 
@@ -176,7 +158,6 @@ def test_search_games():
 
         print(f"  Found {len(results)} games for 'Test'")
 
-        # Search for exact game should work
         results = game_mgr.search_games("Another", limit=10)
         assert len(results) == 1
         assert results[0].name == "Another Game"
@@ -187,13 +168,11 @@ def test_search_games():
 
 
 def test_add_to_library():
-    """Test adding game to library with dummy executable creation."""
     print("Testing add to library...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
-        # Create mock template
         template_path = tmpdir / "DummyGame.exe"
         template_path.write_bytes(b"MOCK_DUMMY")
 
@@ -203,7 +182,6 @@ def test_add_to_library():
         process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        # Add test game to cache
         test_game = {
             "id": 12345,
             "name": "Test Game",
@@ -219,24 +197,20 @@ def test_add_to_library():
 
         db.save_games([test_game])
 
-        # Add to library
         success, message = game_mgr.add_to_library(12345)
 
         assert success is True, f"Failed to add game: {message}"
         print(f"  {message}")
 
-        # Verify it's in library
         assert game_mgr.is_in_library(12345), "Game should be in library"
         print("  Game is in library")
 
-        # Verify dummy executable was created
         lib_game = db.get_library_game(12345)
         assert lib_game is not None
         assert lib_game.executable_path is not None
         assert Path(lib_game.executable_path).exists()
         print(f"  Dummy created: {lib_game.executable_path}")
 
-        # Verify executables are stored
         assert len(lib_game.executables) == 2
         print(f"  Stored {len(lib_game.executables)} executable candidates")
 
@@ -244,7 +218,6 @@ def test_add_to_library():
 
 
 def test_add_duplicate_to_library():
-    """Test that adding same game twice updates library."""
     print("Testing duplicate library add...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -271,11 +244,9 @@ def test_add_duplicate_to_library():
 
         db.save_games([test_game])
 
-        # Add first time
         success1, msg1 = game_mgr.add_to_library(12345)
         assert success1 is True, f"Add failed: {msg1}"
 
-        # Try to add again - should fail (already in library)
         success2, msg2 = game_mgr.add_to_library(12345)
         assert success2 is False, "Should not add game already in library"
         print(f"  Correctly rejected duplicate: {msg2}")
@@ -284,7 +255,6 @@ def test_add_duplicate_to_library():
 
 
 def test_remove_from_library():
-    """Test removing game from library."""
     print("Testing remove from library...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -311,13 +281,11 @@ def test_remove_from_library():
 
         db.save_games([test_game])
 
-        # Add to library
         success, _ = game_mgr.add_to_library(12345)
         assert success is True
         assert game_mgr.is_in_library(12345)
         print("  Added to library")
 
-        # Remove from library
         success, message = game_mgr.remove_from_library(12345)
 
         assert success is True, f"Failed to remove: {message}"
@@ -328,7 +296,6 @@ def test_remove_from_library():
 
 
 def test_get_library():
-    """Test retrieving library with status info."""
     print("Testing get library...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -343,7 +310,6 @@ def test_get_library():
         process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        # Add test games
         test_games = [
             {
                 "id": 12345,
@@ -371,16 +337,13 @@ def test_get_library():
 
         db.save_games(test_games)
 
-        # Add both to library
         for game_id in [12345, 67890]:
             game_mgr.add_to_library(game_id)
 
-        # Get library
         library = game_mgr.get_library()
 
         assert len(library) == 2, f"Expected 2 games in library, got {len(library)}"
 
-        # Check each has is_running status
         for game in library:
             assert "is_running" in game, "Each game should have is_running status"
             assert game["is_running"] is False, "Games should not be running initially"
@@ -392,7 +355,6 @@ def test_get_library():
 
 
 def _seed_library_game(game_mgr, tmpdir, game_id=424242):
-    """Cache a game with a real template exe and add it to the library."""
     template = tmpdir / "DummyGame.exe"
     template.write_bytes(b"fake-exe")
     game_mgr.db.save_games(
@@ -422,7 +384,6 @@ def _seed_library_game(game_mgr, tmpdir, game_id=424242):
 
 
 def test_start_game_direct():
-    """Start launches the best exe at once and records the outcome."""
     print("Testing direct game start...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -453,7 +414,6 @@ def test_start_game_direct():
             ).fetchone()
         assert row is not None and row[0] >= 1
 
-        # Validation paths still fail closed.
         assert game_mgr.start_game(999999)[0] is False
         db.set_process_running(424242, 4242)
         process_mgr._refresh_cache()
@@ -470,7 +430,6 @@ def test_start_game_direct():
 
 
 def test_start_game_records_failure():
-    """A failed launch returns an error and records the failed attempt."""
     print("Testing failed game start...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -506,7 +465,6 @@ def test_start_game_records_failure():
 
 
 def run_all_tests():
-    """Run all GameManager tests."""
     print("\n" + "=" * 50)
     print("GAME MANAGER MODULE TESTS")
     print("=" * 50 + "\n")
@@ -527,7 +485,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:  # noqa: BLE001 - runner must continue past failures
+        except Exception as e:
             print(f"  FAILED: {e}")
             import traceback
 

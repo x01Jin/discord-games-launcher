@@ -1,15 +1,9 @@
-"""Tests for non-destructive schema migration.
-
-Usage:
-    pytest tests/test_migration.py -v
-"""
 
 import sqlite3
 import sys
 import tempfile
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -17,7 +11,6 @@ from launcher.database import Database
 
 
 def _write_v1_db(db_path: Path) -> None:
-    """Create a v1-shaped database: no schema version, no new columns."""
     conn = sqlite3.connect(db_path)
     conn.execute("""
         CREATE TABLE games_cache (
@@ -81,7 +74,6 @@ def _write_v1_db(db_path: Path) -> None:
 
 
 def test_v1_database_migrates_without_data_loss():
-    """Opening a v1 database upgrades it in place, preserving rows."""
     print("Testing v1 migration...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -110,7 +102,6 @@ def test_v1_database_migrates_without_data_loss():
 
 
 def test_migrated_row_converges_through_refresh():
-    """Migrated NULL blobs cause no crash and refresh backfills them."""
     print("Testing migration/refresh convergence...")
 
     from launcher.api import DiscordAPIClient
@@ -159,7 +150,6 @@ def test_migrated_row_converges_through_refresh():
 
 
 def test_future_schema_version_triggers_recreate():
-    """An unrecognized newer version falls back to recreate (last resort)."""
     print("Testing future-version fallback...")
 
     with tempfile.TemporaryDirectory() as tmpdir:

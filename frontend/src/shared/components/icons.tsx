@@ -1,9 +1,5 @@
 import type { SVGProps } from "react";
 
-/**
- * One inline SVG set. Inline beats an icon package here: the app ships as a
- * bundled desktop build, and these are the only glyphs it needs.
- */
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 function Svg({ size = 16, children, ...rest }: IconProps) {

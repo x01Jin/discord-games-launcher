@@ -13,7 +13,6 @@ const TONE = {
   },
 } as const;
 
-/** Bottom-right stack, matching where desktop apps put transient notices. */
 export function Toasts() {
   const toasts = useUiStore((state) => state.toasts);
   const dismiss = useUiStore((state) => state.dismissToast);

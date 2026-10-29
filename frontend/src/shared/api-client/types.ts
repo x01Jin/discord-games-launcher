@@ -75,16 +75,10 @@ export interface RepairResult {
   summary: Record<string, number>;
 }
 
-/* --------------------------------------------------------------------------
- * Quests, read from the running Discord client
- * ----------------------------------------------------------------------- */
-
 export type QuestState = "ready" | "running" | "completed" | "expired" | "unresolved";
 
-/** Which task the client is offering. Only "play" can be finished here. */
 export type QuestKind = "play" | "watch" | "watch_mobile";
 
-/** What the row's button should do. */
 export type QuestAction =
   | "run"
   | "stop"
@@ -96,13 +90,13 @@ export type QuestAction =
 
 export interface QuestReward {
   label: string | null;
-  /** Every reward name on the quest, in Discord's order. */
+
   labels: string[];
   orbs: number | null;
   premium_orbs: number | null;
-  /** The reward is an avatar decoration. */
+
   avatar_decoration: boolean;
-  /** The reward is an in-game item or currency. */
+
   in_game: boolean;
 }
 
@@ -135,34 +129,29 @@ export interface QuestGame {
   in_library: boolean;
   is_running: boolean;
   state: QuestState;
-  /** Discord recorded the reward as claimed. */
+
   claimed: boolean;
-  /** Finished, and the reward is still unclaimed: the row offers Claim. */
+
   claimable: boolean;
-  /** Waiting in the start queue, behind a quest that is still running. */
+
   queued: boolean;
 }
 
-/** A claim Discord answers with a captcha challenge: solve it in the client. */
 export interface ClaimResult extends MutResult {
-  needs_captcha?: boolean;
+  needs_user_action?: boolean;
 }
 
-/** Options that change how a run behaves. Stored in settings.json. */
 export interface QuestPrefs {
-  /** Pause before the next queued quest starts, in minutes. 0 starts at once. */
+
   play_session_tail_min: number;
-  /**
-   * activity starts the dummy game so Discord shows it on the profile.
-   * silent posts the play heartbeat instead and shows nothing.
-   */
+
   run_mode: "activity" | "silent";
 }
 
 export interface QuestQueue {
   ids: string[];
   active: string | null;
-  /** The video quest the queue is crediting in the background. */
+
   watching: string | null;
 }
 
@@ -179,14 +168,13 @@ export interface DiscordStatus {
   error?: string | null;
   hint: string;
   cached?: boolean;
-  /** Every Windows launch entry now carries the debug endpoint. */
+
   silent?: boolean;
-  /** The user asked for silent connection and it should be kept that way. */
+
   silent_wanted?: boolean;
   silent_port?: number;
 }
 
-/** One place Windows starts Discord from. */
 export interface SilentLauncher {
   kind: string;
   location: string;
@@ -223,7 +211,7 @@ export interface QuestsResult {
   suspended_until?: string | null;
   enrollment_blocked_until?: string | null;
   total_quests?: number;
-  /** Orb balance from the client. null until Discord has fetched it. */
+
   orbs?: number | null;
   prefs?: QuestPrefs;
   queue?: QuestQueue;

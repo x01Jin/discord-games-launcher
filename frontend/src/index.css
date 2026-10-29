@@ -1,23 +1,18 @@
 @import "tailwindcss";
 
-/*
- * Discord's own dark palette. The app sits next to the Discord client, so it
- * borrows its greys instead of inventing a theme: the window reads as part of
- * the ecosystem rather than as a themed web page.
- */
 @theme {
-  --color-base: #1e1f22; /* sidebars, deepest surface */
-  --color-canvas: #313338; /* main content */
-  --color-raised: #2b2d31; /* panels, inputs, menus */
-  --color-hover: #35373c; /* row hover */
-  --color-active: #404249; /* selected row / pressed control */
+  --color-base: #1e1f22;
+  --color-canvas: #313338;
+  --color-raised: #2b2d31;
+  --color-hover: #35373c;
+  --color-active: #404249;
   --color-line: rgba(255, 255, 255, 0.06);
   --color-line-strong: rgba(255, 255, 255, 0.12);
 
-  --color-ink: #f2f3f5; /* primary text */
-  --color-muted: #b5bac1; /* secondary text */
-  --color-subtle: #949ba4; /* tertiary text, icons */
-  --color-faint: #6d6f78; /* disabled text */
+  --color-ink: #f2f3f5;
+  --color-muted: #b5bac1;
+  --color-subtle: #949ba4;
+  --color-faint: #6d6f78;
 
   --color-accent: #5865f2;
   --color-accent-hover: #4752c4;
@@ -35,8 +30,7 @@
 }
 
 @layer base {
-  /* Tailwind v4 defaults borders to currentColor; every rule here wants the
-     hairline, so make it the default and override per element when needed. */
+
   *,
   ::before,
   ::after {
@@ -129,9 +123,6 @@
   white-space: nowrap;
 }
 
-/* Rows can be thousands of entries long in the catalogue; letting the engine
-   skip layout for the off-screen ones keeps scrolling smooth without a
-   virtualisation dependency. */
 @utility row-skip {
   content-visibility: auto;
   contain-intrinsic-size: auto 56px;

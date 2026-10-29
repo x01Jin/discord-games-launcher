@@ -1,395 +1,90 @@
 # Testing
 
-## Overview
+The suite runs on pytest (with pytest-asyncio) and lives in `tests/`. Most files
+need no network access: HTTP is mocked and the CDP round trip uses a local socket
+pair.
 
-The suite runs on pytest and needs no network access for most files.
-
-- Tests live in `tests/`
-- pytest>=9.1.1 and pytest-asyncio>=1.4.0
-
-## Test structure
-
-```structure
-tests/
-├── conftest.py              # Shared fixtures and configuration
-├── README.md               # Test documentation (this file)
-├── test_api.py             # Discord API client tests
-├── test_bridge_ids.py      # Snowflake ID bridge serialization tests
-├── test_bridge_quests.py   # Quest methods on the bridge
-├── test_database.py        # Database operation tests
-├── test_database_queries.py # Catalogue paging, bulk lookup, stats memo
-├── test_discord_native.py  # Client discovery, CDP session, quest payload
-├── test_discord_setup.py   # Launch-argument rewriting, shortcut and Run key round trips
-├── test_dummy_generator.py # Dummy executable tests
-├── test_game_manager.py    # Game manager tests
-├── test_integration.py     # End-to-end integration tests
-├── test_migration.py       # Schema migration tests
-├── test_quests.py          # Quest decoration, resolution, start/stop
-├── test_repair.py          # Library repair tests
-└── test_startup_cleanup.py # Startup cleanup tests
-```
-
-## Running tests
-
-### All tests
-
-```bash
-pytest tests/ -q
-```
-
-On Windows with the project virtual environment:
+## Running
 
 ```cmd
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-### One test file
-
 ```bash
-pytest tests/test_database.py -q
-pytest tests/test_api.py -q
-pytest tests/test_dummy_generator.py -q
-pytest tests/test_integration.py -q
-```
-
-### With coverage
-
-Coverage targets `launcher/` only (the React frontend in `frontend/src/` has no Python coverage):
-
-```bash
-pytest tests/ -q --cov=launcher --cov-report=html
-```
-
-### Directly with Python
-
-```bash
-python tests/test_database.py
-python tests/test_api.py
-python tests/test_dummy_generator.py
-```
-
-## Environment variables
-
-### SKIP_PYINSTALLER_TESTS
-
-Set to skip slow PyInstaller-based tests:
-
-```bash
-# Windows
-set SKIP_PYINSTALLER_TESTS=True
-pytest tests/test_dummy_generator.py -q
-
-# Linux/macOS
-export SKIP_PYINSTALLER_TESTS=True
-pytest tests/test_dummy_generator.py -q
-```
-
-## Test files
-
-### test_database.py
-
-Coverage: Database initialization, game caching, library operations, process tracking, executable history, cache sync tracking.
-
-### test_api.py
-
-Coverage: Discord API client initialization, executable scoring, process name normalization, icon URL generation, cache sync logic, error handling.
-
-### test_bridge_ids.py
-
-Coverage: Snowflake-scale game IDs crossing the JS bridge serialized as strings.
-
-### test_dummy_generator.py
-
-Coverage: Copy-based dummy executable generation from the pre-built template.
-
-Note: Tests requiring PyInstaller are skipped if `SKIP_PYINSTALLER_TESTS=True`.
-
-### test_game_manager.py
-
-Coverage: High-level library management, game search and sync, process control.
-
-### test_integration.py
-
-Coverage: Complete application stack working together in realistic workflows.
-
-### test_migration.py
-
-Coverage: Non-destructive schema migration without data loss.
-
-### test_repair.py
-
-Coverage: Executable candidate refresh, library repair composition, generator ownership.
-
-### test_startup_cleanup.py
-
-Coverage: Startup reconciliation of stale runtime records, orphaned directories, missing executables, and orphaned icons.
-
-## Fixtures (conftest.py)
-
-### temp_dir
-
-Creates a temporary directory for test files:
-
-```python
-@pytest.fixture
-def temp_dir():
-    """Create a temporary directory for test files."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-```
-
-### database
-
-Creates a test database in the temporary directory:
-
-```python
-@pytest.fixture
-def database(temp_dir):
-    """Create a test database."""
-    db_path = temp_dir / "test.db"
-    return Database(db_path)
-```
-
-### api_client
-
-Creates a test API client backed by the test database:
-
-```python
-@pytest.fixture
-def api_client(database, temp_dir):
-    """Create a test API client."""
-    cache_dir = temp_dir / "cache"
-    return DiscordAPIClient(database, cache_dir)
-```
-
-### mock_template
-
-Creates a mock DummyGame.exe template file for testing:
-
-```python
-@pytest.fixture
-def mock_template(temp_dir):
-    """Create a mock DummyGame.exe template for testing."""
-    template_path = temp_dir / "DummyGame.exe"
-    template_path.write_bytes(b"MOCK_DUMMY_GAME_EXE_FOR_TESTING")
-    return template_path
-```
-
-### dummy_generator
-
-Creates a test dummy generator with the mock template:
-
-```python
-@pytest.fixture
-def dummy_generator(temp_dir, mock_template):
-    """Create a test dummy generator with mock template."""
-    games_dir = temp_dir / "games"
-    return DummyGenerator(games_dir, template_exe_path=mock_template)
-```
-
-### process_manager
-
-Creates a test process manager:
-
-```python
-@pytest.fixture
-def process_manager(database, dummy_generator):
-    """Create a test process manager."""
-    return ProcessManager(database, dummy_generator)
-```
-
-### game_manager
-
-Creates a test game manager with all components:
-
-```python
-@pytest.fixture
-def game_manager(database, api_client, dummy_generator, process_manager):
-    """Create a test game manager with all components."""
-    return GameManager(
-        database=database,
-        api_client=api_client,
-        dummy_generator=dummy_generator,
-        process_manager=process_manager,
-    )
-```
-
-## Test data helpers
-
-### create_sample_game()
-
-Creates sample game dictionaries for testing:
-
-```python
-def create_sample_game(game_id: int) -> Dict[str, Any]:
-    """Create a sample game dictionary."""
-    return {
-        "id": game_id,
-        "name": f"Test Game {game_id}",
-        "aliases": [f"TG{game_id}"],
-        "executables": [{"os": "win32", "name": f"game{game_id}.exe"}],
-        "icon_hash": f"icon_{game_id}",
-        "themes": ["action"],
-        "isPublished": True
-    }
-```
-
-## Mocking
-
-### Mocking API responses
-
-```python
-import json
-from unittest.mock import patch, MagicMock
-
-def test_api_sync_with_mock(database, temp_dir):
-    """Test API sync with mocked response."""
-    mock_games = [
-        {"id": 1, "name": "Game 1", ...},
-        {"id": 2, "name": "Game 2", ...}
-    ]
-
-    with patch("httpx.Client.get") as mock_get:
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_games
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
-
-        api_client = DiscordAPIClient(database, temp_dir / "cache")
-        api_client.sync_cache(force=True)
-
-        stats = database.get_cache_stats()
-        assert stats["cached_games"] == 2
-```
-
-## Best practices
-
-### 1. Use temporary paths
-
-Always use `tmp_path` fixture for file operations:
-
-```python
-def test_something(tmp_path):
-    db_path = tmp_path / "test.db"
-    db = Database(db_path)
-```
-
-### 2. Clean up resources
-
-Use fixtures for automatic cleanup:
-
-```python
-@pytest.fixture
-def database(temp_dir):
-    db_path = temp_dir / "test.db"
-    db = Database(db_path)
-    yield db
-    # Cleanup happens automatically when temp_dir is removed
-```
-
-### 3. Test error cases
-
-Always test failure scenarios:
-
-```python
-def test_database_error_handling(database):
-    """Test handling of database errors."""
-    # Test with invalid data
-    with pytest.raises(Exception):
-        database.save_games(None)
-```
-
-### 4. Skip slow tests
-
-Use environment variables for optional slow tests:
-
-```python
-import os
-
-@pytest.mark.skipif(
-    os.environ.get("SKIP_PYINSTALLER_TESTS") == "True",
-    reason="PyInstaller tests skipped"
-)
-def test_generate_dummy_executable(dummy_generator):
-    """Test actual dummy generation (slow)."""
-    result = dummy_generator.generate_dummy(123, "Test", "test.exe")
-    assert result[0].exists()
-```
-
-## Continuous integration
-
-Example GitHub Actions workflow:
-
-```yaml
-name: Tests
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run tests (fast)
-        run: |
-          set SKIP_PYINSTALLER_TESTS=True
-          pytest tests/ -q --cov=launcher
-
-      - name: Run full tests
-        run: pytest tests/ -q
-```
-
-## Debugging tests
-
-### Verbose output
-
-```bash
-pytest tests/test_database.py -v -s
-```
-
-### Stop on first failure
-
-```bash
-pytest tests/ -x
-```
-
-### Debug a specific test
-
-```bash
+pytest tests/ -q                                # any environment with pytest
+pytest tests/test_database.py -q                # one file
+pytest tests/test_database.py -v -s             # with output
 pytest tests/test_database.py::test_games_cache -v --pdb
-```
-
-### Show local variables on failure
-
-```bash
+pytest tests/ -x                                # stop on first failure
 pytest tests/ --showlocals
 ```
 
-## Coverage goals
+`SKIP_PYINSTALLER_TESTS=True` skips the slow tests that call PyInstaller.
 
-Target Coverage:
-
-- launcher/ modules: 80%+
-- Overall: 75%+
-
-Exclusions:
-
-- PyInstaller build artifacts
-- Debug print statements
-
-Generate coverage report:
+Coverage targets `launcher/` (the React frontend has no Python coverage) and
+needs `pytest-cov`:
 
 ```bash
 pytest tests/ -q --cov=launcher --cov-report=html
-# Open htmlcov/index.html in browser
 ```
+
+## Files
+
+```structure
+tests/
+├── conftest.py                  # fixtures
+├── README.md                    # short index of the files
+├── test_api.py                  # catalogue client, scoring, normalization, icons
+├── test_api_versions.py         # version cascade, sanitizing, drift warning
+├── test_bridge_ids.py           # string IDs across the bridge
+├── test_bridge_quests.py        # quest methods, error wrapping, events
+├── test_database.py             # schema, caching, library, process tracking
+├── test_database_queries.py     # paging, bulk lookup, stats memo
+├── test_discord_native.py       # discovery, CDP session, payload parsing
+├── test_discord_setup.py        # launch-argument rewriting, shortcuts, Run key
+├── test_dummy_generator.py      # copy-based dummy generation
+├── test_game_manager.py         # library management, sync, process control
+├── test_integration.py          # full stack in realistic workflows
+├── test_migration.py            # in-place schema migration
+├── test_notifications.py        # toast script, finished-quest announcement
+├── test_prefs.py                # settings file, clamping, corrupt file
+├── test_quests.py               # states, runs, queue, pause, video
+├── test_repair.py               # candidate refresh, repair, generator ownership
+└── test_startup_cleanup.py      # stale rows, orphans, missing files, icons
+```
+
+## Fixtures
+
+`conftest.py` provides:
+
+| Fixture | What it builds |
+| --- | --- |
+| `temp_dir` | `tempfile.TemporaryDirectory()`, cleaned up by the context manager |
+| `database` | `Database(temp_dir / "test.db")` |
+| `api_client` | `DiscordAPIClient(database, temp_dir / "cache")` |
+| `mock_template` | A `DummyGame.exe` holding the bytes `MOCK_DUMMY_GAME_EXE_FOR_TESTING` |
+| `dummy_generator` | `DummyGenerator(games_dir, template_exe_path=mock_template)` |
+| `process_manager` | `ProcessManager(database, dummy_generator)` |
+| `game_manager` | `GameManager` wired with all of the above |
+
+`conftest.py` also inserts the repository root into `sys.path`, so tests import
+`launcher` without an install step.
+
+## Patterns
+
+Sample game rows come from small helpers such as `create_sample_game(game_id)`,
+which returns an id, a name, one Windows executable, an icon hash, and a theme.
+HTTP is patched at `launcher.api.httpx.Client`:
+
+```python
+with patch("launcher.api.httpx.Client") as mock_client_class:
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_response
+    mock_client_class.return_value = mock_client
+```
+
+Use `tmp_path` for anything that writes, and keep slow or platform-specific
+tests behind `@pytest.mark.skipif(os.environ.get("SKIP_PYINSTALLER_TESTS") == "True", ...)`.
+There is no CI configuration in the repository; the commands above are the
+whole procedure.

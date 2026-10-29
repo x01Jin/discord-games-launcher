@@ -1,9 +1,3 @@
-"""Quest run options the user can change from the app.
-
-Their own small JSON file, not the SQLite database: two scalars read on every
-quest start do not need a schema, and keeping the file next to the database
-means a backup of the data directory carries them along.
-"""
 
 from __future__ import annotations
 
@@ -18,16 +12,10 @@ from platformdirs import user_data_dir
 PLAY_SESSION_TAIL_MIN = "play_session_tail_min"
 RUN_MODE = "run_mode"
 
-# Two ways to earn quest time. Activity mode starts the dummy game so Discord's
-# own detection sees it and shows the game on the profile; silent mode posts the
-# play heartbeat instead and shows nothing. Activity is the default because a
-# run that is visible behaves like the game Discord expects to see.
 MODE_ACTIVITY = "activity"
 MODE_SILENT = "silent"
 RUN_MODES = (MODE_ACTIVITY, MODE_SILENT)
 
-# The tail is the pause between two quests; the reference userscript's two
-# minutes is the default.
 DEFAULTS: dict[str, Any] = {
     PLAY_SESSION_TAIL_MIN: 2,
     RUN_MODE: MODE_ACTIVITY,
@@ -39,14 +27,12 @@ _lock = threading.Lock()
 
 
 def default_path() -> Path:
-    """Where the settings file lives, overridable for tests."""
     override = os.environ.get("DCGL_DATA_DIR")
     base = Path(override) if override else Path(user_data_dir("discord-games-launcher", appauthor=False))
     return base / "settings.json"
 
 
 def _clean(values: Any, base: dict[str, Any]) -> dict[str, Any]:
-    """Return a full, valid settings dict built from *values* over *base*."""
     result = dict(base)
     if not isinstance(values, dict):
         return result
@@ -68,7 +54,6 @@ def _clean(values: Any, base: dict[str, Any]) -> dict[str, Any]:
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
-    """Current settings. A missing or corrupt file means the defaults."""
     target = path or default_path()
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
@@ -78,7 +63,6 @@ def load(path: Path | None = None) -> dict[str, Any]:
 
 
 def save(values: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
-    """Merge *values* into the stored settings and return the result."""
     target = path or default_path()
     with _lock:
         merged = _clean(values, load(target))

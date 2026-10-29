@@ -1,4 +1,3 @@
-"""Quest option storage: a small JSON file, not the SQLite database."""
 
 import json
 
@@ -27,7 +26,6 @@ def test_save_merges_into_existing_values(tmp_path):
 
 
 def test_unknown_keys_are_dropped(tmp_path):
-    # A stale key from an older version is dropped, not carried in memory.
     assert prefs.save({"nonsense": 1, "hide_activity": True}, tmp_path / "s.json") == {
         "play_session_tail_min": 2,
         "run_mode": "activity",

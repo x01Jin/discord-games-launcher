@@ -1,22 +1,9 @@
-"""Integration tests for Discord Games Launcher.
-
-Tests the complete application stack working together.
-Tests realistic workflows that exercise all components together.
-
-Usage:
-    pytest tests/test_integration.py -v
-    python tests/test_integration.py
-
-Note: These tests verify that components work together correctly,
-not just in isolation.
-"""
 
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -28,17 +15,14 @@ from launcher.process_manager import ProcessManager
 
 
 def test_full_workflow():
-    """Test the complete user workflow from sync to library management."""
     print("Testing complete user workflow...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
-        # Create mock template executable
         template_path = tmpdir / "DummyGame.exe"
         template_path.write_bytes(b"MOCK_DUMMY_GAME_EXE")
 
-        # Initialize all components
         db = Database(tmpdir / "launcher.db")
         api_client = DiscordAPIClient(db, tmpdir / "cache")
         dummy_gen = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
@@ -47,7 +31,6 @@ def test_full_workflow():
 
         print("  All components initialized")
 
-        # Mock Discord API with realistic data
         mock_games = [
             {
                 "id": 12345,
@@ -85,31 +68,26 @@ def test_full_workflow():
             mock_http_client.get.return_value = mock_response
             mock_client_class.return_value = mock_http_client
 
-            # Step 1: Sync games from API
             was_synced, count, skipped = game_mgr.sync_games(force=True)
             assert was_synced is True, "Should perform sync"
             assert count == 2, f"Expected 2 games, got {count}"
             assert skipped == 0, f"Expected 0 skipped, got {skipped}"
             print(f"  ✓ Synced {count} games from API")
 
-            # Step 2: Verify cache was populated
             all_games = game_mgr.get_all_games()
             assert len(all_games) == 2, "Cache should have 2 games"
             print(f"  ✓ Cache populated with {len(all_games)} games")
 
-            # Step 3: Search for specific game
             results = game_mgr.search_games("Test")
             assert len(results) == 1, f"Expected 1 result, got {len(results)}"
             assert results[0].name == "Test Game"
             print(f"  ✓ Search found: {results[0].name}")
 
-            # Step 4: Add game to library
             success, message = game_mgr.add_to_library(12345)
             assert success is True, f"Failed to add game: {message}"
             assert game_mgr.is_in_library(12345), "Game should be in library"
             print(f"  ✓ Added to library: {message}")
 
-            # Step 5: Verify library entry has executable candidates
             lib_game = db.get_library_game(12345)
             assert lib_game is not None, "Library game should exist"
             assert len(lib_game.executables) == 2, "Should store both executables"
@@ -117,13 +95,11 @@ def test_full_workflow():
                 f"  ✓ Library entry has {len(lib_game.executables)} executable candidates"
             )
 
-            # Step 6: Verify dummy executable was created
             assert dummy_gen.dummy_exists(12345, "testgame.exe"), "Dummy should exist"
             dummy_path = lib_game.executable_path
             assert Path(dummy_path).exists(), f"Dummy at {dummy_path} should exist"
             print(f"  ✓ Dummy created: {Path(dummy_path).name}")
 
-            # Step 7: Verify all library operations work
             library = game_mgr.get_library()
             assert len(library) == 1, "Library should have 1 game"
             assert library[0]["game_id"] == 12345
@@ -131,14 +107,12 @@ def test_full_workflow():
             assert "is_running" in library[0], "Each game should have is_running status"
             print(f"  ✓ Library retrieval works: {len(library)} game(s)")
 
-            # Step 8: Add another game
             success, message = game_mgr.add_to_library(67890)
             assert success is True, f"Failed to add second game: {message}"
             library = game_mgr.get_library()
             assert len(library) == 2, "Library should have 2 games now"
             print(f"  ✓ Added second game: {len(library)} in library")
 
-            # Step 9: Remove game from library
             success, message = game_mgr.remove_from_library(12345)
             assert success is True, f"Failed to remove: {message}"
             assert not game_mgr.is_in_library(12345), "Game should not be in library"
@@ -146,13 +120,11 @@ def test_full_workflow():
             assert len(library) == 1, "Library should have 1 game left"
             print(f"  ✓ Removed from library: {len(library)} remaining")
 
-            # Step 10: Verify dummy was cleaned up
             assert not dummy_gen.dummy_exists(12345, "testgame.exe"), (
                 "Dummy should be removed"
             )
             print("  ✓ Dummy executable cleaned up")
 
-            # Step 11: Check stats
             stats = game_mgr.get_cache_stats()
             assert stats["cached_games"] == 2, "Cache should still have 2 games"
             assert stats["library_games"] == 1, "Library should have 1 game"
@@ -164,21 +136,17 @@ def test_full_workflow():
 
 
 def test_cache_persistence():
-    """Test that cache persists across database sessions."""
     print("Testing cache persistence across sessions...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         db_path = tmpdir / "launcher.db"
 
-        # Create mock template executable
         template_path = tmpdir / "DummyGame.exe"
         template_path.write_bytes(b"MOCK_DUMMY_GAME_EXE")
 
-        # First session - save games
         db1 = Database(db_path)
 
-        # Add test game in first session
         test_game = {
             "id": 11111,
             "name": "Persistent Game",
@@ -192,7 +160,6 @@ def test_cache_persistence():
         }
         db1.save_games([test_game])
 
-        # Add to library
         db1.add_to_library(
             11111,
             str(tmpdir / "games" / "11111" / "persistent.exe"),
@@ -203,14 +170,12 @@ def test_cache_persistence():
 
         print("  ✓ First session: Added game to library")
 
-        # Second session (new instances, same database)
         db2 = Database(db_path)
         api2 = DiscordAPIClient(db2, tmpdir / "cache")
         dummy2 = DummyGenerator(tmpdir / "games", template_exe_path=template_path)
         proc2 = ProcessManager(db2, dummy2)
         mgr2 = GameManager(db2, api2, dummy2, proc2)
 
-        # Verify data persisted
         game = db2.get_game(11111)
         assert game is not None, "Game should be cached"
         assert game.name == "Persistent Game", (
@@ -230,7 +195,6 @@ def test_cache_persistence():
 
 
 def test_smart_executable_selection():
-    """Test that best executable is selected when adding to library."""
     print("Testing smart executable selection...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -245,19 +209,14 @@ def test_smart_executable_selection():
         process_mgr = ProcessManager(db, dummy_gen)
         game_mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        # Add game with multiple executables
         test_game = {
             "id": 99999,
             "name": "Multi Executable Game",
             "aliases": [],
             "executables": [
-                # Launcher (should be down-scored)
                 {"os": "win32", "name": "launcher.exe", "is_launcher": True},
-                # Good candidate (should be selected)
                 {"os": "win32", "name": "game.exe", "is_launcher": False},
-                # Path with separator (down-scored)
                 {"os": "win32", "name": "_retail_/wow.exe", "is_launcher": False},
-                # Non-Windows (filtered out)
                 {"os": "darwin", "name": "game.app", "is_launcher": False},
             ],
             "icon_hash": None,
@@ -267,18 +226,15 @@ def test_smart_executable_selection():
 
         db.save_games([test_game])
 
-        # Add to library - should intelligently select best executable
         success, message = game_mgr.add_to_library(99999)
         assert success is True, f"Failed: {message}"
 
-        # Verify best executable was used
         lib_game = db.get_library_game(99999)
         assert lib_game is not None
         assert lib_game.process_name == "game.exe", (
             f"Expected 'game.exe', got {lib_game.process_name}"
         )
 
-        # Verify all Windows executables are stored for fallback
         assert len(lib_game.executables) == 3, (
             f"Should store 3 Windows executables, got {len(lib_game.executables)}"
         )
@@ -290,7 +246,6 @@ def test_smart_executable_selection():
 
 
 def run_all_tests():
-    """Run all integration tests."""
     print("\n" + "=" * 50)
     print("INTEGRATION TESTS")
     print("=" * 50 + "\n")
@@ -305,7 +260,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:  # noqa: BLE001 - runner must continue past failures
+        except Exception as e:
             print(f"  FAILED: {e}")
             import traceback
 

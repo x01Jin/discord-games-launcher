@@ -13,10 +13,6 @@ interface Props {
   danger?: boolean;
 }
 
-/**
- * Modal dialog. Escape closes, the backdrop closes, and focus moves to the
- * first control so a keyboard user is never left behind the overlay.
- */
 export function Dialog({
   open,
   title,

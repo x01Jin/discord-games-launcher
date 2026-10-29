@@ -1,20 +1,9 @@
-"""Test script for Discord API Client module.
-
-Tests the DiscordAPIClient including caching, icon handling, and executable scoring.
-
-Usage:
-    pytest tests/test_api.py -v
-    python tests/test_api.py  # Run basic tests
-
-Note: Some tests require internet connection to Discord API.
-"""
 
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -23,7 +12,6 @@ from launcher.database import Database
 
 
 def test_api_initialization():
-    """Test API client initialization."""
     print("Testing API client initialization...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -43,36 +31,27 @@ def test_api_initialization():
 
 
 def test_best_win32_executables_scoring():
-    """Test smart executable scoring system."""
     print("Testing executable smart scoring system...")
 
     test_executables = [
-        # Launcher (should be downscored - is_launcher=True)
         {"os": "win32", "name": "launcher.exe", "is_launcher": True},
-        # Good candidate - short name, not a launcher
         {"os": "win32", "name": "game.exe", "is_launcher": False},
-        # Path with separator (should be downscored)
         {"os": "win32", "name": "_retail_/wow.exe", "is_launcher": False},
-        # Started with underscore (less preferred)
         {"os": "win32", "name": "_game.exe", "is_launcher": False},
-        # Non-Windows (should be filtered out)
         {"os": "darwin", "name": "game.app", "is_launcher": False},
         {"os": "linux", "name": "game", "is_launcher": False},
     ]
 
     result = DiscordAPIClient.get_best_win32_executables(test_executables)
 
-    # Should only return Windows executables
     assert all(exe.get("os") == "win32" for exe in result), "Should only return win32"
     print(f"  Filtered to {len(result)} Windows executables")
 
-    # Best should be 'game.exe' (non-launcher, short, no path, no underscore)
     assert result[0]["name"] == "game.exe", (
         f"Expected 'game.exe' first, got '{result[0]['name']}'"
     )
     print(f"  Best: {result[0]['name']} (score: {result[0]['_score']})")
 
-    # Launcher should be last
     launcher = next((e for e in result if e["name"] == "launcher.exe"), None)
     assert launcher is not None, "Launcher should still be in list"
     assert launcher == result[-1], "Launcher should be scored lowest"
@@ -82,36 +61,32 @@ def test_best_win32_executables_scoring():
 
 
 def test_executable_scoring_weights():
-    """Test that scoring weights are applied correctly."""
     print("Testing executable scoring weights...")
 
-    # Same executables, only differs in properties
     executables = [
         {
             "os": "win32",
             "name": "perfect.exe",
             "is_launcher": False,
-        },  # 1000 - 100 + 50 + 20 = 970
+        },
         {
             "os": "win32",
             "name": "launcher.exe",
             "is_launcher": True,
-        },  # 0 - 130 + 50 + 20 = -60
+        },
         {
             "os": "win32",
             "name": "_underscore.exe",
             "is_launcher": False,
-        },  # 1000 - 150 + 50 + 0 = 900
+        },
     ]
 
     result = DiscordAPIClient.get_best_win32_executables(executables)
 
-    # Verify scoring order
     assert result[0]["name"] == "perfect.exe"
     assert result[1]["name"] == "_underscore.exe"
     assert result[2]["name"] == "launcher.exe"
 
-    # Verify scores are descending
     assert result[0]["_score"] > result[1]["_score"]
     assert result[1]["_score"] > result[2]["_score"]
 
@@ -120,14 +95,13 @@ def test_executable_scoring_weights():
 
 
 def test_process_name_normalization():
-    """Test process name normalization for Discord detection."""
     print("Testing process name normalization...")
 
     test_cases = [
-        ("game.exe", "game.exe"),  # Already normalized
-        ("_retail_/wow-64.exe", "wow-64.exe"),  # Extract filename from path
-        ("bin/game.exe", "game.exe"),  # Extract from subdirectory
-        ("path/to/executable.exe", "executable.exe"),  # Deep path
+        ("game.exe", "game.exe"),
+        ("_retail_/wow-64.exe", "wow-64.exe"),
+        ("bin/game.exe", "game.exe"),
+        ("path/to/executable.exe", "executable.exe"),
     ]
 
     for input_name, expected in test_cases:
@@ -139,7 +113,6 @@ def test_process_name_normalization():
 
 
 def test_icon_url_generation():
-    """Test icon URL generation."""
     print("Testing icon URL generation...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -159,7 +132,6 @@ def test_icon_url_generation():
         assert url == expected, f"Expected {expected}, got {url}"
         print(f"  Generated URL: {url}")
 
-        # Test with custom size
         url = client.get_icon_url(game_id, icon_hash, size=256)
         assert "size=256" in url
         print("  Custom size works")
@@ -168,7 +140,6 @@ def test_icon_url_generation():
 
 
 def test_sync_cache_logic():
-    """Test cache sync logic with database persistence."""
     print("Testing cache sync logic...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -178,7 +149,6 @@ def test_sync_cache_logic():
         db = Database(db_path)
         client = DiscordAPIClient(db, cache_dir)
 
-        # Mock response data with varied executables
         mock_games = [
             {
                 "id": 12345,
@@ -205,7 +175,6 @@ def test_sync_cache_logic():
             },
         ]
 
-        # Mock the httpx client
         mock_response = MagicMock()
         mock_response.json.return_value = mock_games
         mock_response.raise_for_status.return_value = None
@@ -217,31 +186,26 @@ def test_sync_cache_logic():
             mock_client.get.return_value = mock_response
             mock_client_class.return_value = mock_client
 
-            # First sync should perform sync
             was_synced, count, skipped = client.sync_cache(force=True)
             assert was_synced is True, "Should return True when sync performed"
             assert count == 2, f"Expected count 2, got {count}"
             assert skipped == 0, f"Expected 0 skipped, got {skipped}"
             print("  First sync performed successfully")
 
-            # Check games were saved to database
             games = db.get_all_games()
             assert len(games) == 2, f"Expected 2 games, got {len(games)}"
 
-            # Verify both games are in the cache (order not guaranteed)
             game_names = {g.name for g in games}
             assert "Test Game" in game_names
             assert "Another Game" in game_names
             print(f"  Saved {len(games)} games to cache: {game_names}")
 
-            # Verify games have correct data
             test_game = db.get_game(12345)
             assert test_game is not None
             assert len(test_game.executables) == 2
             assert test_game.aliases == ["TestG"]
             print(f"  Game has {len(test_game.executables)} executables")
 
-            # Second sync without force should skip (cache is fresh)
             was_synced, count, skipped = client.sync_cache(force=False)
             assert was_synced is False, "Should return False when cache is fresh"
             print("  Correctly skipped sync for fresh cache")
@@ -250,7 +214,6 @@ def test_sync_cache_logic():
 
 
 def test_api_error_handling():
-    """Test API error handling and retries."""
     print("Testing API error handling...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -260,7 +223,6 @@ def test_api_error_handling():
         db = Database(db_path)
         client = DiscordAPIClient(db, cache_dir)
 
-        # Test timeout error
         with patch("launcher.api.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -278,7 +240,6 @@ def test_api_error_handling():
 
 
 def run_all_tests():
-    """Run all API tests."""
     print("\n" + "=" * 50)
     print("API CLIENT MODULE TESTS")
     print("=" * 50 + "\n")
@@ -295,7 +256,7 @@ def run_all_tests():
     for test in tests:
         try:
             test()
-        except Exception as e:  # noqa: BLE001 - runner must continue past failures
+        except Exception as e:
             print(f"  FAILED: {e}")
             import traceback
 

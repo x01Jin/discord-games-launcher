@@ -1,74 +1,26 @@
-"""Discord Games Launcher - Database module.
-
-Handles all SQLite operations for caching Discord API data and user library.
-"""
 
 import json
 import sqlite3
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-# "This game has at least one Windows executable", evaluated by SQLite's JSON1
-# extension over the executables column. Pushing it into SQL is what makes a
-# catalogue page a page instead of a scan of every cached game.
+from launcher.database_schema import SchemaMixin
+from launcher.models import Game, LibraryGame
+
 _WIN32_PREDICATE = (
     "EXISTS (SELECT 1 FROM json_each(games_cache.executables) "
     "WHERE json_extract(value, '$.os') = 'win32')"
 )
 
 
-@dataclass
-class Game:
-    """Represents a Discord-supported game."""
-
-    id: int
-    name: str
-    aliases: list[str]
-    executables: list[dict[str, Any]]
-    icon_hash: str | None
-    themes: list[str]
-    is_published: bool
-    cached_at: datetime
-
-
-@dataclass
-class LibraryGame:
-    """Represents a game in the user's library."""
-
-    game_id: int
-    executable_path: str | None
-    process_name: str
-    normalized_process_name: str
-    executables: list[dict[str, Any]]
-    added_at: datetime
-
-
-@dataclass
-class ExecutableHistory:
-    """Represents executable attempt history."""
-
-    id: int
-    game_id: int
-    executable_name: str
-    success_count: int
-    failure_count: int
-    last_attempt_at: datetime
-    last_success_at: datetime | None
-
-
-class Database:
-    """SQLite database manager for Discord Games Launcher."""
+class Database(SchemaMixin):
 
     EXPECTED_SCHEMA_VERSION = 2
 
-    # Counts are read by the footer every few seconds and by every catalogue
-    # page; recomputing four aggregates (one of them a 24k-row JSON scan) that
-    # often is pure waste.
     _STATS_TTL_SECONDS = 3.0
 
     def __init__(self, db_path: Path, logger=None):
@@ -80,7 +32,6 @@ class Database:
 
     @contextmanager
     def _connect(self):
-        """Context manager for database connections."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
@@ -89,201 +40,7 @@ class Database:
         finally:
             conn.close()
 
-    def _validate_schema(self) -> bool:
-        """Check if current schema matches expected version.
-
-        Returns True if schema is valid, False otherwise.
-        """
-        try:
-            with self._connect() as conn:
-                # Check schema_version table
-                row = conn.execute(
-                    "SELECT value FROM cache_metadata WHERE key = 'schema_version'"
-                ).fetchone()
-                if not row:
-                    return False
-
-                try:
-                    current_version = int(str(row[0]).strip())
-                except (ValueError, TypeError):
-                    return False
-                if current_version != self.EXPECTED_SCHEMA_VERSION:
-                    return False
-
-                # Check if all required tables exist
-                required_tables = [
-                    "games_cache",
-                    "user_library",
-                    "executable_history",
-                    "running_processes",
-                    "cache_metadata",
-                ]
-
-                for table_name in required_tables:
-                    result = conn.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                        (table_name,),
-                    ).fetchone()
-                    if not result:
-                        return False
-
-                # Check if user_library has executables and normalized_process_name columns
-                result = conn.execute("PRAGMA table_info(user_library)").fetchall()
-                columns = [row["name"] for row in result]
-                if "executables" not in columns:
-                    return False
-                if "normalized_process_name" not in columns:
-                    return False
-
-            return True
-
-        except (sqlite3.Error, OSError, ValueError, TypeError):
-            return False
-
-    def _migrate_schema(self) -> bool:
-        """Upgrade an existing database toward the expected schema in place.
-
-        Returns True when the database is fresh or was migrated (caller
-        proceeds to CREATE TABLEs); False when the on-disk state is
-        unrecognized, in which case the caller recreates as a last resort.
-        """
-        try:
-            with self._connect() as conn:
-                try:
-                    row = conn.execute(
-                        "SELECT value FROM cache_metadata WHERE key = 'schema_version'"
-                    ).fetchone()
-                except sqlite3.Error:
-                    row = None
-                current: int | None = None
-                if row is not None:
-                    try:
-                        current = int(str(row[0]).strip())
-                    except (ValueError, TypeError):
-                        current = None
-                if current is not None and current > self.EXPECTED_SCHEMA_VERSION:
-                    return False
-
-                # v1 -> v2: user_library gained executables columns.
-                try:
-                    cols = [
-                        r["name"]
-                        for r in conn.execute(
-                            "PRAGMA table_info(user_library)"
-                        ).fetchall()
-                    ]
-                except sqlite3.Error:
-                    cols = []
-                if cols:
-                    for column in ("executables", "normalized_process_name"):
-                        if column in cols:
-                            continue
-                        try:
-                            conn.execute(
-                                f"ALTER TABLE user_library ADD COLUMN {column} TEXT"
-                            )
-                        except sqlite3.OperationalError as e:
-                            # Lost a race or retried migration: the column
-                            # is there after all, anything else is fatal.
-                            if "duplicate column" not in str(e).lower():
-                                raise
-                return True
-        except (sqlite3.Error, OSError, ValueError, TypeError):
-            return False
-
-    def _init_db(self) -> None:
-        """Initialize database schema, migrating old versions in place."""
-        if not self._validate_schema() and not self._migrate_schema():
-            if self.logger:
-                self.logger.database_recreate()
-            if self.db_path.exists():
-                self.db_path.unlink()
-
-        with self._connect() as conn:
-            # Games cache table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS games_cache (
-                    id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    aliases TEXT,
-                    executables TEXT,
-                    icon_hash TEXT,
-                    themes TEXT,
-                    is_published INTEGER DEFAULT 1,
-                    cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # User library table with executables and normalized_process_name columns
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_library (
-                    game_id INTEGER PRIMARY KEY,
-                    executable_path TEXT,
-                    process_name TEXT NOT NULL,
-                    normalized_process_name TEXT,
-                    executables TEXT,
-                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (game_id) REFERENCES games_cache(id)
-                )
-            """)
-
-            # Executable history table for smart selection
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS executable_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    game_id INTEGER NOT NULL,
-                    executable_name TEXT NOT NULL,
-                    success_count INTEGER DEFAULT 0,
-                    failure_count INTEGER DEFAULT 0,
-                    last_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_success_at TIMESTAMP,
-                    UNIQUE(game_id, executable_name),
-                    FOREIGN KEY (game_id) REFERENCES user_library(game_id)
-                )
-            """)
-
-            # Running processes tracking
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS running_processes (
-                    game_id INTEGER PRIMARY KEY,
-                    pid INTEGER,
-                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (game_id) REFERENCES user_library(game_id)
-                )
-            """)
-
-            # Cache metadata
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS cache_metadata (
-                    key TEXT PRIMARY KEY,
-                    value TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # Set schema version
-            conn.execute(
-                """
-                INSERT INTO cache_metadata (key, value, updated_at)
-                VALUES ('schema_version', ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-            """,
-                (str(self.EXPECTED_SCHEMA_VERSION),),
-            )
-
-            # Create indexes for performance
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_games_name ON games_cache(name)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_games_cached_at ON games_cache(cached_at)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_exec_history_game ON executable_history(game_id)
-            """)
-
     def get_last_sync(self) -> datetime | None:
-        """Get timestamp of last API sync."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT value FROM cache_metadata WHERE key = 'last_sync'"
@@ -291,13 +48,11 @@ class Database:
             if row:
                 last_sync = datetime.fromisoformat(row[0])
                 if last_sync.tzinfo is None:
-                    # Rows written before timezone-aware timestamps; treat as UTC.
                     last_sync = last_sync.replace(tzinfo=timezone.utc)
                 return last_sync
             return None
 
     def set_last_sync(self, timestamp: datetime) -> None:
-        """Set timestamp of last API sync."""
         with self._connect() as conn:
             conn.execute(
                 """INSERT INTO cache_metadata (key, value, updated_at)
@@ -309,14 +64,12 @@ class Database:
             )
 
     def needs_sync(self, max_age_days: int = 7) -> bool:
-        """Check if cache needs to be synced with API."""
         last_sync = self.get_last_sync()
         if not last_sync:
             return True
         return datetime.now(timezone.utc) - last_sync > timedelta(days=max_age_days)
 
     def get_metadata_value(self, key: str) -> str | None:
-        """Get a raw cache_metadata value by key (None when absent)."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT value FROM cache_metadata WHERE key = ?", (key,)
@@ -324,7 +77,6 @@ class Database:
             return row[0] if row else None
 
     def set_metadata_value(self, key: str, value: str) -> None:
-        """Upsert a raw cache_metadata value."""
         with self._connect() as conn:
             conn.execute(
                 """INSERT INTO cache_metadata (key, value, updated_at)
@@ -336,11 +88,6 @@ class Database:
             )
 
     def save_games(self, games: list[dict[str, Any]]) -> int:
-        """Save or update games from API to cache.
-
-        Returns the number of malformed records skipped (defense in
-        depth: the API client sanitizes first, this never aborts).
-        """
         skipped = 0
         with self._connect() as conn:
             for game in games:
@@ -377,7 +124,6 @@ class Database:
         return skipped
 
     def get_game(self, game_id: int) -> Optional["Game"]:
-        """Get a single game by ID."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM games_cache WHERE id = ?", (game_id,)
@@ -387,7 +133,6 @@ class Database:
             return None
 
     def get_all_games(self, limit: int | None = None) -> list["Game"]:
-        """Get all cached games."""
         with self._connect() as conn:
             query = "SELECT * FROM games_cache ORDER BY name"
             if limit:
@@ -398,12 +143,6 @@ class Database:
     def get_games_page(
         self, limit: int = 200, offset: int = 0, win32_only: bool = True
     ) -> list["Game"]:
-        """One page of the catalogue, filtered and paginated in SQL.
-
-        The previous path loaded a window of rows, dropped the non-Windows
-        ones in Python, then sliced the survivors. That made page boundaries
-        depend on how many unplayable games happened to sit in the window.
-        """
         where = f"WHERE {_WIN32_PREDICATE}" if win32_only else ""
         with self._connect() as conn:
             rows = conn.execute(
@@ -415,17 +154,11 @@ class Database:
             return [self._row_to_game(row) for row in rows]
 
     def get_games(self, game_ids: Iterable[int]) -> dict[int, "Game"]:
-        """Look many games up at once, keyed by id.
-
-        Decorating a quest list goes through this instead of one connection
-        and one query per quest.
-        """
         wanted = sorted({int(gid) for gid in game_ids})
         found: dict[int, Game] = {}
         if not wanted:
             return found
         with self._connect() as conn:
-            # SQLite's default host-parameter cap is 999; chunk to stay clear.
             for start in range(0, len(wanted), 500):
                 chunk = wanted[start : start + 500]
                 placeholders = ",".join("?" * len(chunk))
@@ -445,12 +178,6 @@ class Database:
         icon_hash: str | None,
         executables: list[dict[str, Any]],
     ) -> bool:
-        """Insert a cache row for an application the sync has not seen.
-
-        Quest rows add nothing to the library any more, but the favourites
-        import and repair still need a row that the catalogue sync has not
-        delivered. Insert-only: a later sync owns the row.
-        """
         try:
             payload = json.dumps(executables)
         except (TypeError, ValueError):
@@ -472,7 +199,6 @@ class Database:
     def search_games(
         self, query: str, limit: int = 100, win32_only: bool = True
     ) -> list["Game"]:
-        """Search cached games by name."""
         conditions = ["name LIKE ?"]
         if win32_only:
             conditions.append(_WIN32_PREDICATE)
@@ -488,7 +214,6 @@ class Database:
             return [self._row_to_game(row) for row in rows]
 
     def _row_to_game(self, row: sqlite3.Row) -> "Game":
-        """Convert database row to Game dataclass."""
         return Game(
             id=row["id"],
             name=row["name"],
@@ -508,7 +233,6 @@ class Database:
         normalized_process_name: str,
         executables: list[dict[str, Any]],
     ) -> None:
-        """Add a game to user's library with all executable candidates."""
         with self._connect() as conn:
             conn.execute(
                 """INSERT INTO user_library (game_id, executable_path, process_name, normalized_process_name, executables, added_at)
@@ -529,7 +253,6 @@ class Database:
         self._invalidate_stats()
 
     def remove_from_library(self, game_id: int) -> None:
-        """Remove a game from user's library."""
         with self._connect() as conn:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
             conn.execute("DELETE FROM executable_history WHERE game_id = ?", (game_id,))
@@ -537,19 +260,16 @@ class Database:
         self._invalidate_stats()
 
     def get_library_ids(self) -> set[int]:
-        """Get IDs of all games in the user's library (no cache join)."""
         with self._connect() as conn:
             rows = conn.execute("SELECT game_id FROM user_library").fetchall()
             return {row["game_id"] for row in rows}
 
     def get_cached_game_ids(self) -> set[int]:
-        """Get IDs of all games currently in the cache."""
         with self._connect() as conn:
             rows = conn.execute("SELECT id FROM games_cache").fetchall()
             return {row["id"] for row in rows}
 
     def get_library(self) -> list[dict[str, Any]]:
-        """Get all games in user's library with full game info."""
         with self._connect() as conn:
             rows = conn.execute("""
                 SELECT l.*, g.name, g.aliases, g.icon_hash, g.executables as game_executables
@@ -577,7 +297,6 @@ class Database:
             return result
 
     def is_in_library(self, game_id: int) -> bool:
-        """Check if a game is in user's library."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT 1 FROM user_library WHERE game_id = ?", (game_id,)
@@ -585,7 +304,6 @@ class Database:
             return row is not None
 
     def get_library_game(self, game_id: int) -> Optional["LibraryGame"]:
-        """Get a library game by ID."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM user_library WHERE game_id = ?", (game_id,)
@@ -604,13 +322,7 @@ class Database:
     def get_preferred_executable(
         self, game_id: int
     ) -> tuple[dict[str, Any], int] | None:
-        """Get the best executable for a game based on history.
-
-        Returns:
-            Tuple of (executable_data, score) or None
-        """
         with self._connect() as conn:
-            # Get all executable history for this game
             history_rows = conn.execute(
                 """SELECT executable_name, success_count, failure_count
                    FROM executable_history
@@ -623,16 +335,13 @@ class Database:
                 exe_name = row["executable_name"]
                 success_count = row["success_count"]
                 failure_count = row["failure_count"]
-                # Score formula: (success_count * 20) - failure_count
                 score = (success_count * 20) - failure_count
                 history_map[exe_name] = score
 
-            # Get library game to check executables
             lib_game = self.get_library_game(game_id)
             if not lib_game:
                 return None
 
-            # Find best executable from library executables
             best_exe = None
             best_score = 0
 
@@ -649,13 +358,6 @@ class Database:
     def record_executable_attempt(
         self, game_id: int, executable_name: str, success: bool
     ) -> None:
-        """Record an executable attempt result.
-
-        Args:
-            game_id: The Discord game ID
-            executable_name: Name of the executable (e.g., "bg3.exe")
-            success: Whether the detection was successful
-        """
         with self._connect() as conn:
             if success:
                 conn.execute(
@@ -678,7 +380,6 @@ class Database:
                 )
 
     def set_process_running(self, game_id: int, pid: int) -> None:
-        """Track a running dummy process."""
         with self._connect() as conn:
             conn.execute(
                 """INSERT INTO running_processes (game_id, pid, started_at)
@@ -691,19 +392,16 @@ class Database:
         self._invalidate_stats()
 
     def set_process_stopped(self, game_id: int) -> None:
-        """Remove process tracking when stopped."""
         with self._connect() as conn:
             conn.execute("DELETE FROM running_processes WHERE game_id = ?", (game_id,))
         self._invalidate_stats()
 
     def get_running_processes(self) -> dict[int, int]:
-        """Get all running processes as {game_id: pid}."""
         with self._connect() as conn:
             rows = conn.execute("SELECT game_id, pid FROM running_processes").fetchall()
             return {row["game_id"]: row["pid"] for row in rows}
 
     def is_process_running(self, game_id: int) -> bool:
-        """Check if a process is marked as running for this game."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT 1 FROM running_processes WHERE game_id = ?", (game_id,)
@@ -711,7 +409,6 @@ class Database:
             return row is not None
 
     def clear_cache(self) -> None:
-        """Clear all cached games (use with caution)."""
         with self._connect() as conn:
             conn.execute("DELETE FROM games_cache")
             conn.execute("DELETE FROM cache_metadata WHERE key = 'last_sync'")
@@ -721,7 +418,6 @@ class Database:
         self._stats_cache = None
 
     def get_cache_stats(self) -> dict[str, int]:
-        """Get cache statistics, memoised for a few seconds."""
         cached = self._stats_cache
         if cached is not None:
             stamp, value = cached
@@ -744,7 +440,6 @@ class Database:
                 "SELECT COUNT(*) FROM executable_history"
             ).fetchone()[0]
 
-            # Count games with NO win32 executables
             no_win_count = conn.execute(
                 """SELECT COUNT(*) FROM games_cache
                    WHERE NOT EXISTS (

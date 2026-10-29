@@ -1,76 +1,44 @@
-# Test Suite for Discord Games Launcher
+# Tests
 
-Tests for the Discord Games Launcher. Most need no network access.
+pytest suite for the launcher. Most files need no network access.
 
-## Running Tests
+## Running
 
-### Run all tests
-
-```bash
-pytest tests/ -v
+```cmd
+.venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-### Run specific test file
-
 ```bash
-pytest tests/test_database.py -v
-pytest tests/test_api.py -v
-pytest tests/test_dummy_generator.py -v
+pytest tests/test_database.py -q
+pytest tests/test_quests.py -k heartbeat -v
 ```
 
-### Run tests directly with Python
+`SKIP_PYINSTALLER_TESTS=True` skips the slow tests that call PyInstaller.
 
-```bash
-python tests/test_database.py
-python tests/test_api.py
-python tests/test_dummy_generator.py
-```
+## Files
 
-## Test Files
+| File | Covers |
+| --- | --- |
+| `conftest.py` | Shared fixtures: `temp_dir`, `database`, `api_client`, `mock_template`, `dummy_generator`, `process_manager`, `game_manager` |
+| `test_api.py` | Catalogue client, executable scoring, name normalization, icon URLs |
+| `test_api_versions.py` | API version cascade, payload sanitizing, skipped-record counts, drift warning |
+| `test_bridge_ids.py` | Snowflake game IDs as strings across the bridge |
+| `test_bridge_quests.py` | Quest methods on the bridge, error wrapping, event push |
+| `test_database.py` | Schema, caching, library operations, process tracking, history |
+| `test_database_queries.py` | Catalogue paging and filtering, bulk lookup, stats memo |
+| `test_discord_native.py` | Install discovery, target selection, websocket framing, `Runtime.evaluate` round trip, payload parsing |
+| `test_discord_setup.py` | Launch-argument rewriting, shortcut and Run key round trips, idempotence |
+| `test_dummy_generator.py` | Copy-based dummy generation from the template |
+| `test_game_manager.py` | Library management, search, sync, process control |
+| `test_integration.py` | Full stack in realistic workflows |
+| `test_migration.py` | In-place schema migration without data loss |
+| `test_notifications.py` | Toast script escaping, finished-quest announcement, failed runner |
+| `test_prefs.py` | Settings file round trip, clamping, unknown keys, corrupt file |
+| `test_quests.py` | Quest states, executable resolution, heartbeat and video runs, queue, prefs |
+| `test_repair.py` | Candidate refresh, repair composition, generator ownership |
+| `test_startup_cleanup.py` | Stale runtime rows, orphaned directories, missing executables, orphaned icons |
 
-- **test_database.py** - Tests for SQLite database operations, caching, library management, and process tracking
-- **test_database_queries.py** - Catalogue paging and filtering, bulk game lookup, synthetic cache rows, stats memoisation
-- **test_api.py** - Tests for Discord API client, including mocked API calls
-- **test_dummy_generator.py** - Tests for dummy executable generation (PyInstaller integration)
-- **test_integration.py** - End-to-end integration tests (creates full stack)
-- **test_discord_native.py** - Discord install discovery, DevTools target selection, websocket framing, a full Runtime.evaluate round trip against a fake peer, quest payload parsing
-- **test_discord_setup.py** - Launch-argument rewriting (injection, replacement, restoration), shortcut discovery, Run key round trips, idempotence
-- **test_quests.py** - Quest decoration, executable resolution, states and ordering, cache behaviour, start and stop
-- **test_bridge_quests.py** - Quest methods on the bridge, error wrapping, event push
+Fixtures and helpers are described in [docs/dev/testing.md](../docs/dev/testing.md).
 
-## Environment Variables
-
-- `SKIP_PYINSTALLER_TESTS=True` - Skip tests that require PyInstaller (slow)
-
-## Test Coverage
-
-### Database Tests
-
-- Database initialization and schema creation
-- Game caching (save, retrieve, search)
-- Library operations (add, remove, query)
-- Process tracking (PID storage and retrieval)
-- Cache sync tracking
-
-### API Tests
-
-- API client initialization
-- Windows executable filtering
-- Process name normalization
-- Icon URL generation
-- Cache sync logic (mocked)
-- Error handling
-
-### Dummy Generator Tests
-
-- Generator initialization
-- Script template creation
-- Path calculations
-- Dummy removal
-- Template formatting
-
-## Notes
-
-- Tests use temporary directories that are automatically cleaned up
-- API tests mock HTTP requests to avoid network dependencies
-- Some tests require PyInstaller to be installed
+Tests write into temporary directories that pytest removes; API tests mock HTTP,
+so a normal run needs no Discord account or network.

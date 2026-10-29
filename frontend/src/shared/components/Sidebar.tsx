@@ -22,7 +22,6 @@ interface NavEntry {
   hint?: string;
 }
 
-/** Left rail: identity, three destinations, and live backend state. */
 export function Sidebar() {
   const page = useUiStore((state) => state.page);
   const setPage = useUiStore((state) => state.setPage);
@@ -30,17 +29,16 @@ export function Sidebar() {
   const { data: questsData } = useQuests();
   const activeQuests =
     (questsData?.quests ?? []).filter((quest) => quest.state === "running").length +
-    // queue.ids starts with the video the queue is watching, when there is one.
     (questsData?.queue?.ids.length ?? 0);
 
   const entries: NavEntry[] = [
-    { id: "quests", label: "Quests", icon: <QuestsIcon size={16} />, hint: "Offers from the running client" },
+    { id: "quests", label: "Quests", icon: <QuestsIcon size={16} />, hint: "Quests offered by Discord" },
     {
       id: "running",
       label: "Running",
       icon: <PlayIcon size={16} />,
       count: activeQuests || undefined,
-      hint: "Games and videos in progress, plus the queue",
+      hint: "Quests and games in progress",
     },
     {
       id: "catalogue",
@@ -112,7 +110,7 @@ export function Sidebar() {
           {stats.data && stats.data.running_processes > 0 ? (
             <span
               className="tabular-nums text-muted"
-              title="Dummy game processes currently running for quests"
+              title="Dummy processes running for quests"
             >
               {stats.data.running_processes} running
             </span>
@@ -124,7 +122,6 @@ export function Sidebar() {
   );
 }
 
-/** One line of live client state, shared with the quests query. */
 function ClientState() {
   const status = useQuestStatus();
   const tone = status?.connected

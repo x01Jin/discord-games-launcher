@@ -1,9 +1,3 @@
-"""Tests for the Discord launcher rewrite used by silent mode.
-
-Nothing in this file touches the registry, the real shortcuts, or Discord: it
-only exercises the pure command line rewriting, which is where the mistakes
-would otherwise land on a user's machine.
-"""
 
 import os
 
@@ -23,9 +17,6 @@ RUN_KEY_ARGS = "--processStart Discord.exe --process-start-args --start-minimize
 SHORTCUT_TARGET = r"C:\Users\Jin\AppData\Local\Discord\Discord.exe"
 
 
-# ---------------------------------------------------------------------------
-# reading a command line
-# ---------------------------------------------------------------------------
 
 
 def test_port_of_reads_the_switch():
@@ -42,15 +33,10 @@ def test_strip_switch_removes_only_the_switch():
     assert _strip_switch("") == ""
 
 
-# ---------------------------------------------------------------------------
-# patching a command line
-# ---------------------------------------------------------------------------
 
 
 def test_run_key_switch_goes_into_the_process_start_args_group():
     patched = with_switch(RUN_KEY_ARGS, RUN_KEY_TARGET)
-    # The flag has to reach the app, so it belongs inside the Squirrel group;
-    # appending it to Update.exe would hand it to the updater instead.
     assert _port_of(patched) == discord_setup.SILENT_PORT
     assert "--start-minimized" in patched
     assert patched.endswith(
@@ -85,9 +71,6 @@ def test_an_existing_port_is_replaced():
     assert "9222" not in patched
 
 
-# ---------------------------------------------------------------------------
-# restoring a command line
-# ---------------------------------------------------------------------------
 
 
 def test_disable_keeps_the_original_arguments():
@@ -108,9 +91,6 @@ def test_disable_on_an_untouched_line_changes_nothing():
     assert without_switch("--processStart Discord.exe") == "--processStart Discord.exe"
 
 
-# ---------------------------------------------------------------------------
-# discovery helpers
-# ---------------------------------------------------------------------------
 
 
 def test_shortcuts_found_once_each(tmp_path, monkeypatch):

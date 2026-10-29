@@ -36,13 +36,6 @@ function Step({ index, title, children }: { index: number; title: string; childr
   );
 }
 
-/**
- * What the user sees instead of a quest list.
- *
- * Three situations, and only one of them is awkward: Discord is closed (start
- * it here), Discord is open with the endpoint (nothing to see), or Discord is
- * open without it (one restart, after which it never needs restarting again).
- */
 export function QuestConnectPanel({
   status,
   silent,
@@ -66,7 +59,7 @@ export function QuestConnectPanel({
     : notRunning
       ? "Discord is not running"
       : setupDone
-        ? "One restart finishes the setup"
+        ? "One restart finishes setup"
         : noEndpoint
           ? "Connect to the Discord client"
           : "Quests unavailable";
@@ -81,24 +74,23 @@ export function QuestConnectPanel({
       <p className="text-[13px] leading-[21px] text-muted">
         {notInstalled ? (
           <>
-            Quests are read from the Discord desktop client, so it has to be
-            installed for this Windows account. Install Discord, sign in, then
-            come back.
+            Quests are read from the Discord desktop client. Install it, sign
+            in, then return here.
           </>
         ) : notRunning ? (
           <>
-            Discord is closed, so there is nothing to interrupt. Start it from
-            here and this page can read your quests as soon as it loads.
+            Discord is closed. Start it here and this page can read quests when
+            it loads.
           </>
         ) : setupDone ? (
           <>
-            The switch is in place. Discord still runs the copy that was started
+            The switch is in place. Discord is still running the copy started
             before it, so it needs one more start.
           </>
         ) : (
           <>
-            Discord is running, but this page can only read it when it starts
-            with a local debug endpoint. One switch turns that on for good.
+            Discord is running without the local debug endpoint. One switch adds
+            it for future starts.
           </>
         )}
       </p>
@@ -107,15 +99,15 @@ export function QuestConnectPanel({
         <ol className="flex flex-col gap-3 rounded-[6px] border border-line bg-raised/60 px-4 py-3.5">
           <Step index={1} title="Set up silent start.">
             {" "}
-            Adds the switch to your Discord shortcuts and startup entry.
+            Adds the switch to Discord's shortcuts and startup entry.
           </Step>
           <Step index={2} title="Discord restarts once.">
             {" "}
-            You stay signed in. A call or game running in Discord ends.
+            You stay signed in. Calls and games in Discord end.
           </Step>
           <Step index={3} title="Nothing to repeat.">
             {" "}
-            From then on the list is there as soon as Discord opens.
+            The list appears whenever Discord starts.
           </Step>
         </ol>
       ) : null}
@@ -127,9 +119,8 @@ export function QuestConnectPanel({
           </span>
           <span>
             Silent connection is on for {silent ? (silent.patched ?? 0) : 0} of{" "}
-            {silent ? (silent.total ?? 0) : 0} launch entries. Closing Discord
-            from the tray and opening it again is enough, or press the button
-            below to do it now.
+            {silent ? (silent.total ?? 0) : 0} launch entries. Close Discord
+            from the tray and open it again, or press the button below.
           </span>
         </p>
       ) : null}

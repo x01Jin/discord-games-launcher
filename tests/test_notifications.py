@@ -1,4 +1,3 @@
-"""Tests for the Windows toast built for a finished quest."""
 
 import base64
 
@@ -42,6 +41,19 @@ def test_a_quest_without_a_reward_still_gets_a_title():
     notifier.quest_finished("Test Quest", None)
 
     assert base64.b64decode(sent[0]).decode("utf-16-le").count("Test Quest") == 1
+
+
+def test_a_refused_claim_is_announced_with_its_reason():
+    sent = []
+    notifier = Notifier(runner=sent.append)
+
+    notifier.claim_needs_action(
+        "Discord would not claim it here (Unknown Message). Claim it from Discord's own Quests page."
+    )
+
+    script = base64.b64decode(sent[0]).decode("utf-16-le")
+    assert "Reward not claimed" in script
+    assert "Unknown Message" in script
 
 
 def test_a_failing_runner_is_logged_not_raised():

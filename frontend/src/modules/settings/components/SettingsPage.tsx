@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
-import type { SilentLauncher } from "../../../shared/api-client";
+import { useState } from "react";
 import { Dialog } from "../../../shared/components/Dialog";
 import { PageHeader } from "../../../shared/components/PageHeader";
-import { Button, Chip, StatusDot } from "../../../shared/components/primitives";
+import { QuestRunPanel } from "./QuestRunPanel";
+import { LauncherRow, Panel, Row } from "./SettingsPrimitives";
+import { Button, StatusDot } from "../../../shared/components/primitives";
 import {
   RefreshIcon,
   TrashIcon,
@@ -17,68 +18,6 @@ import {
   useSilentMode,
 } from "../../../shared/hooks/useQuests";
 
-function Panel({
-  title,
-  description,
-  actions,
-  children,
-}: {
-  title: string;
-  description?: ReactNode;
-  actions?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <section className="rounded-[8px] border border-line bg-raised/50">
-      <div className="flex items-start justify-between gap-4 px-4 pt-3.5">
-        <div className="min-w-0">
-          <h2 className="text-[13px] font-semibold text-ink">{title}</h2>
-          {description ? (
-            <p className="mt-1 text-[12px] leading-[18px] text-subtle">
-              {description}
-            </p>
-          ) : null}
-        </div>
-        {actions ? (
-          <div className="flex shrink-0 items-center gap-2 pt-0.5">{actions}</div>
-        ) : null}
-      </div>
-      {children ? <div className="px-4 pb-3.5 pt-2">{children}</div> : null}
-    </section>
-  );
-}
-
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
-      <span className="shrink-0 text-[12px] text-subtle">{label}</span>
-      <span className="min-w-0 truncate text-right text-[12px] text-muted">
-        {children}
-      </span>
-    </div>
-  );
-}
-
-function LauncherRow({ launcher }: { launcher: SilentLauncher }) {
-  return (
-    <li className="rounded-[6px] border border-line bg-base/40 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="text-[12px] font-medium text-ink">{launcher.kind}</span>
-        <Chip tone={launcher.patched ? "success" : "neutral"}>
-          {launcher.patched ? "Patched" : "Original"}
-        </Chip>
-      </div>
-      <p className="mt-1 truncate text-[11px] text-subtle" title={launcher.location}>
-        {launcher.location}
-      </p>
-      <code className="mt-1 block whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-subtle">
-        {launcher.arguments}
-      </code>
-    </li>
-  );
-}
-
-/** Settings: what the app changes on this machine, and how to undo it. */
 export function SettingsPage() {
   const silent = useSilentMode();
   const status = useQuestStatus();
@@ -131,7 +70,7 @@ export function SettingsPage() {
     <section aria-label="Settings" className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="Settings"
-        subtitle="What this app changes on this machine, and how to undo it."
+        subtitle="What the app changes and how to undo it."
         actions={
           <Button
             size="sm"
@@ -152,85 +91,19 @@ export function SettingsPage() {
         <div className="mx-auto flex w-full max-w-[880px] flex-col gap-3 px-5 py-5">
           <Panel
             title="Discord client"
-            description="Quests are read from the running client over a loopback endpoint, so the request stays on this machine."
+            description="Quests are read from the running client over loopback."
           >
             <Row label="Client">{clientLine}</Row>
             <Row label="Endpoint">{endpointLine}</Row>
           </Panel>
 
-          <Panel
-            title="Quest runs"
-            description="Choose whether a running quest shows the game on your Discord profile or stays private."
-          >
-            <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2 first:border-t-0">
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] text-muted">Play activity</p>
-                <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
-                  Show activity puts the game on your Discord profile while the
-                  quest runs, without opening it. Private runs earn the same
-                  quest time and show nothing. Neither one launches a game.
-                </p>
-              </div>
-              <div
-                role="group"
-                aria-label="Play activity"
-                className="flex shrink-0 overflow-hidden rounded-[4px] border border-line-strong"
-              >
-                {(
-                  [
-                    ["activity", "Show activity"],
-                    ["silent", "Private"],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const active = (prefs?.run_mode ?? "activity") === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => {
-                        if (!active) setPrefs.mutate({ run_mode: mode });
-                      }}
-                      className={
-                        "h-7 px-2.5 text-[12px] transition-colors " +
-                        (active
-                          ? "bg-active text-ink"
-                          : "text-muted hover:bg-hover hover:text-ink")
-                      }
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] text-muted">Pause between quests</p>
-                <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
-                  Wait a random slice of these minutes before the next queued
-                  quest starts, so runs do not follow each other back to back.
-                  0 starts the next one at once.
-                </p>
-              </div>
-              <label className="flex shrink-0 items-center gap-1.5">
-                <input
-                  type="number"
-                  min={0}
-                  max={30}
-                  value={tailDraft ?? String(prefs?.play_session_tail_min ?? 2)}
-                  onChange={(event) => setTailDraft(event.target.value)}
-                  onBlur={commitTail}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                  className="h-7 w-14 rounded-[4px] border border-line-strong bg-base px-2 text-right text-[12px] tabular-nums text-ink outline-none focus:border-accent"
-                  aria-label="Pause between quests in minutes"
-                />
-                <span className="text-[12px] text-subtle">min</span>
-              </label>
-            </div>
-          </Panel>
+          <QuestRunPanel
+            prefs={prefs}
+            onPrefs={(values) => setPrefs.mutate(values)}
+            tailDraft={tailDraft}
+            onTailDraft={setTailDraft}
+            onCommitTail={commitTail}
+          />
 
           <Panel
             title="Launch patch"
@@ -240,9 +113,8 @@ export function SettingsPage() {
                 <code className="font-mono text-[11px] text-muted">
                   --remote-debugging-port={state?.port ?? 9223}
                 </code>{" "}
-                to every entry Windows starts Discord from. The endpoint only
-                exists on loopback, and the switch takes effect the next time
-                Discord starts.
+                to every entry Windows starts Discord from. The endpoint is
+                loopback only and takes effect on the next start.
               </>
             }
             actions={
@@ -253,7 +125,7 @@ export function SettingsPage() {
                     variant="secondary"
                     icon={<TrashIcon size={12} />}
                     onClick={() => setConfirmRemoval(true)}
-                    title="Restore the original command line of every Discord launch entry"
+                    title="Restore every Discord launch entry"
                   >
                     Remove patch
                   </Button>
@@ -294,15 +166,13 @@ export function SettingsPage() {
               </ul>
             ) : (
               <p className="mt-2 text-[12px] leading-[18px] text-subtle">
-                No Discord shortcut, startup entry or Run value was found, so
-                there is nothing to patch.
+                No Discord shortcut, startup entry or Run value was found.
               </p>
             )}
 
             <p className="mt-2.5 text-[12px] leading-[18px] text-subtle">
-              Removing the patch restores the exact command lines these entries
-              had before. A Discord that is already open keeps the endpoint it
-              started with until it is closed.
+              Removing the patch restores the previous command lines. A Discord
+              that is already open keeps its endpoint until it closes.
             </p>
           </Panel>
         </div>
@@ -318,10 +188,10 @@ export function SettingsPage() {
             {patched === 1
               ? "One launch entry goes back"
               : `${patched} launch entries go back`}{" "}
-            to the command line it had before. Discord starts normally again, and
-            this page can no longer read quests.
+            to the previous command line. Discord starts normally again, and this
+            page can no longer read quests.
             <br />
-            A Discord that is already open keeps the endpoint until it is closed.
+            A Discord that is already open keeps its endpoint until it closes.
           </>
         }
         footer={

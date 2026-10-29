@@ -42,7 +42,6 @@ export function CataloguePage() {
     ROW_HEIGHT,
   );
 
-  // Fetch the next page when the window approaches the end of what is loaded.
   const requested = useRef(0);
   useEffect(() => {
     if (!query.hasNextPage || query.isFetchingNextPage) return;
@@ -95,8 +94,8 @@ export function CataloguePage() {
           title={filtered ? "No games match that search" : "The catalogue is empty"}
           description={
             filtered
-              ? "Try fewer words, or part of the executable name."
-              : "Sync the catalogue to pull Discord's detectable games database."
+              ? "Try fewer words or an executable name."
+              : "Sync to load Discord's game list."
           }
           action={
             filtered ? (
@@ -151,7 +150,7 @@ export function CataloguePage() {
         subtitle={
           filtered
             ? formatCount(games.length) + " matches"
-            : formatCount(total) + " games Discord can detect"
+            : formatCount(total) + " games"
         }
         actions={
           <IconButton label="Reload catalogue" onClick={() => void query.refetch()}>
@@ -189,7 +188,7 @@ export function CataloguePage() {
           </>
         ) : games.length > 0 ? (
           <span className="text-[12px] text-subtle">
-            Select rows to add several at once
+            Select rows to add more than one
           </span>
         ) : null}
       </Toolbar>

@@ -4,12 +4,10 @@
 
 The launcher cannot see what Discord does with the process. It starts a dummy
 executable with the name Discord compares against; whether the status appears
-depends on Discord.
+depends on Discord. Check these in order:
 
-Check these, in order:
-
-1. Discord is open and signed in, as the desktop app. The web client cannot
-   show game activity.
+1. Discord is open and signed in as the desktop app. The web client cannot show
+   game activity.
 2. Discord settings, Activity Privacy, **Display current activity as a status
    message** is on. This is the most common cause.
 3. The library row says **Running**, and Task Manager shows the process name the
@@ -46,18 +44,15 @@ To undo the setup, use **Turn silent connection off** on the Quests panel, or
 nothing behind.
 
 Watch quests are credited from here: the app reports the video progress to
-Discord, so no player window opens and Discord stays usable. Phone quests only
-count in the mobile app, and those are listed and finished here through the
-same progress post.
+Discord, so no player window opens and Discord stays usable. Phone quests are
+listed and finished the same way, through the same progress post.
 
 ## A quest says "Not accepted"
 
 Nothing to press: **Run** and **Watch** accept the quest through the running
 Discord client before they start, without opening a window. The chip disappears
-once that happens.
-
-The same applies to a game you started from the Library. Discord only counts
-progress for accepted quests.
+once that happens. The same applies to a game you started from the Library;
+Discord counts progress only for accepted quests.
 
 ## Run does not change the quest
 
@@ -74,11 +69,10 @@ Progress only counts while a run is active. **Stop** ends it.
 
 ## The launcher does not start
 
-1. Restart the PC and try again.
-2. Allow `dcgl.exe` and `%LOCALAPPDATA%\discord-games-launcher\` in your
+1. Allow `dcgl.exe` and `%LOCALAPPDATA%\discord-games-launcher\` in your
    antivirus.
-3. Download `dcgl.exe` again from GitHub Releases. The copy may be damaged.
-4. Confirm Windows 10 or 11, 64-bit.
+2. Download `dcgl.exe` again from GitHub Releases. The copy may be damaged.
+3. Confirm Windows 10 or 11, 64-bit.
 
 ## A game cannot be added
 
@@ -104,20 +98,14 @@ Progress only counts while a run is active. **Stop** ends it.
 ## The app feels heavy
 
 Each running game holds a small window, roughly 10 to 20 MB. The launcher itself
-sits near 50 to 100 MB and almost no CPU when idle.
-
-Press **Stop all** for games you are not showing.
+sits near 50 to 100 MB and almost no CPU when idle. Press **Stop all** for games
+you are not showing.
 
 ## Antivirus flags the app
 
 Each game window shows a name and a timer. That is all it does. Allow
 `%LOCALAPPDATA%\discord-games-launcher\` in your antivirus. The source is
 public, so the build can be checked.
-
-## The same game appears twice
-
-Remove the extra copy from the Library. If it comes back, do a full reset (below)
-and add the game again.
 
 ## Error messages
 

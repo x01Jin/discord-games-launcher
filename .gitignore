@@ -1,4 +1,3 @@
-# --- Python ---
 .venv/
 __pycache__/
 *.pyc
@@ -15,7 +14,6 @@ htmlcov/
 *.egg-info/
 *.egg
 
-# --- PyInstaller / build outputs ---
 /build/
 /dist/
 /frontend-dist/
@@ -24,13 +22,11 @@ templates/dist/
 *.spec
 !dcgl.spec
 
-# --- Frontend (Vite + React) ---
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 *.local
 
-# --- Runtime / local data ---
 *.db
 *.sqlite3
 *.log
@@ -38,13 +34,11 @@ logs/
 .env
 .env.*
 
-# --- Project-private notes and tooling ---
 private/
 .ignore
 .codegraph/
 .playwright-mcp/
 
-# --- Editors and OS ---
 .vscode/
 .idea/
 *.code-workspace

@@ -14,7 +14,7 @@ interface Props {
   busy: boolean;
   selected: boolean;
   selectable: boolean;
-  /** The queue is waiting for this video to be credited in Discord. */
+
   watching?: boolean;
   onSelect: (next: boolean) => void;
   onStart: () => void;
@@ -49,7 +49,6 @@ export function QuestRow({
     typeof quest.seconds_left === "number" &&
     quest.seconds_left > 0 &&
     quest.seconds_left < 86_400;
-  // The title is often the game name too, so only repeat it when it differs.
   const meta =
     [
       quest.kind === "play" ? "" : KIND_LABEL[quest.kind],
@@ -91,28 +90,28 @@ export function QuestRow({
           </p>
           {quest.state === "running" ? <Chip tone="success">Running</Chip> : null}
           {watching ? (
-            <Chip tone="accent" title="The queue is waiting for this video in Discord">
+            <Chip tone="accent" title="The queue is crediting this video">
               Watching
             </Chip>
           ) : quest.queued ? (
-            <Chip tone="accent" title="Starts when the quest ahead of it finishes">
+            <Chip tone="accent" title="Waits for the quest ahead">
               Queued
             </Chip>
           ) : null}
           {quest.kind === "watch" ? (
-            <Chip title="Progress is posted to Discord in the background, no window opens">
+            <Chip title="Credited in the background">
               Video
             </Chip>
           ) : null}
           {quest.kind === "watch_mobile" ? (
-            <Chip title="Discord lists this video task for mobile. The progress post it accepts is the same, so it still finishes here.">
+            <Chip title="Credited here with the same progress post">
               Mobile video
             </Chip>
           ) : null}
           {!quest.enrolled && quest.state === "ready" ? (
             <Chip
               tone="warning"
-              title="Starting this quest accepts it in Discord first"
+              title="Accepted when it starts"
             >
               Not accepted
             </Chip>
@@ -198,7 +197,7 @@ function QuestAction({
           size="sm"
           busy={busy}
           onClick={onClaim}
-          title="Claim the reward. If Discord asks for a captcha, its window comes forward so you can solve it there."
+          title="Claim the reward. Discord may ask for a captcha in its window."
         >
           Claim
         </Button>
@@ -214,7 +213,7 @@ function QuestAction({
           title={
             quest.kind === "watch"
               ? "Stop watching this video. The queue moves on to the next quest."
-              : "Stop crediting this quest. The queue moves on to the next one."
+              : "Stop the quest. The queue moves on."
           }
         >
           Stop
@@ -234,7 +233,7 @@ function QuestAction({
           disabled={quest.queued}
           icon={<PlayIcon size={11} />}
           onClick={onWatch}
-          title="Watch this video in the background. Discord credits the progress without opening its quest page."
+          title="Credit the video in the background"
         >
           Watch
         </Button>
@@ -244,8 +243,7 @@ function QuestAction({
         <span
           className="inline-flex items-center gap-1 text-[12px] text-warning"
           title={
-            "This quest only counts on the Discord mobile app, so it cannot be " +
-            "finished on this PC."
+            "This quest only counts in the Discord mobile app."
           }
         >
           <ClockIcon size={11} /> Phone

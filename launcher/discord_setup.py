@@ -1,18 +1,3 @@
-"""Keep Discord's local DevTools endpoint switched on between launches.
-
-Reading quests means running a snippet inside the live client. Electron only
-opens a debugger endpoint when the process starts with a remote-debugging-port
-switch, so the only silent way to read quests is to make every launch of Discord
-carry that switch. This module edits the places Windows actually starts Discord
-from: the per-user Run key and the shortcuts in the Start menu, on the desktop
-and on the taskbar.
-
-Nothing here modifies the Discord installation. Every edit is a command line in
-a shortcut or a registry value, and disable() puts them back.
-
-The endpoint binds to 127.0.0.1, so it is not reachable from the network. It is
-still a debugger for a signed-in account, which is why the app asks first.
-"""
 
 from __future__ import annotations
 
@@ -36,7 +21,6 @@ _RUN_VALUE = "Discord"
 _CACHE_TTL = 20.0
 _REAPPLY_INTERVAL = 120.0
 
-# Keeps the console window of every helper out of the user's face.
 _NO_WINDOW = 0x08000000
 
 _LOCK = threading.Lock()
@@ -46,7 +30,6 @@ _LAST_REAPPLY = 0.0
 
 @dataclass(frozen=True)
 class Launcher:
-    """One place Windows starts Discord from."""
 
     kind: str
     location: str
@@ -62,12 +45,8 @@ class Launcher:
         return f"{self.kind}: {self.location}"
 
 
-# ---------------------------------------------------------------------------
-# command line rewriting (pure, unit tested)
-# ---------------------------------------------------------------------------
 
 def _port_of(arguments: str) -> int | None:
-    """The debug port already in a command line, if any."""
     for token in (arguments or "").replace('"', " ").split():
         if token.startswith(SWITCH):
             raw = token[len(SWITCH):].strip('"')
@@ -85,7 +64,6 @@ def _strip_switch(arguments: str) -> str:
 
 
 def _is_launcher(target: str, arguments: str) -> bool:
-    """True when the command line goes through Squirrel instead of the app."""
     if _PROCESS_START in (arguments or ""):
         return True
     name = Path(target).name.lower() if target else ""
@@ -93,7 +71,6 @@ def _is_launcher(target: str, arguments: str) -> bool:
 
 
 def with_switch(arguments: str, target: str = "", port: int = SILENT_PORT) -> str:
-    """The same command line, plus the debug switch, in the right place."""
     args = (arguments or "").strip()
     existing = _port_of(args)
     if existing == port:
@@ -116,10 +93,8 @@ def with_switch(arguments: str, target: str = "", port: int = SILENT_PORT) -> st
 
 
 def without_switch(arguments: str) -> str:
-    """Drop the debug switch and the switch that carried it, if it is empty."""
     args = (arguments or "").strip()
     if _port_of(args) is None:
-        # Leave an untouched command line exactly as it was found.
         return args
     if _START_ARGS in args:
         head, tail = args.split(_START_ARGS, 1)
@@ -130,12 +105,8 @@ def without_switch(arguments: str) -> str:
     return _strip_switch(args)
 
 
-# ---------------------------------------------------------------------------
-# discovery
-# ---------------------------------------------------------------------------
 
 def _shortcut_paths() -> list[tuple[str, Path]]:
-    """Every shortcut Windows could start Discord from, when it exists."""
     appdata = Path(os.environ.get("APPDATA") or "")
     user = Path(os.environ.get("USERPROFILE") or Path.home())
     public = Path(os.environ.get("PUBLIC") or "C:/Users/Public")
@@ -170,7 +141,6 @@ def _shortcut_paths() -> list[tuple[str, Path]]:
     if pinned.is_file():
         found.append(("Taskbar", pinned))
 
-    # Two names for the same folder exist on real installs; collapse them.
     seen: set[str] = set()
     unique: list[tuple[str, Path]] = []
     for kind, path in found:
@@ -182,9 +152,6 @@ def _shortcut_paths() -> list[tuple[str, Path]]:
     return unique
 
 
-# Windows PowerShell 5.1 hands back a top-level JSON array as one object, while
-# PowerShell 7 enumerates it. Flattening by hand works under both, and the
-# scripts stay one code path.
 _READ_SHORTCUTS = r'''
 $paths = @()
 foreach ($item in ($env:DCGL_LNK_PATHS | ConvertFrom-Json)) { $paths += $item }
@@ -284,7 +251,6 @@ def _read_run_key() -> Launcher | None:
         return None
     if not isinstance(value, str) or "discord" not in value.lower():
         return None
-    # The value is a whole command line: "C:\...\Update.exe" --processStart ...
     arguments = value.strip()
     target = ""
     if arguments.startswith('"'):
@@ -306,7 +272,6 @@ def _write_run_key(launcher: Launcher) -> None:
 
 
 def discover() -> list[Launcher]:
-    """Every launcher that exists on this machine, with its command line."""
     with _LOCK:
         cached = _CACHE["launchers"]
         if cached and time.monotonic() - _CACHE["at"] < _CACHE_TTL:
@@ -346,9 +311,6 @@ def _invalidate_cache() -> None:
         _CACHE["at"] = 0.0
 
 
-# ---------------------------------------------------------------------------
-# state
-# ---------------------------------------------------------------------------
 
 def _marker_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home())
@@ -371,12 +333,10 @@ def _write_marker(data: dict[str, Any]) -> None:
         with path.open("w", encoding="utf-8") as handle:
             json.dump(data, handle, indent=1)
     except OSError:
-        # The marker only drives self-healing; losing it is not an error.
         pass
 
 
 def _apply(launchers: list[Launcher], port: int) -> tuple[list[str], list[str]]:
-    """Rewrite every launcher. Returns (updated labels, failures)."""
     updates: list[tuple[Launcher, str]] = []
     for launcher in launchers:
         wanted = with_switch(launcher.arguments, launcher.target, port)
@@ -433,7 +393,6 @@ def _apply(launchers: list[Launcher], port: int) -> tuple[list[str], list[str]]:
 
 
 def enable(port: int = SILENT_PORT) -> dict[str, Any]:
-    """Put the debug switch into every launcher that exists."""
     launchers = discover()
     if not launchers:
         return {
@@ -462,7 +421,6 @@ def enable(port: int = SILENT_PORT) -> dict[str, Any]:
 
 
 def disable() -> dict[str, Any]:
-    """Remove the switch from every launcher we edited."""
     launchers = discover()
     restored: list[str] = []
     failures: list[str] = []
@@ -509,14 +467,11 @@ def disable() -> dict[str, Any]:
 
 
 def summary(port: int = SILENT_PORT) -> dict[str, Any]:
-    """Cheap view of the launcher state, safe to poll."""
     launchers = discover()
     patched = [launcher for launcher in launchers if launcher.patched]
     patched_ports = {
         found for found in (_port_of(launcher.arguments) for launcher in patched) if found is not None
     }
-    # Report the port the entries actually carry, so the UI never names one port
-    # while every command line starts Discord with another.
     active_port = (
         next(iter(patched_ports))
         if patched
@@ -545,12 +500,6 @@ def summary(port: int = SILENT_PORT) -> dict[str, Any]:
 
 
 def heal(port: int = SILENT_PORT) -> bool:
-    """Re-apply the switch if a Discord update dropped it.
-
-    Squirrel rewrites the Run value when it updates Discord, which silently
-    takes the endpoint away. The marker written by enable() records that the
-    user asked for it, so restoring it needs no prompt.
-    """
     global _LAST_REAPPLY
     if sys.platform != "win32":
         return False

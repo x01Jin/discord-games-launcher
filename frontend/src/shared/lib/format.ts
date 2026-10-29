@@ -1,11 +1,10 @@
-/** Display formatting shared by every view. */
+
 
 export function formatCount(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return value.toLocaleString("en-US");
 }
 
-/** "4h 12m", "38m", "45s", "3d 2h". Coarse on purpose. */
 export function formatDuration(seconds: number | null | undefined): string {
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "—";
   const total = Math.max(0, Math.round(seconds));
@@ -20,7 +19,6 @@ export function formatDuration(seconds: number | null | undefined): string {
   return restHours ? days + "d " + restHours + "h" : days + "d";
 }
 
-/** Countdown wording: "2d left", "3h left", "expired". */
 export function formatTimeLeft(seconds: number | null | undefined): string {
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "No end date";
   if (seconds <= 0) return "Expired";

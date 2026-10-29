@@ -14,11 +14,6 @@ interface CataloguePage {
   error?: string;
 }
 
-/**
- * Two modes behind one key: a plain query feeds pages of the catalogue, a
- * search feeds a single result set. Both are paged from the backend so the
- * window never materialises 24,000 rows.
- */
 export function useCatalogueGames(query: string) {
   const trimmed = query.trim();
   return useInfiniteQuery<

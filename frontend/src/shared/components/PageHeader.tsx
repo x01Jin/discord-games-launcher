@@ -6,7 +6,6 @@ interface Props {
   actions?: ReactNode;
 }
 
-/** Shared page header: title block on the left, actions on the right. */
 export function PageHeader({ title, subtitle, actions }: Props) {
   return (
     <header className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-line px-5">
@@ -23,7 +22,6 @@ export function PageHeader({ title, subtitle, actions }: Props) {
   );
 }
 
-/** Sticky filter/action row under a PageHeader. */
 export function Toolbar({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[44px] shrink-0 items-center gap-3 border-b border-line px-5 py-1.5">

@@ -1,15 +1,9 @@
-"""Tests for candidate refresh, library repair, and generator ownership.
-
-Usage:
-    pytest tests/test_repair.py -v
-"""
 
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -59,7 +53,6 @@ def _seed_library(
 
 
 def test_refresh_replaces_superseded_exe_and_drops_old_file():
-    """A changed best exe is materialized; the old file is deleted."""
     print("Testing candidate refresh with replacement...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -88,7 +81,6 @@ def test_refresh_replaces_superseded_exe_and_drops_old_file():
 
 
 def test_refresh_updates_blob_without_file_churn():
-    """Reordered candidates update the row but keep the exe file."""
     print("Testing candidate refresh without replacement...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,7 +111,6 @@ def test_refresh_updates_blob_without_file_churn():
 
 
 def test_refresh_skips_running_games():
-    """Games with live processes are left untouched for next restart."""
     print("Testing refresh skip for running games...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -144,7 +135,6 @@ def test_refresh_skips_running_games():
         old_exe.parent.mkdir(parents=True, exist_ok=True)
         old_exe.write_bytes(b"x")
         db.add_to_library(779, str(old_exe), "old.exe", "old.exe", [])
-        # Live PID: a fake one would be dropped by stale-record cleanup.
         db.set_process_running(779, os.getpid())
 
         api = DiscordAPIClient(db, tmpdir / "cache")
@@ -162,14 +152,12 @@ def test_refresh_skips_running_games():
 
 
 def test_repair_merges_cleanup_and_refresh_summaries():
-    """repair_library composes both passes with merged warning counts."""
     print("Testing repair composition...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         mgr = _make_manager(tmpdir)
 
-        # Dangling row (no cache entry) with files on disk.
         ghost_dir = tmpdir / "games" / "555"
         ghost_dir.mkdir(parents=True)
         (ghost_dir / "ghost.exe").write_bytes(b"x")
@@ -177,7 +165,6 @@ def test_repair_merges_cleanup_and_refresh_summaries():
             555, str(ghost_dir / "ghost.exe"), "ghost.exe", "ghost.exe", []
         )
 
-        # Healthy row needing a candidate refresh.
         _seed_library(
             mgr,
             tmpdir,
@@ -198,7 +185,6 @@ def test_repair_merges_cleanup_and_refresh_summaries():
 
 
 def test_repair_skips_live_dangling_game():
-    """On-demand repair never purges a game with a live process."""
     print("Testing repair live-game guard...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -223,7 +209,6 @@ def test_repair_skips_live_dangling_game():
         ghost_exe.parent.mkdir(parents=True, exist_ok=True)
         ghost_exe.write_bytes(b"x")
         db.add_to_library(555, str(ghost_exe), "ghost.exe", "ghost.exe", [])
-        # Live PID seeded before construction so the PID cache picks it up.
         db.set_process_running(555, os.getpid())
 
         api = DiscordAPIClient(db, tmpdir / "cache")
@@ -231,7 +216,7 @@ def test_repair_skips_live_dangling_game():
         process_mgr = ProcessManager(db, dummy_gen)
         mgr = GameManager(db, api, dummy_gen, process_mgr)
 
-        summary = mgr.repair_library()  # On-demand: no runtime reset.
+        summary = mgr.repair_library()
 
         assert summary["dangling_removed"] == 0
         assert summary["warnings"] >= 1
@@ -243,7 +228,6 @@ def test_repair_skips_live_dangling_game():
 
 
 def test_verify_game_process_matches_path_segments():
-    """Game 22 must not verify against .../222/... after PID recycling."""
     print("Testing process verification...")
 
     from unittest.mock import MagicMock, patch
@@ -261,7 +245,6 @@ def test_verify_game_process_matches_path_segments():
 
 
 def test_process_manager_requires_injected_generator():
-    """ProcessManager shares the single generator instance (no second owner)."""
     print("Testing generator ownership...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -270,7 +253,7 @@ def test_process_manager_requires_injected_generator():
         assert mgr.process_mgr.dummy_gen is mgr.dummy_gen
 
         try:
-            ProcessManager(mgr.db)  # type: ignore[call-arg]
+            ProcessManager(mgr.db)
         except TypeError:
             pass
         else:

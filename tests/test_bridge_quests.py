@@ -1,4 +1,3 @@
-"""Bridge surface for the quest list."""
 
 import pytest
 

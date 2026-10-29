@@ -17,7 +17,7 @@ function initialPage(): Page {
     const saved = localStorage.getItem(PAGE_KEY);
     if (saved && PAGES.includes(saved as Page)) return saved as Page;
   } catch {
-    /* storage is optional */
+
   }
   return "quests";
 }
@@ -39,7 +39,6 @@ interface UiState {
 
 let toastId = 0;
 
-/** UI-only state. Server state lives in React Query. */
 export const useUiStore = create<UiState>((set, get) => ({
   page: initialPage(),
   search: "",
@@ -51,7 +50,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     try {
       localStorage.setItem(PAGE_KEY, page);
     } catch {
-      /* storage is optional */
+
     }
     set({ page });
   },
@@ -71,7 +70,6 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   pushToast: (message, kind = "info") => {
     const id = (toastId += 1);
-    // Three at a time is enough to read; older ones fall off the top.
     set((state) => ({ toasts: [...state.toasts.slice(-2), { id, message, kind }] }));
     window.setTimeout(() => {
       if (get().toasts.some((toast) => toast.id === id)) {
