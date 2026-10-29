@@ -42,8 +42,6 @@ When a run finishes on its own, a Windows notification names the quest and its r
 
 A finished quest keeps its reward until it is claimed. The row then reads Claim: pressing it claims the reward through the running client. Discord answers some claims with a captcha, which can only be solved in its own window, so the client is brought to the front on its quest page and the captcha is finished there.
 
-With Play activity set to Show activity, the game stays on your profile while the quest runs. Discord only shows it if your status is not Invisible and current activity is enabled in Activity Privacy; the row's toast says which one is holding it back.
-
 If Discord was started without the local endpoint, the view offers one setup that adds the flag to your Discord shortcuts and startup entry. It restarts Discord once, and from then on the list is there every time Discord starts.
 
 Settings also holds the quest options: Play activity chooses whether a run shows the game on your profile or stays private, and the pause between quests, in minutes, spaces finished runs out so they do not follow each other back to back. The same page lists every Discord entry the setup touched, in case you want the switch removed again.

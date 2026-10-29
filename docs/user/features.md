@@ -77,11 +77,6 @@ Under Quest runs, **Play activity** picks what Discord shows while a quest runs.
 nothing. Neither one opens a game or touches your Playing status elsewhere, and
 both earn the same quest time.
 
-Discord shows that activity only while its own settings allow it: the account
-status has to be anything but **Invisible**, and **Display current activity as a
-status message** has to be on in Activity Privacy. When one of them is holding
-the game back, the toast that appears on Run names it.
-
 **Pause between quests** (0 to 30 minutes, default 2) spaces runs out. After a
 quest finishes on its own, the next queued one waits a random part of that pause,
 so runs do not follow each other back to back. 0 starts the next quest on the

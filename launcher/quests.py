@@ -553,39 +553,7 @@ class QuestService:
                 else f"Crediting the play quest {name!r} with heartbeats"
             ),
         )
-        # The activity is set; whether Discord shows it is decided by the
-        # account's own status and activity switch, so say so while the user
-        # is looking at the row instead of leaving them to wonder.
-        note = self._visibility_note() if activity else ""
-        if not activity:
-            return True, f"Crediting {name}"
-        return True, f"Showing {name} as playing{note}"
-
-    def _visibility_note(self) -> str:
-        """A short reason an activity run may be invisible, or an empty string."""
-        state = getattr(self.native, "presence_state", None)
-        if state is None:
-            return ""
-        try:
-            values = state()
-        except (DiscordNativeError, OSError, ValueError):
-            return ""
-        if not isinstance(values, dict):
-            return ""
-        status = str(values.get("status") or "").lower()
-        if status == "invisible":
-            self._log(
-                "warning",
-                "Discord status is Invisible, so the playing activity is not shown to anyone",
-            )
-            return " · your Discord status is Invisible, so no one sees it"
-        if values.get("show_current_game") is False:
-            self._log(
-                "warning",
-                "Game activity is off in Discord, so the playing activity is not shown",
-            )
-            return " · game activity is off in Discord's settings"
-        return ""
+        return True, f"Showing {name} as playing" if activity else f"Crediting {name}"
 
     def _enqueue(self, quest_id: str) -> bool:
         with self._run_lock:

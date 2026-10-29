@@ -841,39 +841,6 @@ QUEST_API_EXPRESSION = r"""
 """
 
 
-PRESENCE_STATE_EXPRESSION = r"""
-(() => {
-  const wc = window.webpackChunkdiscord_app;
-  if (!wc) return JSON.stringify({ ok: false, error: "Discord's module registry is not reachable" });
-  const req = wc.push([[Symbol()], {}, (r) => r]);
-  wc.pop();
-  const mods = (req && req.c) || {};
-  const out = {};
-  for (const id in mods) {
-    const record = mods[id];
-    if (!record || !record.exports) continue;
-    for (const candidate of [record.exports, record.exports.default, record.exports.A, record.exports.Z]) {
-      if (!candidate || typeof candidate !== "object") continue;
-      let name = null;
-      try { name = typeof candidate.getName === "function" ? candidate.getName() : null; } catch (e) { continue; }
-      if (name !== "UserSettingsProtoStore") continue;
-      try {
-        const status = (candidate.settings && candidate.settings.status) || {};
-        out.status = status.status && status.status.value ? String(status.status.value) : null;
-        out.showCurrentGame = status.showCurrentGame
-          ? Boolean(status.showCurrentGame.value)
-          : null;
-      } catch (e) {
-        out.error = String((e && e.message) || e);
-      }
-    }
-  }
-  out.ok = !out.error;
-  return JSON.stringify(out);
-})()
-"""
-
-
 def parse_quest_payload(value: Any) -> dict[str, Any]:
     """Decode whatever the renderer handed back into the quest envelope."""
     if isinstance(value, str):
@@ -1141,29 +1108,6 @@ class DiscordNative:
     def claim_quest_reward(self, quest_id: str) -> dict[str, Any]:
         """Claim the reward of a finished quest."""
         return self._quest_api({"kind": "claim", "questId": str(quest_id)})
-
-    def presence_state(self) -> dict[str, Any] | None:
-        """The client's own status and game-activity switch, or None.
-
-        Both decide whether an activity this app sets is visible at all: an
-        Invisible account broadcasts no presence, and with game activity off
-        the client never reports one. Read on demand, at the start of a run.
-        """
-        try:
-            value = self._evaluate_on_client(PRESENCE_STATE_EXPRESSION, timeout=8.0)
-        except (DiscordNativeError, OSError):
-            return None
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except ValueError:
-                return None
-        if not isinstance(value, dict) or not value.get("ok", True):
-            return None
-        return {
-            "status": value.get("status"),
-            "show_current_game": value.get("showCurrentGame"),
-        }
 
     # -- control ----------------------------------------------------------
     def start(self, wait_seconds: float = 45.0) -> tuple[bool, str]:

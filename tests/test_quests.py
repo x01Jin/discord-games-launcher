@@ -653,33 +653,6 @@ def test_activity_mode_shows_the_game_and_still_posts_a_heartbeat(
     assert service._activity_shown is True
 
 
-def test_an_invisible_status_is_named_when_the_game_starts(
-    game_manager, cached_game, tmp_path
-):
-    native = FakeNative(payload=payload(quest()))
-    native.presence_state = lambda: {"status": "invisible", "show_current_game": True}
-    service = activity_service(game_manager, native, tmp_path)
-
-    ok, message = service.start_quest("1")
-
-    assert ok is True
-    assert "Invisible" in message
-    assert service._rpc.shows == [(100, "Test Quest")]
-
-
-def test_game_activity_switched_off_is_named_when_the_game_starts(
-    game_manager, cached_game, tmp_path
-):
-    native = FakeNative(payload=payload(quest()))
-    native.presence_state = lambda: {"status": "online", "show_current_game": False}
-    service = activity_service(game_manager, native, tmp_path)
-
-    ok, message = service.start_quest("1")
-
-    assert ok is True
-    assert "game activity is off" in message
-
-
 def test_activity_mode_withdraws_the_game_on_stop(
     game_manager, cached_game, tmp_path
 ):

@@ -221,13 +221,10 @@ exist in Discord 1.0.9265: a scan of 460 stores in the loaded client found only
 on i18n proxies that return message objects. The pipe is the route that survived
 on this build, and it needs no injected script and no debug port.
 
-Two limits worth knowing:
-
-- The pipe only works while the client has its RPC endpoint open, which it does
-  by default. If `show()` fails the run continues on heartbeats and the log says
-  why, so a quest never stalls over a cosmetic feature.
-- An account set to Invisible shows no Playing line no matter what the client
-  holds. The activity is still there; the status setting hides it.
+One limit worth knowing: the pipe only works while the client has its RPC
+endpoint open, which it does by default. If `show()` fails the run continues on
+heartbeats and the log says why, so a quest never stalls over a cosmetic
+feature.
 
 A stale activity can outlive the pipe in `LocalActivityStore`. It credits
 nothing (verified: no progress drift over 50 s with one sitting there) and clears
@@ -371,22 +368,6 @@ back from `ToastNotificationManager.History`.
 
 Anything that goes wrong is logged and swallowed. A missing `powershell.exe`
 costs a warning line, never a stalled run.
-
-## Why a run can be visible but not shown
-
-Setting the activity is not the same as Discord displaying it. Two account
-settings gate the display, both read on demand from `UserSettingsProtoStore`
-(`presence_state()`):
-
-- `status.status` set to `invisible` broadcasts no presence at all.
-- `status.showCurrentGame` off stops the client reporting any activity.
-
-`start_quest()` checks both right after the activity is set and appends the
-reason to its message, which the page shows as a toast. Verified against a live
-client in this state: `LocalActivityStore.getActivities()` held
-`{name: "Roblox", type: 0}` while the run was in flight, with the account
-Invisible, so the activity itself was correct and the profile showed nothing.
-
 
 ## Quest options
 
