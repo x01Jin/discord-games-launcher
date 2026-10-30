@@ -1,4 +1,3 @@
-
 import json
 
 from launcher import prefs
@@ -8,13 +7,18 @@ def test_defaults_when_no_file(tmp_path):
     assert prefs.load(tmp_path / "missing.json") == {
         "play_session_tail_min": 2,
         "run_mode": "activity",
+        "test_mode": False,
     }
 
 
 def test_save_and_load_round_trip(tmp_path):
     path = tmp_path / "settings.json"
     prefs.save({"play_session_tail_min": 7}, path)
-    assert prefs.load(path) == {"play_session_tail_min": 7, "run_mode": "activity"}
+    assert prefs.load(path) == {
+        "play_session_tail_min": 7,
+        "run_mode": "activity",
+        "test_mode": False,
+    }
     assert json.loads(path.read_text(encoding="utf-8"))["play_session_tail_min"] == 7
 
 
@@ -22,13 +26,18 @@ def test_save_merges_into_existing_values(tmp_path):
     path = tmp_path / "settings.json"
     prefs.save({"play_session_tail_min": 7}, path)
     saved = prefs.save({"play_session_tail_min": 5}, path)
-    assert saved == {"play_session_tail_min": 5, "run_mode": "activity"}
+    assert saved == {
+        "play_session_tail_min": 5,
+        "run_mode": "activity",
+        "test_mode": False,
+    }
 
 
 def test_unknown_keys_are_dropped(tmp_path):
     assert prefs.save({"nonsense": 1, "hide_activity": True}, tmp_path / "s.json") == {
         "play_session_tail_min": 2,
         "run_mode": "activity",
+        "test_mode": False,
     }
 
 
@@ -56,6 +65,7 @@ def test_update_only_touches_named_values(tmp_path):
     assert prefs.update(path, play_session_tail_min=3) == {
         "play_session_tail_min": 3,
         "run_mode": "activity",
+        "test_mode": False,
     }
 
 
@@ -63,6 +73,12 @@ def test_run_mode_keeps_known_values_and_drops_others(tmp_path):
     assert prefs.save({"run_mode": "silent"}, tmp_path / "a.json")["run_mode"] == "silent"
     assert prefs.save({"run_mode": "loud"}, tmp_path / "b.json")["run_mode"] == "activity"
     assert prefs.save({"run_mode": None}, tmp_path / "c.json")["run_mode"] == "activity"
+
+
+def test_test_mode_only_accepts_booleans(tmp_path):
+    assert prefs.save({"test_mode": True}, tmp_path / "a.json")["test_mode"] is True
+    assert prefs.save({"test_mode": "on"}, tmp_path / "b.json")["test_mode"] is False
+    assert prefs.save({"test_mode": 1}, tmp_path / "c.json")["test_mode"] is False
 
 
 def test_default_path_honours_data_dir(tmp_path, monkeypatch):

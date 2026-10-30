@@ -56,7 +56,6 @@ def _read_frame(read) -> tuple[bool, int, bytes]:
 
 
 class CdpConnection:
-
     def __init__(self, ws_url: str, timeout: float = 10.0):
         if not ws_url.startswith("ws://"):
             raise DiscordNativeError(f"Unsupported DevTools URL: {ws_url}")

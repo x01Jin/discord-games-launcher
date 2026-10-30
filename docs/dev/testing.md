@@ -48,7 +48,7 @@ tests/
 ├── test_migration.py            # in-place schema migration
 ├── test_notifications.py        # toast script, finished-quest announcement
 ├── test_prefs.py                # settings file, clamping, corrupt file
-├── test_quests.py               # states, runs, queue, pause, video
+├── test_quests.py               # states, runs, queue, stall, test mode, live progress
 ├── test_repair.py               # candidate refresh, repair, generator ownership
 ├── test_startup_cleanup.py      # stale rows, orphans, missing files, icons
 └── test_updates.py              # version comparison and GitHub release check

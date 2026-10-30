@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,7 +25,6 @@ class DiscordAPIError(Exception):
 
 
 class DiscordAPIClient:
-
     def __init__(
         self,
         database: Database,

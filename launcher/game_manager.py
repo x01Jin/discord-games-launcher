@@ -1,4 +1,3 @@
-
 import sqlite3
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -17,7 +16,6 @@ class GameManagerError(Exception):
 
 
 class GameManager(MaintenanceMixin):
-
     def __init__(
         self,
         database: Database,
@@ -107,7 +105,6 @@ class GameManager(MaintenanceMixin):
 
         best_exe = win_executables[0]
         process_name = best_exe["name"]
-
 
         normalized_name = self.api.normalize_process_name(process_name)
 

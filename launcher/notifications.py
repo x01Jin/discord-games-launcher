@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import base64
@@ -61,7 +60,6 @@ def run_powershell(encoded: str) -> None:
 
 
 class Notifier:
-
     def __init__(self, logger=None, runner=None):
         self.logger = logger
         self._runner = runner or run_powershell
@@ -90,6 +88,5 @@ class Notifier:
             getattr(self.logger, level)(message)
         except (AttributeError, OSError):
             pass
-
 
 __all__ = ["APP_ID", "Notifier", "build_command", "build_payload", "run_powershell"]

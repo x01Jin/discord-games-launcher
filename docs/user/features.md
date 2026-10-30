@@ -60,9 +60,12 @@ The reward does not land on its own. A finished quest whose reward is still
 unclaimed shows **Claim**, and pressing it claims the reward through the
 running client. When Discord refuses that, the app switches Discord to its
 Quests page and presses the client's own Claim button for that quest, which is
-what makes Discord ask for a captcha when it wants one. If Discord reports a
-reward error instead, refresh the client and claim again; the app catches up on
-the next read.
+what makes Discord ask for a captcha when it wants one.
+
+A claim that succeeds flips the row to **Done** and adds the reward to the orb
+count even though Discord's own cached list updates later, so the page does not
+keep showing a reward you already own. If the row stays after a press, Discord
+refused the claim; check its Quests page.
 
 ### Quest options
 
@@ -82,23 +85,34 @@ quest finishes on its own, the next queued one starts at a random point between
 10 seconds and that pause. 0 starts it on the next tick. A manual **Stop** skips
 the pause.
 
+**Test mode** runs a quest only far enough to prove it works: a game quest stops
+after two credited beats, a video quest after three progress posts. Nothing is
+claimed and the quest stays unfinished, so you can queue everything, watch each
+one prove itself, and still run them for real later.
+
 Discord sometimes offers the same game in two quests. They run one after the
 other from the queue, because two runs at once would only split the same play
 time between two requests.
 
 ### Starting Discord through the launcher
 
-The Quests view can start Discord for you with the endpoint already in place,
-so there is no restart. This only works while Discord is closed.
+The launch patch is what lets the launcher read quests: it adds the local
+endpoint to every entry Windows starts Discord from. The Quests panel names the
+one action that fits the situation:
 
-If Discord is already running, the view offers **Set up and restart Discord**.
-That adds the endpoint switch to your Discord shortcuts and startup entry, then
-restarts Discord once. You stay signed in.
+- Discord closed, patch off: **Patch and run Discord** writes the patch and
+  starts Discord with it.
+- Discord open, patch off: **Patch and restart Discord** writes the patch and
+  restarts Discord once. You stay signed in.
+- Patch on: **Start Discord** or **Restart Discord now**, with no patch work.
 
-From then on the list is there whenever Discord starts. The toolbar keeps a
-**Set up silent start** button while the switch is missing, so the one restart
-can wait. **Turn silent connection off** removes the switch again, and
-**Settings** lists every entry it touched and can remove it from there.
+Removing it works the same way round. With Discord closed, **Remove launch
+patch** only restores the original shortcuts. With Discord open, both the
+Quests panel and Settings ask first, because removing the patch also restarts
+Discord without the endpoint so the port really closes.
+Every launch here opens Discord from its own shortcut, so it behaves exactly
+like clicking that shortcut: the window opens and the endpoint, when the patch
+is on, is already in place.
 
 ## Catalogue
 

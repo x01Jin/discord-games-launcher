@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import webbrowser
@@ -7,19 +6,22 @@ from typing import Any
 
 from launcher import discord_setup, updates
 from launcher import prefs as quest_prefs
-from launcher.discord_native import DiscordNativeError
+from launcher.discord_native import DiscordNativeError, is_running
 from launcher.discord_window import _focus_discord, claim_in_client
 from launcher.game_manager import GameManager, GameManagerError
 
 
 class Bridge:
-
     def __init__(self, game_manager: GameManager, quest_service=None):
         self.game_manager = game_manager
         self.quest_service = quest_service
         self.push: Callable[[dict[str, Any]], None] | None = None
         if quest_service is not None:
             quest_service.on_change = lambda: self._emit({"type": "quests_changed"})
+
+            quest_service.on_progress = lambda entry: self._emit(
+                {"type": "quest_progress", **entry}
+            )
 
     def _emit(self, event: dict[str, Any]) -> None:
         if self.push is not None:
@@ -313,19 +315,39 @@ class Bridge:
         except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
             return {"connected": False, "quests": [], "error": str(e)}
 
+    def _patch_port(self) -> int:
+        native = getattr(self.quest_service, "native", None)
+        return native.endpoint_port() if native is not None else discord_setup.SILENT_PORT
+
+    def _apply_patch(self) -> dict[str, Any]:
+        try:
+            return discord_setup.enable(self._patch_port())
+        except (OSError, ValueError) as e:
+            return {"ok": False, "message": str(e), "updated": [], "failed": []}
+
+    @staticmethod
+    def _patch_result(
+        ok: bool, message: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        if patch.get("ok"):
+            return {"ok": ok, "message": message}
+        note = str(patch.get("message") or "The launch patch could not be applied.")
+        return {"ok": False, "message": f"{note} {message}".strip()}
+
     def connect_discord(self) -> dict[str, Any]:
         if self.quest_service is None:
             return {
                 "ok": False,
                 "message": "Quest support is unavailable in this build.",
             }
+        patch = self._apply_patch()
         try:
-            ok, message = self.quest_service.native.connect()
+            ok, message = self.quest_service.native.restart()
         except (DiscordNativeError, OSError) as e:
             return {"ok": False, "message": str(e)}
         if ok:
             self.quest_service.invalidate()
-        return {"ok": ok, "message": message}
+        return self._patch_result(ok, message, patch)
 
     def open_quest_in_discord(self, quest_id: str = "") -> dict[str, Any]:
         if not isinstance(quest_id, str):
@@ -348,11 +370,23 @@ class Bridge:
             )
         except (DiscordNativeError, sqlite3.Error, OSError, ValueError) as e:
             return {"ok": False, "message": f"Failed to claim the reward: {e}"}
+        pressed = False
         if needs_user_action:
-            claim_in_client(self.quest_service, quest_id.strip(), message, self._emit)
+            pressed = claim_in_client(
+                self.quest_service, quest_id.strip(), message, self._emit
+            )
+            if pressed:
+                message = (
+                    "Pressed Claim in Discord. The reward can take a moment to show."
+                )
         if ok:
             self._emit({"type": "quests_changed"})
-        return {"ok": ok, "message": message, "needs_user_action": needs_user_action}
+        return {
+            "ok": ok,
+            "message": message,
+            "needs_user_action": needs_user_action,
+            "claimed_in_client": pressed,
+        }
 
     def start_discord(self) -> dict[str, Any]:
         if self.quest_service is None:
@@ -360,13 +394,14 @@ class Bridge:
                 "ok": False,
                 "message": "Quest support is unavailable in this build.",
             }
+        patch = self._apply_patch()
         try:
             ok, message = self.quest_service.native.start()
         except (DiscordNativeError, OSError) as e:
             return {"ok": False, "message": str(e)}
         if ok:
             self.quest_service.invalidate()
-        return {"ok": ok, "message": message}
+        return self._patch_result(ok, message, patch)
 
     def silent_mode_status(self) -> dict[str, Any]:
         try:
@@ -376,7 +411,7 @@ class Bridge:
 
     def enable_silent_mode(self) -> dict[str, Any]:
         try:
-            result = discord_setup.enable()
+            result = discord_setup.enable(self._patch_port())
         except (OSError, ValueError) as e:
             return {"ok": False, "message": str(e), "updated": [], "failed": []}
         if self.quest_service is not None:
@@ -384,17 +419,35 @@ class Bridge:
         return result
 
     def disable_silent_mode(self) -> dict[str, Any]:
+        running = is_running()
         try:
             result = discord_setup.disable()
         except (OSError, ValueError) as e:
             return {"ok": False, "message": str(e), "restored": [], "failed": []}
-        if result.get("ok"):
-            return {**result, "message": "Silent connection is off. Discord starts normally again."}
-        return {
-            **result,
-            "message": "Some launch entries could not be restored: "
-            + "; ".join(result.get("failed") or []),
-        }
+        if self.quest_service is not None:
+            self.quest_service.invalidate()
+        if not result.get("ok"):
+            return {
+                **result,
+                "message": "Some launch entries could not be restored: "
+                + "; ".join(result.get("failed") or []),
+            }
+        restarted = False
+        if running and self.quest_service is not None:
+            try:
+                restarted, message = self.quest_service.native.restart_without_endpoint()
+            except (DiscordNativeError, OSError) as e:
+                restarted, message = False, str(e)
+            if restarted:
+                self.quest_service.invalidate()
+                message = "Launch patch removed. Discord restarted without the endpoint."
+            else:
+                message = f"Launch patch removed. Discord was not restarted: {message}"
+        elif running:
+            message = "Launch patch removed. Restart Discord to close its endpoint."
+        else:
+            message = "Launch patch removed. Discord starts normally again."
+        return {**result, "message": message, "restarted": restarted}
 
     def start_quest(self, quest_id: str) -> dict[str, Any]:
         if self.quest_service is None:

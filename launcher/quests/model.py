@@ -5,11 +5,23 @@ from datetime import datetime, timezone
 from typing import Any
 
 CACHE_TTL_SECONDS = 20.0
+EMPTY_CACHE_TTL_SECONDS = 3.0
 ASSET_BASE = "https://cdn.discordapp.com/"
 WATCH_TIMEOUT_SECONDS = 1800.0
 WATCH_REFRESH_SECONDS = 15.0
+CLAIM_OVERLAY_SECONDS = 180.0
 PLAY_BEAT_SECONDS = 20.0
 PLAY_TIMEOUT_SECONDS = 4 * 3600.0
+
+PLAY_STALL_BEATS = 4
+
+PLAY_MAX_ATTEMPTS = 3
+
+TEST_MODE_BEATS = 2
+TEST_MODE_VIDEO_POSTS = 3
+
+PROGRESS_PUSH_SECONDS = 1.0
+
 
 def _parse_time(raw: Any) -> datetime | None:
     if not isinstance(raw, str) or not raw:
@@ -22,14 +34,17 @@ def _parse_time(raw: Any) -> datetime | None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
 
+
 def _asset_url(path: Any) -> str | None:
     if not isinstance(path, str) or not path or path == "PLACEHOLDER":
         return None
     return ASSET_BASE + path.lstrip("/")
 
+
 def derive_executable_name(game_name: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]", "", game_name or "")
     return f"{cleaned or 'game'}.exe"
+
 
 def _application_id(raw: Any) -> int | None:
     if isinstance(raw, bool):

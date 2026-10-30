@@ -1,4 +1,3 @@
-
 import json
 import socket
 import struct
@@ -10,6 +9,7 @@ from launcher import discord_native, discord_setup
 from launcher.discord_native import (
     CdpConnection,
     CdpTarget,
+    DiscordInstall,
     DiscordNative,
     DiscordNativeError,
     _is_discord_page,
@@ -65,8 +65,6 @@ def test_find_installs_empty(temp_dir, monkeypatch):
     monkeypatch.setattr(discord_native.discovery, "_appdata", lambda: temp_dir / "Roaming")
     monkeypatch.setattr(discord_native.discovery, "_localappdata", lambda: temp_dir / "Local")
     assert find_installs() == []
-
-
 
 
 @pytest.mark.parametrize(
@@ -157,8 +155,6 @@ def test_find_target_survives_dead_ports(monkeypatch):
     assert calls == [6463, 9222]
 
 
-
-
 def test_mask_frame_and_read_back():
     left, right = socket.socketpair()
     try:
@@ -195,10 +191,7 @@ def test_read_frame_handles_close_frame():
         right.close()
 
 
-
-
 class _FakePeer(threading.Thread):
-
     def __init__(self, sock, reply_factory):
         super().__init__(daemon=True)
         self.sock = sock
@@ -358,8 +351,6 @@ def test_cdp_rejects_non_ws_url():
         CdpConnection("http://127.0.0.1:9222/")
 
 
-
-
 def test_parse_quest_payload_accepts_json_string():
     envelope = {"ok": True, "quests": [{"id": "1"}]}
     assert parse_quest_payload(json.dumps(envelope))["quests"] == [{"id": "1"}]
@@ -379,11 +370,8 @@ def test_parse_quest_payload_defaults_quests():
     assert parse_quest_payload({"ok": True})["quests"] == []
 
 
-
-
 @pytest.fixture
 def silent(monkeypatch):
-
     def pin(enabled: bool) -> None:
         state = {
             "port": 9223,
@@ -425,7 +413,7 @@ def test_status_when_running_without_debugger(monkeypatch, temp_dir, silent):
     assert state["running"] is True
     assert state["connected"] is False
     assert state["silent"] is False
-    assert "DevTools endpoint" in state["hint"]
+    assert "without the endpoint" in state["hint"]
 
 
 def test_status_hint_when_silent_mode_still_needs_a_restart(monkeypatch, temp_dir, silent):
@@ -513,9 +501,142 @@ def test_candidate_ports_only_scans_sockets_as_a_last_resort(monkeypatch):
     assert scanned == []
 
 
-
-
 @pytest.mark.parametrize("value,expected", [(67080, 67080), (0, 0), (-5, None), (1.5, None), (True, None)])
 def test_parse_quest_payload_normalises_orbs(value, expected):
     parsed = parse_quest_payload({"ok": True, "orbs": value, "quests": []})
     assert parsed["orbs"] == expected
+
+
+def test_send_heartbeat_carries_the_task_key(monkeypatch):
+    native = DiscordNative(port=9222)
+    captured = {}
+
+    def fake_api(op, timeout=20.0):
+        captured.update(op)
+        return {"ok": True}
+
+    monkeypatch.setattr(native, "_quest_api", fake_api)
+    native.send_heartbeat("1", 100, "game.exe", task_key="PLAY_ON_DESKTOP")
+
+    assert captured["taskKey"] == "PLAY_ON_DESKTOP"
+
+
+def test_send_video_progress_carries_the_task_key(monkeypatch):
+    native = DiscordNative(port=9222)
+    captured = {}
+
+    def fake_api(op, timeout=20.0):
+        captured.update(op)
+        return {"ok": True}
+
+    monkeypatch.setattr(native, "_quest_api", fake_api)
+    native.send_video_progress("1", 12.5, task_key="WATCH_VIDEO")
+
+    assert captured["taskKey"] == "WATCH_VIDEO"
+
+
+def test_click_claim_reward_names_the_quest_and_its_card(monkeypatch):
+    native = DiscordNative(port=9222)
+    seen = {}
+
+    def fake_eval(expression, timeout=8.0):
+        seen["expression"] = expression
+        return {"ok": True}
+
+    monkeypatch.setattr(native, "_evaluate_on_client", fake_eval)
+    native.click_claim_reward("12345", "Play Me", "Test Game")
+
+    expression = seen["expression"]
+    assert '"12345"' in expression
+    assert "Play Me" in expression
+    assert "Test Game" in expression
+    assert "__DCGL_QUEST_NAMES__" not in expression
+    assert "__DCGL_QUEST_ID__" not in expression
+
+
+class _FakeProc:
+    def __init__(self, pid, exe):
+        self.pid = pid
+        self._exe = exe
+        self.terminated = False
+        self.killed = False
+
+    def exe(self):
+        return self._exe
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+    def is_running(self):
+        return True
+
+
+def test_launch_opens_discord_from_its_shortcut(temp_dir, monkeypatch):
+    exe = temp_dir / "app-1.0.1" / "Discord.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"MZ")
+    install = DiscordInstall("stable", temp_dir / "roam", exe.parent, exe, "1.0.1")
+    opened = []
+    native = DiscordNative()
+
+    class FakeOs:
+        @staticmethod
+        def startfile(path):
+            opened.append(path)
+
+    class FakeSys:
+        platform = "win32"
+
+    monkeypatch.setattr(discord_native.client, "os", FakeOs)
+    monkeypatch.setattr(discord_native.client, "sys", FakeSys)
+    monkeypatch.setattr(
+        discord_native.client.discord_setup,
+        "shortcut_path",
+        lambda: "C:/Discord.lnk",
+    )
+    monkeypatch.setattr(
+        discord_native.client.subprocess,
+        "Popen",
+        lambda *args, **kwargs: opened.append("popen"),
+    )
+
+    native._launch(install)
+
+    assert opened == ["C:/Discord.lnk"]
+
+
+def test_stop_client_stops_every_app_build_after_a_patch(temp_dir, monkeypatch):
+    root = temp_dir / "Discord"
+    old_exe = root / "app-1.0.9000" / "Discord.exe"
+    new_exe = root / "app-1.0.9001" / "Discord.exe"
+    other_channel = temp_dir / "DiscordPTB" / "app-1.0.1" / "DiscordPTB.exe"
+    install = DiscordInstall(
+        "stable", temp_dir / "roam", new_exe.parent, new_exe, "1.0.9001"
+    )
+    old_proc = _FakeProc(11, str(old_exe))
+    new_proc = _FakeProc(12, str(new_exe))
+    other_proc = _FakeProc(13, str(other_channel))
+
+    monkeypatch.setattr(
+        discord_native.client,
+        "running_processes",
+        lambda: [old_proc, new_proc, other_proc],
+    )
+    monkeypatch.setattr(
+        DiscordNative, "_request_close", staticmethod(lambda victims: None)
+    )
+    waits = [[], []]
+
+    def fake_wait(procs, timeout=None):
+        return ([], procs if not waits.pop(0) else [])
+
+    monkeypatch.setattr(discord_native.client.psutil, "wait_procs", fake_wait)
+
+    DiscordNative()._stop_client(install)
+
+    assert old_proc.terminated is True
+    assert new_proc.terminated is True
+    assert other_proc.terminated is False

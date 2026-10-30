@@ -13,15 +13,13 @@ QUEST_API_EXPRESSION = r"""
       if (!candidate || (typeof candidate !== "object" && typeof candidate !== "function")) return null;
       try {
         if (typeof candidate.getName === "function") return candidate.getName();
-      } catch (e) { /* stores are not all well behaved */ }
+      } catch (e) { }
       try {
         if (typeof candidate.displayName === "string") return candidate.displayName;
-      } catch (e) { /* ignore */ }
+      } catch (e) { }
       return null;
     };
 
-    // Same discovery as the quest reader: named stores first, because the
-    // duck-typed matcher can land on an unrelated cache in this build.
     let questStore = null;
     let api = null;
     for (const id in mods) {
@@ -33,9 +31,6 @@ QUEST_API_EXPRESSION = r"""
         if (!questStore && (name === "QuestStore" || name === "QuestsStore")) questStore = candidate;
       }
       for (const key of Object.keys(exported)) {
-        // Some modules export the global object, whose numeric keys are
-        // cross-origin iframes. Reading a property off one throws, and that
-        // error used to abort the whole scan before the HTTP client was found.
         let value;
         try {
           value = exported[key];
@@ -49,7 +44,7 @@ QUEST_API_EXPRESSION = r"""
           ) {
             api = value;
           }
-        } catch (e) { /* frames from another origin are not candidates */ }
+        } catch (e) { }
       }
     }
     if (!questStore) return fail("Discord's QuestStore was not found");
@@ -87,8 +82,6 @@ QUEST_API_EXPRESSION = r"""
         timestamp: op.timestamp,
       });
     } else if (op.kind === "heartbeat") {
-      // Discord's own game client posts this every twenty seconds; the server
-      // credits play time per beat, so nothing has to run on the machine.
       result = await post("/quests/" + op.questId + "/heartbeat", {
         application_id: op.applicationId,
         terminal: Boolean(op.terminal),
@@ -102,6 +95,12 @@ QUEST_API_EXPRESSION = r"""
         metadata_sealed: null,
         traffic_metadata_sealed: sealed,
       });
+      if (result.ok && quest) {
+        try {
+          const status = quest.userStatus || (quest.userStatus = {});
+          if (!status.claimedAt) status.claimedAt = new Date().toISOString();
+        } catch (e) { }
+      }
     } else {
       return fail("Unknown quest operation");
     }
@@ -111,18 +110,28 @@ QUEST_API_EXPRESSION = r"""
       return fail(body.message || "Discord refused the quest request", {
         status: result.status,
         code: body.code ?? null,
-        // A claim that needs a challenge comes back with one of these keys.
         captcha: Boolean(body.captcha_key || body.captcha_sitekey),
       });
     }
-    // One beat answers with the running total for the quest's task, which is
-    // how the caller knows the target was reached without another full read.
+    const keys = body.progress && typeof body.progress === "object"
+      ? Object.keys(body.progress)
+      : [];
     let credited = null;
-    if (body.progress && typeof body.progress === "object") {
-      for (const key of Object.keys(body.progress)) {
+    let creditedKey = null;
+    const wanted = op.taskKey ? String(op.taskKey) : null;
+    if (wanted && keys.includes(wanted)) {
+      const entry = body.progress[wanted];
+      if (entry && typeof entry.value === "number") {
+        credited = entry.value;
+        creditedKey = wanted;
+      }
+    }
+    if (credited === null) {
+      for (const key of keys) {
         const entry = body.progress[key];
         if (entry && typeof entry.value === "number") {
-          credited = Math.max(credited === null ? 0 : credited, entry.value);
+          credited = credited === null ? entry.value : Math.max(credited, entry.value);
+          creditedKey = key;
         }
       }
     }
@@ -133,6 +142,7 @@ QUEST_API_EXPRESSION = r"""
       completed: Boolean(body.completed_at),
       progress: body.progress ?? null,
       credited: credited,
+      creditedKey: creditedKey,
     });
   } catch (error) {
     const body = (error && error.body) || {};
@@ -161,27 +171,58 @@ NAVIGATE_QUESTS_EXPRESSION = r"""
 
 CLAIM_CLICK_EXPRESSION = r"""
 (() => {
-  const target = String(__DCGL_QUEST_NAME__).toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const buttons = Array.from(
-    document.querySelectorAll('button, [role="button"]'),
-  ).filter((element) => /^claim(\s+reward)?$/i.test((element.innerText || "").trim()));
-  for (const button of buttons) {
+  const norm = (value) =>
+    String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const names = __DCGL_QUEST_NAMES__;
+  const questId = String(__DCGL_QUEST_ID__ || "");
+  const wanted = (Array.isArray(names) ? names : []).map(norm).filter(Boolean);
+  const CLAIM = /^claim(\s+reward)?$/i;
+
+  const claimButtonsIn = (root) =>
+    Array.from(root.querySelectorAll('button, [role="button"]')).filter(
+      (element) => CLAIM.test((element.innerText || "").trim()),
+    );
+
+  const buttons = claimButtonsIn(document).filter((button) => !button.disabled);
+  if (!buttons.length) {
+    return JSON.stringify({ ok: false, reason: "no-button" });
+  }
+
+  const cardOf = (button) => {
     let node = button;
-    let card = "";
-    for (let level = 0; level < 8 && node; level += 1) {
+    for (let level = 0; level < 10 && node; level += 1) {
       node = node.parentElement;
       if (!node) break;
-      const text = String(node.innerText || "");
-      if (text.length >= 60) {
-        card = text;
-        break;
+      if (claimButtonsIn(node).length > 1) return null;
+      if (questId) {
+        for (const attribute of ["data-quest-id", "data-list-item-id", "id"]) {
+          const value = String(node.getAttribute(attribute) || "");
+          if (value && (value === questId || value.endsWith(questId))) return node;
+        }
       }
+      const text = norm(node.innerText || "");
+      if (wanted.some((name) => text.includes(name))) return node;
+      if (text.length > 400) return null;
     }
-    if (target && card.toLowerCase().replace(/[^a-z0-9]+/g, "").includes(target)) {
-      button.click();
-      return JSON.stringify({ ok: true, buttons: buttons.length });
-    }
+    return null;
+  };
+
+  const matches = [];
+  for (const button of buttons) {
+    const card = cardOf(button);
+    if (card) matches.push({ button: button, card: card });
   }
-  return JSON.stringify({ ok: false, reason: buttons.length ? "no-match" : "no-button" });
+  if (!matches.length) {
+    return JSON.stringify({ ok: false, reason: "no-match", buttons: buttons.length });
+  }
+  if (matches.length > 1) {
+    return JSON.stringify({ ok: false, reason: "ambiguous", buttons: buttons.length });
+  }
+  matches[0].button.click();
+  return JSON.stringify({
+    ok: true,
+    buttons: buttons.length,
+    card: norm(matches[0].card.innerText || "").slice(0, 120),
+  });
 })()
 """

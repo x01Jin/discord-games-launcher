@@ -13,6 +13,10 @@ from launcher.rpc_activity import DiscordRpcActivity
 
 from .model import (
     CACHE_TTL_SECONDS,
+    CLAIM_OVERLAY_SECONDS,
+    EMPTY_CACHE_TTL_SECONDS,
+    PLAY_BEAT_SECONDS,
+    PROGRESS_PUSH_SECONDS,
     _application_id,
     _asset_url,
     _parse_time,
@@ -42,12 +46,24 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
         self._rpc = activity or DiscordRpcActivity(logger=logger)
         self.notifier = notifier
         self.on_change = None
+        self.on_progress = None
         self.logger = logger
         self.ttl = ttl
         self.prefs_path = prefs_path
         self._lock = threading.Lock()
         self._payload: dict[str, Any] | None = None
         self._fetched_at = 0.0
+
+        self._live: dict[str, dict[str, Any]] = {}
+        self._last_push = 0.0
+        self._last_pushed: dict[str, float] = {}
+
+        self._skipped: set[str] = set()
+        self._failures: dict[str, int] = {}
+        self._retry_at: dict[str, float] = {}
+        self._claimed: dict[str, float] = {}
+        self._orbs_bonus = 0
+        self._orbs_base: int | None = None
 
         self._run_lock = threading.Lock()
         self._playing: str | None = None
@@ -56,7 +72,11 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
         self._playing_name = ""
         self._playing_reward: str | None = None
         self._playing_target = 0
+        self._playing_task = ""
         self._playing_at = 0.0
+        self._beats = 0
+        self._idle_beats = 0
+        self._last_credited: int | None = None
         self._beat_next = 0.0
         self._activity_shown = False
         self._play_ready_at = 0.0
@@ -66,6 +86,9 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
         self._watching_name = ""
         self._watching_reward: str | None = None
         self._watching_at = 0.0
+        self._watching_task = ""
+        self._watching_target = 0
+        self._watch_posts = 0
         self._watch_seconds = 0.0
         self._watch_last = 0.0
         self._watch_next = 0.0
@@ -73,12 +96,18 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
         self._monitor_enabled = monitor
         self._monitor_thread: threading.Thread | None = None
         self._monitor_stop = threading.Event()
-
+        self._monitor_wake = threading.Event()
 
     def _cached_payload(self) -> dict[str, Any] | None:
         if self._payload is None:
             return None
-        if time.monotonic() - self._fetched_at > self.ttl:
+        ttl = self.ttl
+        try:
+            if int(self._payload.get("questCount") or 0) <= 0:
+                ttl = min(ttl, EMPTY_CACHE_TTL_SECONDS)
+        except (TypeError, ValueError):
+            pass
+        if time.monotonic() - self._fetched_at > ttl:
             return None
         return self._payload
 
@@ -98,12 +127,145 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             self._fetched_at = time.monotonic()
             return payload
 
-
     def status(self) -> dict[str, Any]:
         state = self.native.status()
         state["cached"] = self._cached_payload() is not None
         state["fetched_at"] = self._fetched_at or None
         return state
+
+    def _test_mode(self) -> bool:
+        try:
+            return bool(self.prefs().get(quest_prefs.TEST_MODE))
+        except (OSError, ValueError):
+            return False
+
+    def _track_progress(
+        self, quest_id: str | None, credited: Any, target: Any, kind: str
+    ) -> None:
+        if quest_id is None or credited is None:
+            return
+        try:
+            value = float(credited)
+            limit = float(target or 0)
+        except (TypeError, ValueError):
+            return
+        if value < 0:
+            return
+        with self._run_lock:
+            self._live[str(quest_id)] = {
+                "credited": value,
+                "target": max(0.0, limit),
+                "kind": kind,
+                "at": time.monotonic(),
+            }
+
+    def _live_values(self, now: float) -> dict[str, float]:
+        with self._run_lock:
+            playing = self._playing
+            watching = self._watching
+            entries = {
+                quest_id: dict(entry)
+                for quest_id, entry in self._live.items()
+                if quest_id in (playing, watching)
+            }
+        values: dict[str, float] = {}
+        for quest_id, entry in entries.items():
+            credited = float(entry.get("credited") or 0.0)
+            if quest_id == playing:
+                since = max(0.0, now - float(entry.get("at") or now))
+                credited += min(since, PLAY_BEAT_SECONDS)
+            target = float(entry.get("target") or 0.0)
+            if target > 0:
+                credited = min(credited, target)
+            values[quest_id] = credited
+        return values
+
+    def _push_progress(self, now: float) -> None:
+        if self.on_progress is None:
+            return
+        if now - self._last_push < PROGRESS_PUSH_SECONDS:
+            return
+        self._last_push = now
+        values = self._live_values(now)
+        with self._run_lock:
+            self._last_pushed = {
+                key: value for key, value in self._last_pushed.items() if key in values
+            }
+        for quest_id, credited in values.items():
+            previous = self._last_pushed.get(quest_id)
+            if previous is not None and int(previous) == int(credited):
+                continue
+            self._last_pushed[quest_id] = credited
+            with self._run_lock:
+                entry = dict(self._live.get(quest_id) or {})
+            try:
+                self.on_progress(
+                    {
+                        "quest_id": quest_id,
+                        "credited": round(credited, 1),
+                        "target": float(entry.get("target") or 0.0),
+                        "kind": str(entry.get("kind") or ""),
+                    }
+                )
+            except Exception as exc:
+                self._log("warning", f"Could not push quest progress: {exc}")
+
+    def _forget_progress(self, quest_id: str) -> None:
+        with self._run_lock:
+            self._live.pop(quest_id, None)
+            self._last_pushed.pop(quest_id, None)
+
+    def _remember_claim(self, quest: dict[str, Any]) -> None:
+        quest_id = str(quest.get("id") or "")
+        if not quest_id:
+            return
+        reward = quest.get("reward") or {}
+        orbs = reward.get("orbs")
+        with self._run_lock:
+            self._claimed[quest_id] = time.monotonic() + CLAIM_OVERLAY_SECONDS
+            payload = self._payload or {}
+            balance = payload.get("orbs")
+            if (
+                isinstance(orbs, int)
+                and not isinstance(orbs, bool)
+                and orbs > 0
+                and isinstance(balance, int)
+                and not isinstance(balance, bool)
+            ):
+                if self._orbs_base is None:
+                    self._orbs_base = balance
+                self._orbs_bonus += orbs
+
+    def _claim_overlay(self, quests: list[dict[str, Any]]) -> None:
+        now = time.monotonic()
+        with self._run_lock:
+            active = {
+                quest_id: until
+                for quest_id, until in self._claimed.items()
+                if until > now
+            }
+            self._claimed = active
+            for quest in quests:
+                if quest.get("claimed"):
+                    active.pop(str(quest.get("id")), None)
+        for quest in quests:
+            if str(quest.get("id")) not in active:
+                continue
+            quest["claimed"] = True
+            quest["claimable"] = False
+            quest["action"] = "done"
+
+    def _orbs_value(self, balance: Any) -> int | None:
+        if not isinstance(balance, int) or isinstance(balance, bool):
+            return None
+        with self._run_lock:
+            bonus = self._orbs_bonus
+            base = self._orbs_base
+            if bonus and base is not None and balance != base:
+                self._orbs_bonus = 0
+                self._orbs_base = None
+                bonus = 0
+        return balance + bonus
 
     def list_quests(self, force: bool = False) -> dict[str, Any]:
         status = self.native.status()
@@ -155,12 +317,26 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
         if watching is not None:
             queued.insert(0, watching)
         queued_set = set(queued)
+        live = self._live_values(time.monotonic())
         for quest in quests:
             quest_id = quest.get("id")
             quest["queued"] = quest_id in queued_set
             if quest_id == playing or quest_id == watching:
                 quest["state"] = "running"
                 quest["action"] = "stop"
+            credited = live.get(quest_id)
+            if credited is None:
+                continue
+
+            quest["progress_seconds"] = max(
+                int(quest.get("progress_seconds") or 0), int(credited)
+            )
+            target = int(quest.get("target_seconds") or 0)
+            if target > 0:
+                quest["progress"] = round(
+                    min(1.0, quest["progress_seconds"] / target), 4
+                )
+        self._claim_overlay(quests)
         quests.sort(key=_sort_key)
         self._announce_completed(quests)
 
@@ -174,7 +350,7 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             "suspended_until": payload.get("suspendedUntil"),
             "enrollment_blocked_until": payload.get("enrollmentBlockedUntil"),
             "total_quests": payload.get("questCount", len(quests)),
-            "orbs": payload.get("orbs"),
+            "orbs": self._orbs_value(payload.get("orbs")),
             "prefs": self.prefs(),
             "queue": {
                 "ids": queued,
@@ -309,10 +485,11 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             "claimable": claimable,
         }
 
-
-    def quest_name(self, quest_id: str) -> str:
+    def quest_labels(self, quest_id: str) -> tuple[str, str]:
         quest = self._find(quest_id)
-        return str(quest.get("name") or "") if quest else ""
+        if quest is None:
+            return "", ""
+        return str(quest.get("name") or ""), str(quest.get("game_name") or "")
 
     def _find(self, quest_id: str) -> dict[str, Any] | None:
         wanted = str(quest_id)
@@ -340,6 +517,8 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             return False, "Discord did not send an application id for that quest"
 
         with self._run_lock:
+            self._skipped.discard(quest_id)
+            self._failures.pop(quest_id, None)
             playing = self._playing
         if playing == quest_id:
             return True, "That quest is already running"
@@ -394,13 +573,20 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
                     "Discord wants a captcha. Solve it in the Discord window.",
                     True,
                 )
+            detail = str(exc)
+            code = getattr(exc, "code", None)
+            if code:
+                detail += f", code {code}"
             self._log(
                 "warning",
-                f"Discord refused the claim for {quest.get('name')!r}: {exc}",
+                f"Discord refused the claim for {quest.get('name')!r}: {detail}",
             )
             return (
                 False,
-                f"Discord refused the claim ({exc}). Claim it from Discord's Quests page.",
+                (
+                    f"Discord refused the claim ({detail}). "
+                    "Claim it from Discord's Quests page."
+                ),
                 True,
             )
         except (DiscordNativeError, OSError) as exc:
@@ -413,6 +599,7 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
                 f"Could not reach Discord ({exc}). Claim it in the Discord window.",
                 True,
             )
+        self._remember_claim(quest)
         self.invalidate()
         self._log("info", f"Claimed the reward for {quest.get('name')!r}")
         self._changed()
@@ -433,8 +620,6 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             return False, "That quest is no longer in Discord's list"
         return False, "That quest is not running"
 
-
-
     def prefs(self) -> dict[str, Any]:
         return quest_prefs.load(self.prefs_path)
 
@@ -443,6 +628,7 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
 
     def shutdown(self) -> None:
         with self._run_lock:
+            self._live.clear()
             playing = self._playing
             app_id = self._playing_app
             executable = self._playing_exe
@@ -455,6 +641,7 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             except (DiscordNativeError, OSError) as exc:
                 self._log("warning", f"Could not close the quest session: {exc}")
         self._monitor_stop.set()
+        self._monitor_wake.set()
         with self._run_lock:
             self._playing = None
             self._playing_app = None
@@ -479,7 +666,6 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
             getattr(self.logger, level)(message)
         except (AttributeError, OSError):
             pass
-
 
     def _changed(self) -> None:
         if self.on_change is None:
@@ -523,5 +709,3 @@ class QuestService(MonitorMixin, PlayMixin, WatchMixin, QueueMixin):
                 continue
             reward = self._reward_label(quest)
             self._notify_finished(str(quest.get("name") or ""), reward, quest_id)
-
-

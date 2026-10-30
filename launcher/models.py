@@ -7,7 +7,6 @@ from typing import Any
 
 @dataclass
 class Game:
-
     id: int
     name: str
     aliases: list[str]
@@ -20,7 +19,6 @@ class Game:
 
 @dataclass
 class LibraryGame:
-
     game_id: int
     executable_path: str | None
     process_name: str

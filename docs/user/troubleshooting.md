@@ -29,19 +29,21 @@ The Quests page says Discord is not running, or that it cannot read the client.
 1. Start Discord and sign in. The list comes from your own client, so it has to
    be open.
 2. Read the reason on the panel. "Not installed" means Discord is missing for
-   this Windows account. "Running, no endpoint" means Discord is open but was
-   started in a way that does not expose the local endpoint.
-3. If the panel offers **Set up and restart Discord**, press it. It adds the
-   endpoint switch to your Discord shortcuts and startup entry, then restarts
-   Discord once. You stay signed in. Anything running inside Discord, a call
-   included, ends with the restart.
+   this Windows account. "Running without the endpoint" means Discord is open
+   but was started in a way that does not expose the local endpoint.
+3. Press **Patch and restart Discord**. It adds the endpoint switch to your
+   Discord shortcuts and startup entry, then restarts Discord once. You stay
+   signed in. Anything running inside Discord, a call included, ends with the
+   restart. When Discord is closed the same button reads **Patch and run
+   Discord**.
 4. Open Discord's own Quests page. If Discord lists nothing there, the launcher
    has nothing to show either.
 5. Press **Check again** after Discord finishes loading.
 
-To undo the setup, use **Turn silent connection off** on the Quests panel, or
+To undo the setup, use **Remove launch patch** on the Quests panel, or
 **Remove patch** in Settings. Both restore the original command lines and leave
-nothing behind.
+nothing behind. A running Discord is restarted without the endpoint so the port
+closes right away; with Discord closed, nothing else happens.
 
 Watch quests are credited from here: the app reports the video progress to
 Discord, so no player window opens and Discord stays usable. Phone quests are
@@ -59,9 +61,11 @@ Discord counts progress only for accepted quests.
 - **Done** or **Expired**: nothing to run. The quest is finished or past its end
   date.
 - **Unsupported**: Discord did not include the game this quest belongs to.
-- The progress bar does not move: press **Refresh**, and give it 20 seconds.
-  Each beat adds the time since the previous one, so the bar moves in 20 second
-  steps.
+- The progress bar does not move: it advances on its own as Discord credits
+  beats, with no refresh needed. A game quest gains about 20 seconds per beat;
+  a video quest advances every 7 to 9.5 seconds. If it sits still while the row
+  says **Running**, Discord is not counting the run: the app stops it after
+  about a minute and says so in the queue message rather than beating nothing.
 - A message says Discord refused the credit: Discord may have ended the quest
   early or signed you out. Check its quest page.
 

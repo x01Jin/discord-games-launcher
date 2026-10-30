@@ -1,5 +1,3 @@
-
-
 import json
 import tempfile
 import time
@@ -9,7 +7,12 @@ import pytest
 
 from launcher.discord_native import DiscordNativeError
 from launcher.quests import (
+    EMPTY_CACHE_TTL_SECONDS,
+    PLAY_MAX_ATTEMPTS,
+    PLAY_STALL_BEATS,
     PLAY_TIMEOUT_SECONDS,
+    TEST_MODE_BEATS,
+    TEST_MODE_VIDEO_POSTS,
     WATCH_TIMEOUT_SECONDS,
     QuestService,
     derive_executable_name,
@@ -18,7 +21,6 @@ from launcher.rpc_activity import RpcError
 
 
 class FakeNative:
-
     def __init__(self, payload=None, state=None, error=None):
         self.payload = payload
         self.state = state or {
@@ -30,12 +32,15 @@ class FakeNative:
         }
         self.error = error
         self.reads = 0
-        self.connects = 0
+        self.starts = 0
+        self.restarts = 0
+        self.plain_restarts = 0
         self.accepted = []
         self.progress_posts = []
         self.heartbeats = []
         self.claims = []
         self.claim_error = None
+        self.accept_error = None
         self.credited = {}
         self.heartbeat_error = None
         self.games = []
@@ -52,23 +57,42 @@ class FakeNative:
             raise self.error
         return self.payload
 
-    def connect(self):
-        self.connects += 1
-        return True, "Reconnected"
+    def endpoint_port(self):
+        return 9222
+
+    def start(self):
+        self.starts += 1
+        return True, "Started"
+
+    def restart(self):
+        self.restarts += 1
+        return True, "Restarted"
+
+    def restart_without_endpoint(self):
+        self.plain_restarts += 1
+        return True, "Restarted without the endpoint"
 
     def accept_quest(self, quest_id):
         self.accepted.append(str(quest_id))
+        if self.accept_error:
+            raise self.accept_error
         return {"ok": True, "status": 200, "enrolled": True, "completed": False}
 
-    def send_video_progress(self, quest_id, timestamp):
+    def send_video_progress(self, quest_id, timestamp, task_key=None):
         self.progress_posts.append((str(quest_id), timestamp))
+        self.video_task_keys = getattr(self, "video_task_keys", [])
+        self.video_task_keys.append(task_key)
         return {"ok": True, "status": 200, "completed": False, "progress": None}
 
-    def send_heartbeat(self, quest_id, application_id, executable_path, terminal=False):
+    def send_heartbeat(
+        self, quest_id, application_id, executable_path, terminal=False, task_key=None
+    ):
         if self.heartbeat_error:
             raise self.heartbeat_error
         quest_id = str(quest_id)
         self.heartbeats.append((quest_id, str(application_id), str(executable_path), bool(terminal)))
+        self.heartbeat_keys = getattr(self, "heartbeat_keys", [])
+        self.heartbeat_keys.append(task_key)
         return {
             "ok": True,
             "status": 200,
@@ -184,7 +208,6 @@ def make_service(game_manager, native, ttl=20.0, prefs_path=None, rpc=None, noti
 
 
 class FakeRpc:
-
     def __init__(self):
         self.shows = []
         self.hides = 0
@@ -206,8 +229,6 @@ def silent_runs(monkeypatch):
     monkeypatch.setitem(quest_prefs.DEFAULTS, "run_mode", quest_prefs.MODE_SILENT)
 
 
-
-
 @pytest.mark.parametrize(
     "name,expected",
     [
@@ -219,8 +240,6 @@ def silent_runs(monkeypatch):
 )
 def test_derive_executable_name(name, expected):
     assert derive_executable_name(name) == expected
-
-
 
 
 def test_list_quests_when_discord_is_not_running(game_manager):
@@ -331,8 +350,6 @@ def test_library_membership_is_reported(game_manager, cached_game):
     native = FakeNative(payload=payload(quest()))
     entry = make_service(game_manager, native).list_quests()["quests"][0]
     assert entry["in_library"] is True
-
-
 
 
 def test_start_quest_rejects_completed(game_manager, cached_game):
@@ -484,15 +501,56 @@ def test_payload_counter_is_passed_through(game_manager, cached_game):
     assert listing["total_quests"] == 81
 
 
-
-
 def test_listing_includes_orbs_and_default_prefs(game_manager, cached_game, tmp_path):
     data = payload(quest())
     data["orbs"] = 67080
     native = FakeNative(payload=data)
     listing = make_service(game_manager, native, prefs_path=tmp_path / "s.json").list_quests()
     assert listing["orbs"] == 67080
-    assert listing["prefs"] == {"play_session_tail_min": 2, "run_mode": "silent"}
+    assert listing["prefs"] == {
+        "play_session_tail_min": 2,
+        "run_mode": "silent",
+        "test_mode": False,
+    }
+
+
+def test_an_empty_quest_list_is_cached_briefly(game_manager, cached_game):
+    native = FakeNative(payload=payload())
+    service = make_service(game_manager, native, ttl=60.0)
+
+    assert service.list_quests()["quests"] == []
+    assert native.reads == 1
+    assert service.list_quests()["quests"] == []
+    assert native.reads == 1
+
+    service._fetched_at -= EMPTY_CACHE_TTL_SECONDS + 1.0
+    service.list_quests()
+    assert native.reads == 2
+
+
+def test_a_claimed_reward_stays_claimed_until_the_client_catches_up(
+    game_manager, cached_game
+):
+    data = payload(quest(target=900, progress=900, completed=True, orbs=700))
+    data["orbs"] = 500
+    native = FakeNative(payload=data)
+    service = make_service(game_manager, native)
+    service.list_quests()
+
+    ok, _message, _needs = service.claim_reward("1")
+    assert ok is True
+
+    listing = service.list_quests(force=True)
+    entry = listing["quests"][0]
+    assert entry["claimed"] is True
+    assert entry["action"] == "done"
+    assert listing["orbs"] == 1200
+
+    native.payload["quests"][0]["claimedAt"] = "2026-01-02T00:00:00+00:00"
+    native.payload["orbs"] = 1200
+    listing = service.list_quests(force=True)
+    assert listing["orbs"] == 1200
+    assert listing["quests"][0]["claimed"] is True
 
 
 def test_prefs_round_trip(game_manager, tmp_path):
@@ -501,10 +559,12 @@ def test_prefs_round_trip(game_manager, tmp_path):
     assert service.update_prefs({"play_session_tail_min": 5}) == {
         "play_session_tail_min": 5,
         "run_mode": "silent",
+        "test_mode": False,
     }
     assert make_service(game_manager, FakeNative(), prefs_path=path).prefs() == {
         "play_session_tail_min": 5,
         "run_mode": "silent",
+        "test_mode": False,
     }
 
 
@@ -513,17 +573,18 @@ def test_prefs_reject_out_of_range_tail(game_manager, tmp_path):
     assert service.update_prefs({"play_session_tail_min": 900}) == {
         "play_session_tail_min": 30,
         "run_mode": "silent",
+        "test_mode": False,
     }
     assert service.update_prefs({"play_session_tail_min": -3}) == {
         "play_session_tail_min": 0,
         "run_mode": "silent",
+        "test_mode": False,
     }
     assert service.update_prefs({"play_session_tail_min": "soon"}) == {
         "play_session_tail_min": 0,
         "run_mode": "silent",
+        "test_mode": False,
     }
-
-
 
 
 def test_monitor_beats_the_session(game_manager, cached_game):
@@ -535,6 +596,97 @@ def test_monitor_beats_the_session(game_manager, cached_game):
 
     assert len(native.heartbeats) == 2
     assert native.heartbeats[-1][3] is False
+
+
+def test_heartbeat_carries_the_quest_task_key(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(target=900)))
+    service = make_service(game_manager, native)
+    service.start_quest("1")
+
+    assert native.heartbeat_keys[0] == "PLAY_ON_DESKTOP"
+
+
+def test_test_mode_stops_the_run_before_the_target(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(target=900)))
+    service = make_service(game_manager, native)
+    service.update_prefs({"test_mode": True})
+    service.start_quest("1")
+
+    service._monitor_tick(service._beat_next + 0.1)
+
+    assert service._playing is None
+    assert len(native.heartbeats) == TEST_MODE_BEATS + 1
+
+    entry = service.list_quests()["quests"][0]
+    assert entry["state"] != "completed"
+    assert entry["action"] == "run"
+
+
+def test_a_quest_discord_never_credits_is_stopped(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(target=900)))
+    native.credited["1"] = 0
+    service = make_service(game_manager, native)
+    service.start_quest("1")
+
+    for _ in range(PLAY_STALL_BEATS):
+        service._monitor_tick(service._beat_next + 0.1)
+
+    assert service._playing is None
+
+
+def test_live_progress_is_pushed_and_merged_into_the_list(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest(target=900)))
+    native.credited["1"] = 40
+    service = make_service(game_manager, native)
+    pushed = []
+    service.on_progress = pushed.append
+    service.start_quest("1")
+
+    service._push_progress(time.monotonic())
+
+    assert pushed and pushed[0]["quest_id"] == "1"
+    assert pushed[0]["credited"] >= 40
+    entry = service.list_quests()["quests"][0]
+    assert entry["progress_seconds"] >= 40
+    assert entry["progress"] > 0
+
+
+def test_a_video_quest_resumes_from_its_saved_progress(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("2", kind="watch", target=120, progress=45)))
+    service = make_service(game_manager, native)
+    service.start_queue(["2"])
+
+    service._monitor_tick(service._watch_next + 0.1)
+
+    assert native.progress_posts
+    assert native.progress_posts[0][1] >= 45
+
+
+def test_test_mode_stops_a_video_after_its_posts(game_manager, cached_game):
+    native = FakeNative(payload=payload(quest("2", kind="watch", target=600)))
+    service = make_service(game_manager, native)
+    service.update_prefs({"test_mode": True})
+    service.start_queue(["2"])
+
+    for _ in range(TEST_MODE_VIDEO_POSTS):
+        service._monitor_tick(service._watch_next + 0.1)
+
+    assert service._watching is None
+    assert len(native.progress_posts) == TEST_MODE_VIDEO_POSTS
+
+
+def test_an_unaccepted_video_quest_is_dropped_instead_of_watched(
+    game_manager, cached_game
+):
+    native = FakeNative(payload=payload(quest("2", kind="watch", target=60, enrolled=False)))
+    native.accept_error = DiscordNativeError("Discord refused the enrolment")
+    service = make_service(game_manager, native)
+
+    service.start_queue(["2"])
+
+    assert service._watching is None
+    assert service._queue == []
+    assert "2" in service._skipped
 
 
 def test_monitor_stops_a_quest_discord_reports_finished(game_manager, cached_game):
@@ -600,8 +752,6 @@ def test_a_zero_tail_starts_the_next_quest_at_once(game_manager, cached_game, tm
     service._monitor_tick(service._beat_next + 0.1)
 
     assert service._playing == "2"
-
-
 
 
 def activity_service(game_manager, native, tmp_path, show_error=None):
@@ -768,8 +918,6 @@ def test_private_mode_never_touches_the_activity_store(
     assert service._rpc.hides == 0
 
 
-
-
 def test_start_queue_runs_the_first_quest(game_manager, cached_game):
     native = FakeNative(payload=payload(quest("1"), quest("2", app_id="200")))
     service = make_service(game_manager, native)
@@ -904,7 +1052,9 @@ def test_drop_queue_item_rejects_a_quest_that_is_not_waiting(game_manager):
     assert ok is False
 
 
-def test_failed_start_keeps_the_quest_at_the_head(game_manager, cached_game, monkeypatch):
+def test_failed_start_rotates_to_the_back_of_the_queue(
+    game_manager, cached_game, monkeypatch
+):
     native = FakeNative(payload=payload(quest("1"), quest("2", app_id="200")))
     service = make_service(game_manager, native)
     calls = []
@@ -916,13 +1066,34 @@ def test_failed_start_keeps_the_quest_at_the_head(game_manager, cached_game, mon
     monkeypatch.setattr(service, "start_quest", refuse)
 
     ok, _message = service.start_queue(["1", "2"])
-    service._monitor_tick(time.monotonic() + 1.0)
-
     assert ok is True
-    assert calls[:2] == ["1", "1"]
-    assert service._queue == ["1", "2"]
+
+    assert calls == ["1"]
+    assert service._queue == ["2", "1"]
+    assert service._retry_at["1"] > 0
+
+    service._monitor_tick(time.monotonic() + 1.0)
+    assert calls == ["1", "2"]
 
 
+def test_a_quest_that_keeps_failing_is_dropped(
+    game_manager, cached_game, monkeypatch
+):
+    native = FakeNative(payload=payload(quest("1")))
+    service = make_service(game_manager, native)
+
+    def refuse(quest_id):
+        return False, "Discord would not credit that quest"
+
+    monkeypatch.setattr(service, "start_quest", refuse)
+    service.start_queue(["1"])
+
+    for _ in range(PLAY_MAX_ATTEMPTS):
+        service._retry_at.clear()
+        service._monitor_tick(time.monotonic() + 1.0)
+
+    assert service._queue == []
+    assert "1" in service._skipped
 
 
 def test_stop_quest_ends_the_watched_video(game_manager, cached_game):
@@ -1010,8 +1181,6 @@ def test_watch_wait_times_out(game_manager, cached_game):
     assert service._watching is None
 
 
-
-
 def test_a_manual_run_while_a_game_is_playing_is_queued(game_manager, cached_game):
     native = FakeNative(payload=payload(quest("1"), quest("2", app_id="200")))
     service = make_service(game_manager, native)
@@ -1049,10 +1218,7 @@ def test_shutdown_closes_the_session(game_manager, cached_game):
     assert native.heartbeats[-1][3] is True
 
 
-
-
 class FakeNotifier:
-
     def __init__(self):
         self.finished = []
 
@@ -1144,8 +1310,6 @@ def test_claim_is_idempotent_when_discord_already_recorded_it(game_manager, cach
     assert native.claims == []
 
 
-
-
 def test_finishing_a_play_quest_posts_a_notification(game_manager, cached_game):
     native = FakeNative(payload=payload(quest("1", target=100)))
     notifier = FakeNotifier()
@@ -1165,7 +1329,7 @@ def test_finishing_a_video_quest_posts_a_notification(game_manager, cached_game)
     service = make_service(game_manager, native, notifier=notifier)
     service.start_queue(["2"])
 
-    def completed_progress(quest_id, timestamp):
+    def completed_progress(quest_id, timestamp, task_key=None):
         native.progress_posts.append((str(quest_id), timestamp))
         return {"ok": True, "status": 200, "completed": True, "progress": None}
 

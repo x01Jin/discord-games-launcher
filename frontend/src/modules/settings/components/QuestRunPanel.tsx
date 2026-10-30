@@ -1,4 +1,5 @@
 import type { QuestPrefs } from "../../../shared/api-client";
+import { Switch } from "../../../shared/components/primitives";
 import { Panel } from "./SettingsPrimitives";
 
 export function QuestRunPanel({
@@ -85,6 +86,23 @@ export function QuestRunPanel({
           />
           <span className="text-[12px] text-subtle">min</span>
         </label>
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t border-line/70 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] text-muted">Test mode</p>
+          <p className="mt-0.5 text-[12px] leading-[18px] text-subtle">
+            Runs a quest only far enough to prove enrolment, crediting and
+            progress work, then stops it. Nothing is claimed and the quest stays
+            unfinished, so it can be run again. Video quests stop after three
+            progress posts, game quests after two credited beats.
+          </p>
+        </div>
+        <Switch
+          checked={prefs?.test_mode ?? false}
+          onChange={(next) => onPrefs({ test_mode: next })}
+          label="Test mode"
+          hideLabel
+        />
       </div>
     </Panel>
   );

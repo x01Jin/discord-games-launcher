@@ -1,4 +1,3 @@
-
 import json
 import sqlite3
 import time
@@ -18,7 +17,6 @@ _WIN32_PREDICATE = (
 
 
 class Database(SchemaMixin):
-
     EXPECTED_SCHEMA_VERSION = 2
 
     _STATS_TTL_SECONDS = 3.0

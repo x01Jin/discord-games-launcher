@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import ctypes
@@ -22,7 +21,6 @@ _OP_FRAME = 1
 
 class RpcError(Exception):
     pass
-
 
 if os.name == "nt":
     _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -64,7 +62,6 @@ else:
 
 
 class DiscordRpcActivity:
-
     def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger
         self._handle: int | None = None

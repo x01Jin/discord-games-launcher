@@ -56,7 +56,7 @@ def _focus_discord() -> bool:
         return False
 
 
-def claim_in_client(service, quest_id: str, message: str, emit) -> None:
+def claim_in_client(service, quest_id: str, message: str, emit) -> bool:
     native = getattr(service, "native", None) if service is not None else None
     pressed = False
     if native is not None:
@@ -65,27 +65,31 @@ def claim_in_client(service, quest_id: str, message: str, emit) -> None:
         except (DiscordNativeError, OSError):
             pass
         try:
-            name = service.quest_name(quest_id)
+            name, game_name = service.quest_labels(quest_id)
         except (DiscordNativeError, OSError, ValueError):
-            name = ""
+            name, game_name = "", ""
         for _attempt in range(14):
-            if not name:
+            if not name and not game_name:
                 break
             try:
-                if native.click_claim_reward(quest_id, name).get("ok"):
-                    pressed = True
-                    service.invalidate()
-                    emit({"type": "quests_changed"})
-                    break
+                result = native.click_claim_reward(quest_id, name, game_name)
             except (DiscordNativeError, OSError):
+                break
+            if result.get("ok"):
+                pressed = True
+                service.invalidate()
+                emit({"type": "quests_changed"})
+                break
+            if result.get("reason") == "ambiguous":
                 break
             time.sleep(0.75)
     _focus_discord()
     if pressed:
-        return
+        return True
     notifier = getattr(service, "notifier", None)
     if notifier is not None:
         try:
             notifier.claim_needs_action(message)
         except (AttributeError, OSError):
             pass
+    return False

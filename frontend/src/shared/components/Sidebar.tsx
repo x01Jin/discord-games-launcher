@@ -30,9 +30,14 @@ export function Sidebar() {
   const setPage = useUiStore((state) => state.setPage);
   const stats = useStats();
   const { data: questsData } = useQuests();
+  const runningIds = new Set(
+    (questsData?.quests ?? [])
+      .filter((quest) => quest.state === "running")
+      .map((quest) => quest.id),
+  );
   const activeQuests =
-    (questsData?.quests ?? []).filter((quest) => quest.state === "running").length +
-    (questsData?.queue?.ids.length ?? 0);
+    runningIds.size +
+    (questsData?.queue?.ids ?? []).filter((id) => !runningIds.has(id)).length;
 
   const entries: NavEntry[] = [
     { id: "quests", label: "Quests", icon: <QuestsIcon size={16} />, hint: "Quests offered by Discord" },

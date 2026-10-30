@@ -171,8 +171,10 @@ export function SettingsPage() {
             )}
 
             <p className="mt-2.5 text-[12px] leading-[18px] text-subtle">
-              Removing the patch restores the previous command lines. A Discord
-              that is already open keeps its endpoint until it closes.
+              Removing the patch restores the previous command lines.{" "}
+              {status?.running
+                ? "Discord restarts without the endpoint, so the removal takes effect right away."
+                : "Discord starts normally on its next launch."}
             </p>
           </Panel>
         </div>
@@ -188,10 +190,11 @@ export function SettingsPage() {
             {patched === 1
               ? "One launch entry goes back"
               : `${patched} launch entries go back`}{" "}
-            to the previous command line. Discord starts normally again, and this
-            page can no longer read quests.
+            to the previous command line.
             <br />
-            A Discord that is already open keeps its endpoint until it closes.
+            {status?.running
+              ? "Discord restarts now without the endpoint, so the endpoint is gone immediately and this page cannot read quests until the patch is turned on again."
+              : "Discord starts normally again, and this page cannot read quests until the patch is turned on again."}
           </>
         }
         footer={

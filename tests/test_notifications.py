@@ -1,4 +1,3 @@
-
 import base64
 
 from launcher.notifications import APP_ID, Notifier, build_command, build_payload

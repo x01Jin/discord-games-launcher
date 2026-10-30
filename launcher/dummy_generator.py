@@ -1,4 +1,3 @@
-
 import os
 import shutil
 import sys
@@ -10,7 +9,6 @@ class DummyGeneratorError(Exception):
 
 
 class DummyGenerator:
-
     TEMPLATE_EXE_NAME = "DummyGame.exe"
 
     def __init__(self, output_dir: Path, template_exe_path: Path | None = None):

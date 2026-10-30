@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -30,7 +29,6 @@ _LAST_REAPPLY = 0.0
 
 @dataclass(frozen=True)
 class Launcher:
-
     kind: str
     location: str
     target: str
@@ -43,7 +41,6 @@ class Launcher:
     @property
     def label(self) -> str:
         return f"{self.kind}: {self.location}"
-
 
 
 def _port_of(arguments: str) -> int | None:
@@ -105,6 +102,16 @@ def without_switch(arguments: str) -> str:
     return _strip_switch(args)
 
 
+def shortcut_path() -> str | None:
+    launchers = discover()
+    for kind in ("Start menu", "Taskbar", "Desktop"):
+        for launcher in launchers:
+            if launcher.kind != kind or not launcher.location:
+                continue
+            if Path(launcher.location).is_file():
+                return launcher.location
+    return None
+
 
 def _shortcut_paths() -> list[tuple[str, Path]]:
     appdata = Path(os.environ.get("APPDATA") or "")
@@ -150,7 +157,6 @@ def _shortcut_paths() -> list[tuple[str, Path]]:
         seen.add(key)
         unique.append((kind, path))
     return unique
-
 
 _READ_SHORTCUTS = r'''
 $paths = @()
@@ -311,7 +317,6 @@ def _invalidate_cache() -> None:
         _CACHE["at"] = 0.0
 
 
-
 def _marker_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home())
     return Path(base) / "discord-games-launcher" / "silent_mode.json"
@@ -461,7 +466,10 @@ def disable() -> dict[str, Any]:
             elif isinstance(row, dict):
                 restored.append("Start menu: " + str(row.get("path")))
 
-    _write_marker({"enabled": False, "port": SILENT_PORT, "at": time.time()})
+    previous = _read_marker()
+    remembered = previous.get("port")
+    port = remembered if isinstance(remembered, int) else SILENT_PORT
+    _write_marker({"enabled": False, "port": port, "at": time.time()})
     _invalidate_cache()
     return {"ok": not failures, "restored": restored, "failed": failures}
 
@@ -472,14 +480,16 @@ def summary(port: int = SILENT_PORT) -> dict[str, Any]:
     patched_ports = {
         found for found in (_port_of(launcher.arguments) for launcher in patched) if found is not None
     }
+    marker = _read_marker()
+    remembered = marker.get("port")
+    fallback = remembered if isinstance(remembered, int) else port
     active_port = (
         next(iter(patched_ports))
         if patched
         and len(patched) == len(launchers)
         and len(patched_ports) == 1
-        else port
+        else fallback
     )
-    marker = _read_marker()
     return {
         "port": active_port,
         "enabled": bool(launchers) and len(patched) == len(launchers),

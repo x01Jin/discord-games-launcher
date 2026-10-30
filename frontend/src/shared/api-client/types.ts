@@ -139,6 +139,7 @@ export interface QuestGame {
 
 export interface ClaimResult extends MutResult {
   needs_user_action?: boolean;
+  claimed_in_client?: boolean;
 }
 
 export interface QuestPrefs {
@@ -146,6 +147,8 @@ export interface QuestPrefs {
   play_session_tail_min: number;
 
   run_mode: "activity" | "silent";
+
+  test_mode: boolean;
 }
 
 export interface QuestQueue {
@@ -230,7 +233,16 @@ export interface ClearQueueResult {
 
 export type DcglEventDetail =
   | { type: "library_changed" }
-  | { type: "quests_changed" };
+  | { type: "quests_changed" }
+  | {
+      type: "quest_progress";
+      quest_id: string;
+
+      credited: number;
+
+      target: number;
+      kind: string;
+    };
 
 export interface AppInfo {
   version: string;

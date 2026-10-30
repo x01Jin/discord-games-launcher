@@ -23,6 +23,7 @@ _DEFAULT_PORTS: tuple[int, ...] = (9222, 9223, 9224, 9229)
 
 _DISCORD_HOSTS = ("discord.com", "canary.discord.com", "ptb.discord.com")
 
+
 def _is_discord_page(url: str) -> bool:
     try:
         parsed = urlsplit(url)
@@ -33,9 +34,9 @@ def _is_discord_page(url: str) -> bool:
     host = (parsed.hostname or "").lower()
     return host in _DISCORD_HOSTS or host.endswith(".discord.com")
 
+
 @dataclass(frozen=True)
 class DiscordInstall:
-
     channel: str
     user_data_dir: Path
     app_dir: Path | None
@@ -45,11 +46,11 @@ class DiscordInstall:
 
 @dataclass(frozen=True)
 class CdpTarget:
-
     port: int
     title: str
     url: str
     ws_url: str
+
 
 def _appdata() -> Path:
     return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
@@ -151,7 +152,6 @@ def _http_json(port: int, path: str = "/json/list", timeout: float = 1.0) -> Any
         raise DiscordNativeError(str(exc)) from exc
     finally:
         conn.close()
-
 
 _MAIN_ROUTES = ("/channels", "/quest-home", "/store", "/library", "/login")
 _AUXILIARY_ROUTES = ("/popout", "/overlay", "/ptt", "/devtools")

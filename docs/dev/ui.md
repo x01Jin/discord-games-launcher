@@ -81,7 +81,9 @@ The default view. It reads the quest list from the running Discord client (see
 - Rows: checkbox on rows that can be queued, art (video thumbnail for watch
   quests), quest name, one metadata line, reward chip, time left (amber inside
   24 h), progress bar once enrolled, and the action the backend chose: Run, Stop,
-  Watch, Done, or Unsupported. Video rows carry a Video chip; a mobile video
+  Watch, Done, or Unsupported. The bar on a running row moves from the
+  `quest_progress` event (`useDcglEvents` patches that row in the quest cache),
+  not from a refetch. Video rows carry a Video chip; a mobile video
   quest is labelled "Mobile video". A queued row shows a Queued chip, and the
   video being credited shows a Watching chip with Stop as its action.
 - Selection (`modules/quests/hooks/useQuestSelection.ts`): every unfinished play
@@ -91,9 +93,16 @@ The default view. It reads the quest list from the running Discord client (see
   chip.
 - Filters (`modules/quests/lib/filters.ts`) drive the reward and kind predicates
   and the sort order.
-- Disconnected: one panel that states the situation, shows what the client
-  reported, and offers the single useful action. The copy is short because the
-  panel sits in a ~530 px column.
+- Disconnected: one panel (`QuestConnectPanel`) that states the situation and
+  offers the one action the two flags allow. Closed and unpatched reads "Patch
+  and run Discord"; running and unpatched reads "Patch and restart Discord";
+  patched and closed reads "Start Discord"; patched and running reads "Restart
+  Discord now". Both patch labels write the launch entries first. The panel also
+  lists the client, the endpoint, and the patch state, and carries **Remove
+  launch patch** behind a confirmation when Discord is running.
+- The sidebar's Running badge counts distinct quests: every row in the running
+  state plus queued ids that are not running. The watching quest appears in both
+  lists, so counting the lists separately reported 2 for one video.
 
 ## Running
 
@@ -147,12 +156,17 @@ equal gutters. On a narrow window the column fills the body.
   **Turn on** appears while any entry is unpatched.
 - Removal and re-application use `disable_silent_mode` / `enable_silent_mode`,
   the same calls as the Quests panel, so the page only reflects state. Both
-  invalidate `["silent-mode"]` and `["quests"]`.
+  invalidate `["silent-mode"]` and `["quests"]`. The removal dialog changes its
+  copy with the client state: with Discord running it warns that the restart
+  happens now and the endpoint is gone immediately, instead of the old "keeps
+  its endpoint until it closes".
 - Quest runs: a Play activity segmented control (**Show activity** / **Private**,
-  `aria-pressed`) and a pause-between-quests field (0 to 30 minutes). Both save
-  through `set_quest_prefs` and apply to the next run without a restart.
-- A footnote says removal restores the exact original command lines and that an
-  already-open Discord keeps its endpoint until it is closed.
+  `aria-pressed`), a pause-between-quests field (0 to 30 minutes), and a
+  **Test mode** switch that stops each run once the pipeline is proven. All
+  three save through `set_quest_prefs` and apply to the next run without a
+  restart.
+- A footnote says removal restores the exact original command lines and that a
+  running Discord is restarted without the endpoint.
 
 ## Data layer
 

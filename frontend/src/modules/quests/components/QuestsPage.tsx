@@ -6,6 +6,7 @@ import {
   TrashIcon,
 } from "../../../shared/components/icons";
 import { PageHeader } from "../../../shared/components/PageHeader";
+import { Dialog } from "../../../shared/components/Dialog";
 import {
   Button,
   Checkbox,
@@ -53,6 +54,7 @@ export function QuestsPage() {
   const [reward, setReward] = useState<RewardFilter>("all");
   const [sort, setSort] = useState<Sort>("suggested");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
 
   const quests = data?.quests ?? NO_QUESTS;
   const queue = data?.queue;
@@ -161,14 +163,13 @@ export function QuestsPage() {
               status={data?.status}
               silent={silent}
               error={isError ? "The backend did not answer." : (data?.error ?? null)}
-              connecting={connect.isPending || startDiscord.isPending}
+              connecting={connect.isPending}
               starting={startDiscord.isPending}
               disabling={disableSilent.isPending}
-              canStart={Boolean(data?.status?.installed && !data?.status?.running)}
               onConnect={() => connect.mutate()}
               onStartDiscord={() => startDiscord.mutate()}
               onRefresh={() => void refetch()}
-              onDisableSilent={() => disableSilent.mutate()}
+              onDisableSilent={() => setConfirmRemoval(true)}
             />
           </div>
         )
@@ -339,6 +340,44 @@ export function QuestsPage() {
           </div>
         </>
       )}
+
+      <Dialog
+        open={confirmRemoval}
+        title="Remove the launch patch?"
+        danger
+        onClose={() => setConfirmRemoval(false)}
+        description={
+          data?.status?.running ? (
+            <>
+              Every launch entry goes back to its previous command line, then
+              Discord restarts without the endpoint. Quests cannot be read again
+              until the patch is turned on.
+            </>
+          ) : (
+            <>
+              Every launch entry goes back to its previous command line. Discord
+              starts normally again and this page cannot read quests.
+            </>
+          )
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmRemoval(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              busy={disableSilent.isPending}
+              onClick={() => {
+                setConfirmRemoval(false);
+                disableSilent.mutate();
+              }}
+            >
+              Remove patch
+            </Button>
+          </>
+        }
+      />
     </section>
   );
 }

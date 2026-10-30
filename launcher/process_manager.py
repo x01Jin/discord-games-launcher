@@ -1,4 +1,3 @@
-
 import sqlite3
 import subprocess
 import sys
@@ -16,7 +15,6 @@ class ProcessError(Exception):
 
 
 class ProcessManager:
-
     def __init__(
         self,
         database: Database,

@@ -1,6 +1,6 @@
-
 import pytest
 
+from launcher import discord_setup
 from launcher.bridge import Bridge
 from launcher.discord_native import DiscordNativeError
 from launcher.quests import QuestService
@@ -94,11 +94,56 @@ def test_stop_quest_wraps_failures(game_manager):
     assert "nope" in result["message"]
 
 
-def test_connect_discord_reports_result(game_manager, quest_payload):
+def test_connect_discord_patches_then_restarts(game_manager, quest_payload, monkeypatch):
+    patched = []
+    monkeypatch.setattr(
+        discord_setup,
+        "enable",
+        lambda port=None: patched.append(port) or {"ok": True, "updated": [], "failed": []},
+    )
     bridge, native = make_bridge(game_manager, quest_payload)
     result = bridge.connect_discord()
     assert result["ok"] is True
-    assert native.connects == 1
+    assert native.restarts == 1
+    assert patched == [9222]
+
+
+def test_start_discord_patches_then_starts(game_manager, quest_payload, monkeypatch):
+    patched = []
+    monkeypatch.setattr(
+        discord_setup,
+        "enable",
+        lambda port=None: patched.append(port) or {"ok": True, "updated": [], "failed": []},
+    )
+    bridge, native = make_bridge(game_manager, quest_payload)
+    result = bridge.start_discord()
+    assert result["ok"] is True
+    assert native.starts == 1
+    assert patched == [9222]
+
+
+def test_removing_the_patch_restarts_a_running_discord(
+    game_manager, quest_payload, monkeypatch
+):
+    monkeypatch.setattr(discord_setup, "disable", lambda: {"ok": True, "restored": [], "failed": []})
+    monkeypatch.setattr("launcher.bridge.is_running", lambda: True)
+    bridge, native = make_bridge(game_manager, quest_payload)
+    result = bridge.disable_silent_mode()
+    assert result["ok"] is True
+    assert result["restarted"] is True
+    assert native.plain_restarts == 1
+
+
+def test_removing_the_patch_leaves_a_closed_discord_alone(
+    game_manager, quest_payload, monkeypatch
+):
+    monkeypatch.setattr(discord_setup, "disable", lambda: {"ok": True, "restored": [], "failed": []})
+    monkeypatch.setattr("launcher.bridge.is_running", lambda: False)
+    bridge, native = make_bridge(game_manager, quest_payload)
+    result = bridge.disable_silent_mode()
+    assert result["ok"] is True
+    assert result["restarted"] is False
+    assert native.plain_restarts == 0
 
 
 def test_quest_prefs_default_and_save(game_manager, quest_payload, tmp_path):
@@ -106,6 +151,7 @@ def test_quest_prefs_default_and_save(game_manager, quest_payload, tmp_path):
     assert bridge.get_quest_prefs()["prefs"] == {
         "play_session_tail_min": 2,
         "run_mode": "activity",
+        "test_mode": False,
     }
 
     saved = bridge.set_quest_prefs({"play_session_tail_min": 4})

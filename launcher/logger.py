@@ -1,4 +1,3 @@
-
 import logging
 import sys
 from datetime import datetime, timezone
@@ -7,9 +6,10 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
+from launcher import __version__
+
 
 class GameLauncherLogger:
-
     def __init__(self):
         self._setup_logger()
 
@@ -64,10 +64,10 @@ class GameLauncherLogger:
     def critical(self, message: str):
         self.logger.critical(message)
 
-
     def app_start(self):
         self.info("=" * 50)
-        self.info("Discord Games Launcher starting")
+
+        self.info(f"Discord Games Launcher v{__version__} starting")
         self.info("=" * 50)
 
     def app_exit(self):
@@ -78,7 +78,6 @@ class GameLauncherLogger:
     def database_recreate(self):
         self.warning("Database schema invalid - recreating database")
 
-
     def process_start(self, game_name: str, exe_path: str, pid: int):
         self.info(f"Process started: {game_name} from {exe_path} (PID: {pid})")
 
@@ -88,14 +87,12 @@ class GameLauncherLogger:
     def process_kill(self, game_name: str, pid: int):
         self.warning(f"Process killed: {game_name} (PID: {pid})")
 
-
     def database_operation(self, operation: str, table: str, details: str = ""):
         self.debug(f"DB: {operation} on {table}" + (f" - {details}" if details else ""))
 
     def record_executable_attempt(self, game_name: str, exe_name: str, success: bool):
         result = "SUCCESS" if success else "FAILURE"
         self.debug(f"History recorded for {game_name}: {exe_name} - {result}")
-
 
     def game_add_library(self, game_name: str, game_id: int, exe_count: int):
         self.info(

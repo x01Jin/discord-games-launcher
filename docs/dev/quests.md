@@ -71,6 +71,23 @@ through a fixed allow-list. Three states matter:
   action that restarts Discord with a loopback `--remote-debugging-port`.
   Sign-in state survives because the same user data directory is reused.
 
+A restart asks Discord's windows to close with `WM_CLOSE`, then terminates what
+is left, including every `app-*` build of that channel. Stopping only the newest
+build left the pre-patch client running, so the new instance lost the
+single-instance race and exited.
+
+The relaunch opens Discord from its own shortcut (`discord_setup.shortcut_path()`),
+the same file Explorer runs when the user clicks it, so the window opens
+normally and the arguments already in the shortcut apply. Nothing is
+synthesized: no `Update.exe` line, no extra flags. The shortcut carries the
+endpoint switch when the patch is on, which is all a connected start needs.
+When the patch is off the shortcut starts Discord exactly as before, and the
+app reports that no endpoint came up instead of pretending it failed. This
+replaces an `Update.exe --processStart ... --process-start-args` line that the
+app built itself; that line dropped the shortcut's own arguments and produced a
+Discord with no usable tray icon. A launch that dies within a couple of seconds
+is reported as an early exit rather than waiting out the whole timeout.
+
 Nothing is injected into Discord, no script is patched into the client, and no
 account data leaves the machine.
 
@@ -106,6 +123,23 @@ The user's choice is recorded in `%LOCALAPPDATA%\discord-games-launcher\silent_m
 `DiscordNative.status()` calls `heal()` on every status read, so a Discord
 update that rewrites a shortcut is repaired (rate limited to once per
 `_REAPPLY_INTERVAL`, 120 s) without asking again.
+
+The patch is only written by an explicit action. `start_discord()` and
+`connect_discord()` patch first and then start or restart Discord with the
+endpoint, which is what the Quests panel's two labels describe ("Patch and run
+Discord", "Patch and restart Discord"). Nothing in `DiscordNative` patches on
+its own: `start()` and `restart()` launch with the switch only for that run, so
+an unpatched machine stays unpatched unless the user asks for it.
+
+Removing the patch is the mirror image. `disable_silent_mode()` restores the
+entries and, when Discord is running, restarts it without the endpoint
+(`restart_without_endpoint()`). That restart is what makes the removal visible:
+a running client keeps the endpoint it was started with, so restoring shortcuts
+alone left the port open until the next manual restart, and any later Connect
+silently patched the machine again. Both UIs confirm the removal first when
+Discord is running, because it closes the window and drops voice connections.
+Both restarts open Discord from the user's own shortcut, so it comes up the way
+a click on that shortcut does.
 
 The setup is per Windows account, changes no file inside the Discord
 installation, sends nothing anywhere, and is reversible: **Turn silent
@@ -269,7 +303,13 @@ independent lanes, one play runner and one video runner:
   passed since the previous beat. The run ends when the response sets
   `completed_at` or the credited seconds reach the target, and a run that never
   completes stops after `PLAY_TIMEOUT_SECONDS` (4 h). The monitor thread ticks
-  every 2 s while a run is in flight.
+  every second while a run is in flight and every 20 s when idle; it never
+  exits, so a run that starts between two idle ticks cannot find a thread that
+  already decided to stop.
+- A beat whose credited total does not move means Discord is not counting the
+  run (wrong task key, a refused executable, a quest pulled). After
+  `PLAY_STALL_BEATS` beats like that the run stops and says so, instead of
+  beating nothing for four hours.
 - When a play run finishes on its own, the next queued game starts at a random
   point between 10 seconds and the configured pause (default 2 min), so runs do
   not follow each other back to back. A manual Stop skips the pause.
@@ -289,9 +329,16 @@ independent lanes, one play runner and one video runner:
   `drop_queue_item()` removes one. The Running view moves ids within their own
   lane, so a video never changes where a game sits in its lane.
 - A play quest that fails to start (Discord refused the heartbeat, the quest
-  expired before its turn) stays queued and is retried on the next tick with the
-  reason logged. Anything that cannot be queued is skipped at enqueue time, and
-  the message names both counts.
+  expired before its turn) rotates to the back of the queue and is retried after
+  20 s, so one bad row cannot block everything behind it. At
+  `PLAY_MAX_ATTEMPTS` failures it is dropped and remembered in the skip set,
+  which a manual Run or a new Start selected clears. Anything that cannot be
+  queued is skipped at enqueue time, and the message names both counts.
+- A video quest the account has not accepted is dropped rather than watched:
+  `video-progress` for an unenrolled quest credits nothing, and the old path
+  posted into that void until the 30 minute timeout.
+- A video run starts its timestamp at the progress Discord already holds, not at
+  zero, so a part-watched quest resumes instead of sending a lower value.
 - Pressing Run while another play quest is running enqueues it and answers
   "Queued behind the game quest that is running", so two runs never overlap.
 
@@ -339,6 +386,17 @@ answered `260004` ("Quest does not support codes for this platform") for
 platform 1 or 2, so the path and body are accepted and the refusal is
 Discord-side.
 
+A claim that succeeds does not update the client's own QuestStore: the request
+goes through the client's HTTP layer, but nothing dispatches the result into the
+store. A list read right after it therefore still showed the reward as unclaimed
+and the old orb balance. The claim branch now writes `userStatus.claimedAt` on
+the cached quest, and the service keeps a short overlay
+(`CLAIM_OVERLAY_SECONDS`, 180 s) that marks the quest claimed and adds the
+reward orbs to the balance it was claimed against. The overlay entry is dropped
+as soon as the payload reports `claimedAt`, and the orb credit is dropped as
+soon as the client's balance moves away from the recorded one, so a real balance
+always wins over the estimate.
+
 A refusal therefore hands the claim to the client's own UI.
 `DiscordNative.open_quest_page()` switches the SPA route with
 
@@ -348,12 +406,22 @@ window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
 ```
 
 instead of the `discord://-/quest-home` deep link, which opened a second window.
-`click_claim_reward(quest_id, name)` then finds the Claim button whose card
-carries the quest's name and presses it, retrying for about ten seconds while
-the page renders. That is the only path that can raise Discord's captcha. If the
-button never appears, `launcher/discord_window.py` focuses the window and a
-Windows toast states the failure, because the webview toast would be behind
-Discord by then.
+`click_claim_reward(quest_id, name, alt_name)` then finds the quest's own card
+and presses its Claim button, retrying for about ten seconds while the page
+renders.
+
+The card is the closest ancestor of a Claim button that still holds exactly one
+Claim button and either an attribute ending in the quest id or the quest name or
+game title in its text. The first version stopped at the first ancestor with
+"enough text", which is the grid that holds every quest, so the click landed on
+whichever Claim button came first: that is the wrong-quest claim, and Discord
+answered it with its reward error. Two matches now come back as `ambiguous` and
+nothing is pressed, so the user claims from Discord's page instead.
+
+That UI click is the only path that can raise Discord's captcha. If the button
+never appears, `launcher/discord_window.py` focuses the window and a Windows
+toast states the failure, because the webview toast would be behind Discord by
+then.
 
 Verified on Discord 1.0.9266: the request that button sends is byte-identical to
 the app's own claim body and got the same `403`, so a claim that fails here can
@@ -382,6 +450,21 @@ Windows accepts for desktop toasts.
 A failure is logged and swallowed: a missing `powershell.exe` costs a warning
 line, never a stalled run.
 
+## Live progress
+
+Every beat and every video-progress post answers with the server's credited
+total for the quest's task. The service keeps that value per running quest
+(`_live`), the monitor pushes it as a `quest_progress` event at most once a
+second, and the frontend patches the one row in its quest cache. The list read
+merges the same value, so a manual refresh and the pushed bar agree.
+
+Play progress between beats is extrapolated from the last beat, capped at the
+target and at one beat window. When Discord stops reporting, the bar freezes at
+the last known value instead of inventing movement; a free-running bar reaching
+100% while Discord's own page sat at 0% is the failure Orion documents as its
+issue #43, and the same rule applies here. Video progress is the local clock,
+which is the value being posted.
+
 ## Quest options
 
 Two options live in `%LOCALAPPDATA%\discord-games-launcher\settings.json`
@@ -393,6 +476,12 @@ Two options live in `%LOCALAPPDATA%\discord-games-launcher\settings.json`
 - `play_session_tail_min` (Pause between quests, default 2, allowed 0 to 30)
   spaces out finished runs: the next queued game starts at a random point
   between 10 seconds and those minutes. 0 starts it on the next tick.
+- `test_mode` (default off) runs quests only far enough to prove the pipeline:
+  enrolment, a beat the server credits, and a progress value coming back. A
+  play run stops after `TEST_MODE_BEATS` beats, a video after
+  `TEST_MODE_VIDEO_POSTS` posts, the stop is a normal terminal heartbeat, and
+  nothing is claimed. The quest stays unfinished, so a test run can be repeated
+  instead of consuming the offer.
 
 `QuestService` keeps the last payload for `CACHE_TTL_SECONDS` (20 s), because
 the DevTools read costs a round trip and the client refreshes quests on its own

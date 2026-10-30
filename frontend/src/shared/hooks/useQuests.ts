@@ -14,7 +14,8 @@ export function useQuests() {
     queryFn: () => bridge.get_quests(),
     refetchInterval: (query) => {
       const data = query.state.data as QuestsResult | undefined;
-      return data?.connected ? 20_000 : 4_000;
+      if (!data?.connected) return 4_000;
+      return (data.quests?.length ?? 0) > 0 ? 60_000 : 5_000;
     },
     staleTime: 3_000,
     retry: 0,
@@ -66,6 +67,9 @@ export function useClaimQuest() {
         pushToast(result.message, "success");
       } else if (result.needs_user_action) {
         pushToast(result.message, "info");
+        window.setTimeout(() => {
+          void queryClient.invalidateQueries({ queryKey: ["quests"] });
+        }, 2500);
       } else {
         pushToast(result.message, "error");
       }
@@ -208,7 +212,8 @@ export function useSilentMode() {
   return useQuery({
     queryKey: ["silent-mode"],
     queryFn: () => bridge.silent_mode_status() as Promise<SilentModeStatus>,
-    staleTime: 60_000,
+    refetchInterval: 10_000,
+    staleTime: 5_000,
     retry: 0,
   });
 }

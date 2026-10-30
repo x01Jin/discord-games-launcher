@@ -172,4 +172,3 @@ class SchemaMixin:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_exec_history_game ON executable_history(game_id)
             """)
-

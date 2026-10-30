@@ -34,7 +34,7 @@ pytest tests/test_quests.py -k heartbeat -v
 | `test_migration.py` | In-place schema migration without data loss |
 | `test_notifications.py` | Toast script escaping, finished-quest announcement, failed runner |
 | `test_prefs.py` | Settings file round trip, clamping, unknown keys, corrupt file |
-| `test_quests.py` | Quest states, executable resolution, heartbeat and video runs, queue, prefs |
+| `test_quests.py` | Quest states, executable resolution, heartbeat and video runs, queue retries, stall guard, test mode, live progress, prefs |
 | `test_repair.py` | Candidate refresh, repair composition, generator ownership |
 | `test_startup_cleanup.py` | Stale runtime rows, orphaned directories, missing executables, orphaned icons |
 | `test_updates.py` | Version comparison and GitHub release lookup |

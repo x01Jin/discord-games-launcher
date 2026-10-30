@@ -92,8 +92,10 @@ badge. Play quests post `/quests/{id}/heartbeat` through the client's own HTTP
 layer every 20 s, video quests post `/quests/{id}/video-progress`, and neither
 touches the process manager or the dummy executables. One queue runs in two
 lanes (one play run, one video), pumped by a monitor thread, with the configured
-pause between finished runs. The payload is cached for 20 s and mutations
-invalidate it.
+pause between finished runs, a stall guard for a quest Discord stops crediting,
+and a test mode that stops a run once the pipeline is proven. Credited progress
+is pushed to the UI as a `quest_progress` event instead of waiting for the next
+list read. The payload is cached for 20 s and mutations invalidate it.
 
 **Process manager** (`launcher/process_manager.py`). Starts, verifies, and ends
 dummy processes: PIDs tracked in the database with verification, duplicate

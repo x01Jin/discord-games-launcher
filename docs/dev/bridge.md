@@ -54,23 +54,23 @@ Read from the running Discord client, never from the REST API. Details in
 | --- | --- | --- |
 | `discord_status()` | - | `{installed, running, connected, channel, version, debug_port, silent, silent_wanted, silent_port, hint, error}` |
 | `get_quests(force?)` | bool (opt) | `{connected, quests, status, error, account, suspended_until, total_quests}` |
-| `connect_discord()` | - | `{ok, message}`; starts Discord with the endpoint, or restarts it once if it is already running |
-| `start_discord()` | - | `{ok, message}`; launches Discord with the endpoint when it is closed, never restarts a running one |
+| `connect_discord()` | - | `{ok, message}`; patches the launch entries, then restarts Discord with the endpoint (starts it when closed) |
+| `start_discord()` | - | `{ok, message}`; patches the launch entries, then starts Discord with the endpoint; never restarts a running one |
 | `open_quest_in_discord(quest_id)` | string | `{ok, message}` |
 | `start_quest(quest_id)` | string ID | `{ok, message}`; accepts the quest when needed, then starts a heartbeat run, or queues it behind an active play run |
 | `stop_quest(quest_id)` | string ID | `{ok, message}`; ends the play run or the video wait, with no library effect |
 | `accept_quest(quest_id)` | string ID | `{ok, message}`; enrolls through the running client |
-| `claim_quest_reward(quest_id)` | string ID | `{ok, message, needs_user_action}`; a refusal opens Discord's quest page and brings the window forward |
+| `claim_quest_reward(quest_id)` | string ID | `{ok, message, needs_user_action, claimed_in_client}`; a refusal opens Discord's quest page, presses that quest's Claim button when it finds it, and brings the window forward |
 | `start_quest_queue(quest_ids?)` | string ID list (opt) | `{ok, message}`; queues unfinished play and video quests, accepting them first |
 | `clear_quest_queue()` | - | `{ok, cleared}`; empties both lanes and stops waiting on a video |
 | `skip_quest_watch()` | - | `{ok, message}`; stops waiting for the video and starts the next queued one |
 | `reorder_quest_queue(quest_ids?)` | string ID list | `{ok, message}`; puts the pending ids in that order |
 | `remove_from_quest_queue(quest_id)` | string ID | `{ok, message}` |
-| `get_quest_prefs()` | - | `{ok, prefs}`, where prefs is `{play_session_tail_min, run_mode}` |
+| `get_quest_prefs()` | - | `{ok, prefs}`, where prefs is `{play_session_tail_min, run_mode, test_mode}` |
 | `set_quest_prefs(values)` | object | `{ok, prefs, message}`; merges known keys and clamps the tail to 0..30 |
 | `silent_mode_status()` | - | `{port, enabled, wanted, patched, total, launchers}` |
 | `enable_silent_mode()` | - | `{ok, message, updated, failed}`; writes the switch into the Run key and every Discord shortcut |
-| `disable_silent_mode()` | - | `{ok, message, restored, failed}`; restores the original arguments and clears the marker |
+| `disable_silent_mode()` | - | `{ok, message, restored, failed, restarted}`; restores the original arguments, clears the marker, and restarts a running Discord without the endpoint |
 
 `get_quests` never raises. A missing client, a missing DevTools endpoint, or a
 timed-out read all come back as `{connected: false, error}` so the view can show
@@ -81,6 +81,11 @@ options panel, and the queue bar.
 Each quest carries `kind` (`play`, `watch`, `watch_mobile`), `enrolled`,
 `claimed`, `claimable`, `queued`, an `action` (`run`, `stop`, `open`, `claim`,
 `done`, `unsupported`), and a reward object with the orb counts and labels.
+
+`start_discord` and `connect_discord` write the launch patch before they touch
+Discord, so "Patch and run" and "Patch and restart" are one call each. The
+client's own `start()` and `restart()` never patch: they pass the switch on that
+launch only.
 
 `start_quest` refuses a watch quest by name and accepts an unaccepted play quest
 before starting it, so the UI and the backend cannot disagree about what is
@@ -125,6 +130,13 @@ changes, and a `quests_changed` detail when a quest run starts or finishes
 invalidates the library, catalogue, stats, and quest queries. Mutation results
 arrive as the direct return value and surface as a single toast.
 
+A third detail, `quest_progress`, carries `{quest_id, credited, target, kind}`
+at most once a second while a run is in flight (`QuestService.on_progress`,
+filled by the monitor from the last credited beat). `useDcglEvents` patches that
+one row in the quest cache instead of refetching, which is what makes the bar
+move while the run is credited rather than once per list read.
+
 Polling is limited to two backstops: stats every 20 s, because a dummy process
-can exit on its own and no event reports it, and the quest list every 20 s while
-the client is connected.
+can exit on its own and no event reports it, and the quest list every 60 s while
+the client is connected, for changes no event describes (a quest appearing, the
+client refreshing its own list).

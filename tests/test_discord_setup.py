@@ -1,4 +1,3 @@
-
 import os
 
 from launcher import discord_setup
@@ -17,8 +16,6 @@ RUN_KEY_ARGS = "--processStart Discord.exe --process-start-args --start-minimize
 SHORTCUT_TARGET = r"C:\Users\Jin\AppData\Local\Discord\Discord.exe"
 
 
-
-
 def test_port_of_reads_the_switch():
     assert _port_of("--processStart Discord.exe --remote-debugging-port=9223") == 9223
     assert _port_of("--remote-debugging-port=9223") == 9223
@@ -31,8 +28,6 @@ def test_strip_switch_removes_only_the_switch():
     assert _strip_switch("--start-minimized --remote-debugging-port=9223") == "--start-minimized"
     assert _strip_switch("--remote-debugging-port=9223") == ""
     assert _strip_switch("") == ""
-
-
 
 
 def test_run_key_switch_goes_into_the_process_start_args_group():
@@ -71,8 +66,6 @@ def test_an_existing_port_is_replaced():
     assert "9222" not in patched
 
 
-
-
 def test_disable_keeps_the_original_arguments():
     patched = with_switch(RUN_KEY_ARGS, RUN_KEY_TARGET)
     restored = without_switch(patched)
@@ -89,8 +82,6 @@ def test_disable_drops_the_group_it_added():
 def test_disable_on_an_untouched_line_changes_nothing():
     assert without_switch(RUN_KEY_ARGS) == RUN_KEY_ARGS
     assert without_switch("--processStart Discord.exe") == "--processStart Discord.exe"
-
-
 
 
 def test_shortcuts_found_once_each(tmp_path, monkeypatch):
@@ -127,6 +118,26 @@ def test_launcher_patched_flag_matches_the_command_line():
     assert plain.patched is False
 
 
+def test_shortcut_path_prefers_a_start_menu_entry(tmp_path, monkeypatch):
+    start_menu = tmp_path / "Discord.lnk"
+    start_menu.write_bytes(b"lnk")
+    taskbar = tmp_path / "Pinned.lnk"
+    taskbar.write_bytes(b"lnk")
+    launchers = [
+        Launcher("Start with Windows", "HKCU Run", "Update.exe", ""),
+        Launcher("Taskbar", str(taskbar), "Discord.exe", ""),
+        Launcher("Start menu", str(start_menu), "Discord.exe", ""),
+    ]
+    monkeypatch.setattr(discord_setup, "discover", lambda: launchers)
+    assert discord_setup.shortcut_path() == str(start_menu)
+
+
+def test_shortcut_path_ignores_missing_files(tmp_path, monkeypatch):
+    launchers = [Launcher("Start menu", str(tmp_path / "nope.lnk"), "Discord.exe", "")]
+    monkeypatch.setattr(discord_setup, "discover", lambda: launchers)
+    assert discord_setup.shortcut_path() is None
+
+
 def test_summary_reports_the_port_already_on_the_entries(monkeypatch):
     launcher = Launcher(
         "Start menu",
@@ -140,7 +151,14 @@ def test_summary_reports_the_port_already_on_the_entries(monkeypatch):
 
 def test_summary_shape_without_touching_the_machine(monkeypatch):
     monkeypatch.setattr(discord_setup, "discover", list)
+    monkeypatch.setattr(discord_setup, "_read_marker", dict)
     state = discord_setup.summary()
     assert state["enabled"] is False
     assert state["launchers"] == []
     assert state["port"] == discord_setup.SILENT_PORT
+
+
+def test_summary_keeps_the_remembered_port_after_removal(monkeypatch):
+    monkeypatch.setattr(discord_setup, "discover", list)
+    monkeypatch.setattr(discord_setup, "_read_marker", lambda: {"enabled": False, "port": 9222})
+    assert discord_setup.summary()["port"] == 9222

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -39,7 +38,6 @@ from .renderer import (
 
 
 class DiscordNative:
-
     def __init__(self, logger=None, port: int | None = None):
         self.logger = logger
         self.port = port or int(os.environ.get("DCGL_DISCORD_CDP_PORT") or 0) or None
@@ -138,8 +136,8 @@ class DiscordNative:
                     "Discord once."
                 )
             return (
-                "Discord is running without the DevTools endpoint. Connect "
-                "enables it and restarts Discord once."
+                "Discord is running without the endpoint. Patching the launch "
+                "entries and restarting Discord once turns it on."
             )
         return "Connected to the running Discord client."
 
@@ -148,8 +146,8 @@ class DiscordNative:
         if not targets:
             self._last_error = error
             raise DiscordNativeError(
-                "Discord's DevTools endpoint is closed. Connect restarts Discord "
-                "once with it enabled."
+                "Discord's endpoint is closed. Patch the launch entries and "
+                "restart Discord once to open it."
             )
 
         last_error: str | None = None
@@ -242,7 +240,6 @@ class DiscordNative:
         self._last_error = last_error
         raise DiscordNativeError(last_error or "Discord did not answer")
 
-
     def _quest_api(self, op: dict[str, Any], timeout: float = 20.0) -> dict[str, Any]:
         expression = QUEST_API_EXPRESSION.replace("__DCGL_OP__", json.dumps(op))
         value = self._evaluate_on_client(expression, timeout=timeout)
@@ -261,18 +258,23 @@ class DiscordNative:
             raise QuestApiError(
                 str(payload.get("error") or "Discord refused the quest request"),
                 captcha=bool(payload.get("captcha")),
+                code=payload.get("code"),
+                status=payload.get("status"),
             )
         return payload
 
     def accept_quest(self, quest_id: str) -> dict[str, Any]:
         return self._quest_api({"kind": "enroll", "questId": str(quest_id)})
 
-    def send_video_progress(self, quest_id: str, timestamp: float) -> dict[str, Any]:
+    def send_video_progress(
+        self, quest_id: str, timestamp: float, task_key: str | None = None
+    ) -> dict[str, Any]:
         return self._quest_api(
             {
                 "kind": "video",
                 "questId": str(quest_id),
                 "timestamp": round(float(timestamp), 6),
+                "taskKey": str(task_key or ""),
             }
         )
 
@@ -282,6 +284,7 @@ class DiscordNative:
         application_id: int | str,
         executable_path: str,
         terminal: bool = False,
+        task_key: str | None = None,
     ) -> dict[str, Any]:
         return self._quest_api(
             {
@@ -290,6 +293,7 @@ class DiscordNative:
                 "applicationId": str(application_id),
                 "executablePath": str(executable_path),
                 "terminal": bool(terminal),
+                "taskKey": str(task_key or ""),
             }
         )
 
@@ -305,9 +309,18 @@ class DiscordNative:
                 return False
         return bool(isinstance(value, dict) and value.get("ok"))
 
-    def click_claim_reward(self, quest_id: str, name: str) -> dict[str, Any]:
-        expression = CLAIM_CLICK_EXPRESSION.replace(
-            "__DCGL_QUEST_NAME__", json.dumps(str(name))
+    def click_claim_reward(
+        self, quest_id: str, name: str, alt_name: str = ""
+    ) -> dict[str, Any]:
+        names = []
+        for candidate in (name, alt_name):
+            text = str(candidate or "")
+            if text and text not in names:
+                names.append(text)
+        expression = (
+            CLAIM_CLICK_EXPRESSION.replace(
+                "__DCGL_QUEST_NAMES__", json.dumps(names)
+            ).replace("__DCGL_QUEST_ID__", json.dumps(str(quest_id)))
         )
         value = self._evaluate_on_client(expression, timeout=10.0)
         if isinstance(value, str):
@@ -319,6 +332,18 @@ class DiscordNative:
             return {"ok": False, "reason": "unexpected"}
         return value
 
+    def endpoint_port(self) -> int:
+        if self.port:
+            return self.port
+        target = self.target()
+        if target is not None:
+            return target.port
+        try:
+            state = discord_setup.summary()
+        except (OSError, ValueError):
+            return discord_setup.SILENT_PORT
+        port = state.get("port")
+        return int(port) if isinstance(port, int) else discord_setup.SILENT_PORT
 
     def start(self, wait_seconds: float = 45.0) -> tuple[bool, str]:
         target = self.target()
@@ -329,22 +354,15 @@ class DiscordNative:
         if install is None or install.exe_path is None:
             return False, "Discord is not installed for this user."
         if is_running():
-            return False, (
-                "Discord is running without the DevTools endpoint. It has to be "
-                "restarted once to enable it."
-            )
+            return False, "Discord is already running."
 
-        port = self.port or self._free_port()
-        if port is None:
-            return False, "Could not find a free local port for the DevTools endpoint."
-        self._enable_silent(port)
         try:
-            self._launch(install, port)
+            self._launch(install)
         except OSError as exc:
             return False, f"Could not start Discord: {exc}"
-        return self._await_quests(port, wait_seconds)
+        return self._await_connection(wait_seconds, "started")
 
-    def connect(self, wait_seconds: float = 30.0) -> tuple[bool, str]:
+    def restart(self, wait_seconds: float = 30.0) -> tuple[bool, str]:
         target = self.target()
         if target is not None:
             return True, f"Already connected to Discord on port {target.port}"
@@ -355,12 +373,6 @@ class DiscordNative:
         if not is_running():
             return self.start(wait_seconds=wait_seconds)
 
-        port = self.port or self._free_port()
-        if port is None:
-            return False, "Could not find a free local port for the DevTools endpoint."
-
-        self._enable_silent(port)
-
         try:
             self._stop_client(install)
         except (psutil.Error, OSError) as exc:
@@ -368,23 +380,61 @@ class DiscordNative:
                 self.logger.warning(f"Could not close Discord cleanly: {exc}")
 
         try:
-            self._launch(install, port)
+            self._launch(install)
         except OSError as exc:
             return False, f"Could not start Discord: {exc}"
 
-        return self._await_quests(port, wait_seconds, closing="restarted")
+        return self._await_connection(wait_seconds, "restarted")
 
-    def _enable_silent(self, port: int) -> bool:
+    def restart_without_endpoint(self) -> tuple[bool, str]:
+        install = self.install()
+        if install is None or install.exe_path is None:
+            return False, "Discord is not installed for this user."
+        if not is_running():
+            return True, "Discord is not running."
+
         try:
-            result = discord_setup.enable(port)
-        except (OSError, ValueError) as exc:
-            if self.logger:
-                self.logger.warning(f"Could not update the Discord launchers: {exc}")
-            return False
-        if self.logger:
-            state = "on" if result.get("ok") else "partial"
-            self.logger.info(f"Silent connection {state}: {result.get('message')}")
-        return bool(result.get("ok"))
+            self._stop_client(install)
+        except (psutil.Error, OSError) as exc:
+            return False, f"Could not close Discord: {exc}"
+
+        try:
+            self._launch(install)
+        except OSError as exc:
+            return False, f"Could not start Discord: {exc}"
+
+        if self._await_process():
+            return True, "Discord restarted."
+        return False, "Discord did not start again after the restart."
+
+    def _await_process(self, timeout: float = 20.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if is_running():
+                return True
+            time.sleep(0.5)
+        return False
+
+    def _await_connection(self, wait_seconds: float, closing: str) -> tuple[bool, str]:
+        deadline = time.monotonic() + wait_seconds
+        missing = 0
+        while time.monotonic() < deadline:
+            target = self.target()
+            if target is not None:
+                return self._await_quests(target.port, wait_seconds, closing=closing)
+            if is_running():
+                missing = 0
+            else:
+                missing += 1
+                if missing >= 4:
+                    return False, f"Discord {closing} and then exited."
+            time.sleep(0.5)
+        if is_running():
+            return True, (
+                f"Discord {closing}, but it has no endpoint. The launch patch is "
+                "off or its entries were not updated."
+            )
+        return False, f"Discord {closing} and then exited."
 
     def _await_quests(
         self,
@@ -394,14 +444,27 @@ class DiscordNative:
     ) -> tuple[bool, str]:
         deadline = time.monotonic() + wait_seconds
         opened = False
+        missing = 0
         while time.monotonic() < deadline:
             target, _error = find_target([port])
             if target is not None:
                 self.port = port
                 opened = True
                 break
+
+            if is_running():
+                missing = 0
+            else:
+                missing += 1
+                if missing >= 4:
+                    break
             time.sleep(0.5)
         if not opened:
+            if not is_running():
+                return False, (
+                    f"Discord {closing} and then exited. A stale instance or a "
+                    "pending update is the usual cause; try Connect again."
+                )
             return False, (
                 f"Discord {closing} but did not open a DevTools endpoint. "
                 "Check that no other process is holding the port."
@@ -426,44 +489,39 @@ class DiscordNative:
             "Refresh in a few seconds."
         )
 
-    @staticmethod
-    def _free_port() -> int | None:
-        for port in _DEFAULT_PORTS:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                try:
-                    probe.bind(("127.0.0.1", port))
-                except OSError:
-                    continue
-                return port
-        return None
-
     def _stop_client(self, install: DiscordInstall) -> None:
+        root = install.app_dir.parent if install.app_dir is not None else None
         victims: list[psutil.Process] = []
         for proc in running_processes():
             try:
                 exe = proc.exe()
             except (psutil.Error, OSError):
                 exe = ""
-            if install.app_dir is not None and exe:
+            if root is not None and exe:
                 try:
-                    Path(exe).relative_to(install.app_dir)
+                    Path(exe).relative_to(root)
                 except ValueError:
                     continue
             victims.append(proc)
 
-        for proc in victims:
+        self._request_close(victims)
+        try:
+            _gone, alive = psutil.wait_procs(victims, timeout=8)
+        except (psutil.Error, OSError):
+            alive = victims
+
+        for proc in alive:
             try:
                 proc.terminate()
             except (psutil.Error, OSError):
                 continue
 
         try:
-            psutil.wait_procs(victims, timeout=10)
+            alive = psutil.wait_procs(alive, timeout=5)[1]
         except (psutil.Error, OSError):
             pass
 
-        for proc in victims:
+        for proc in alive:
             try:
                 if proc.is_running():
                     proc.kill()
@@ -474,17 +532,79 @@ class DiscordNative:
         if self.logger:
             self.logger.info(f"Stopped {len(victims)} Discord process(es)")
 
-    def _launch(self, install: DiscordInstall, port: int) -> None:
-        if install.exe_path is None:
+    @staticmethod
+    def _request_close(victims: list[psutil.Process]) -> None:
+        if sys.platform != "win32" or not victims:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+        except (ImportError, OSError, AttributeError):
+            return
+        try:
+            user32.GetWindowThreadProcessId.argtypes = [
+                wintypes.HWND,
+                ctypes.POINTER(wintypes.DWORD),
+            ]
+            user32.PostMessageW.argtypes = [
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+        except (AttributeError, OSError):
+            return
+
+        pids = {proc.pid for proc in victims}
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def visit(hwnd, _lparam):
+            pid = wintypes.DWORD()
+            try:
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if pid.value in pids:
+                    user32.PostMessageW(hwnd, 0x0010, 0, 0)
+            except (OSError, AttributeError, ValueError):
+                return True
+            return True
+
+        try:
+            user32.EnumWindows(callback_type(visit), 0)
+        except (OSError, AttributeError, ValueError):
+            pass
+
+    def _launch(self, install: DiscordInstall) -> None:
+        shortcut = None
+        if sys.platform == "win32":
+            try:
+                shortcut = discord_setup.shortcut_path()
+            except (OSError, ValueError):
+                shortcut = None
+        if shortcut is not None:
+            os.startfile(shortcut)
+            if self.logger:
+                self.logger.info(f"Opened Discord from {shortcut}")
+            return
+
+        if install.exe_path is None or install.app_dir is None:
             raise OSError("Discord executable not found")
         creationflags = 0
         if sys.platform == "win32":
             creationflags = (
                 subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
             )
+        updater = install.app_dir.parent / "Update.exe"
+        if updater.is_file():
+            command = [str(updater), "--processStart", install.exe_path.name]
+            cwd = str(updater.parent)
+        else:
+            command = [str(install.exe_path)]
+            cwd = str(install.exe_path.parent)
         subprocess.Popen(
-            [str(install.exe_path), f"--remote-debugging-port={port}"],
-            cwd=str(install.exe_path.parent),
+            command,
+            cwd=cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -492,4 +612,4 @@ class DiscordNative:
             close_fds=True,
         )
         if self.logger:
-            self.logger.info(f"Started Discord with --remote-debugging-port={port}")
+            self.logger.info(f"Started Discord ({Path(command[0]).name})")

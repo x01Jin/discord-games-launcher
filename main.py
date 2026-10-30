@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import json
 import os
 import sys
@@ -35,7 +33,6 @@ _DWMWA_TEXT_COLOR = 36
 
 _FRAME_BG = 0x0014151C
 _FRAME_TEXT = 0x00FFFFFF
-
 
 _INSTANCE_HANDLE = None
 
@@ -274,7 +271,6 @@ def main():
             game_manager.process_mgr.force_cleanup_all()
         if logger:
             logger.app_exit()
-
 
 if __name__ == "__main__":
     main()

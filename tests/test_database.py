@@ -1,4 +1,3 @@
-
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -302,7 +301,6 @@ def run_all_tests():
     print("=" * 50 + "\n")
 
     return len(failed) == 0
-
 
 if __name__ == "__main__":
     success = run_all_tests()

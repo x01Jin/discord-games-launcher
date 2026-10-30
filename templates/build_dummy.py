@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import shutil
 import subprocess
 import sys
@@ -66,7 +64,6 @@ def build_dummy():
         print("  Cleaned up spec file")
 
     return True
-
 
 if __name__ == "__main__":
     success = build_dummy()

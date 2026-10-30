@@ -5,6 +5,8 @@ import time
 
 from launcher.discord_native import DiscordNativeError
 
+from .model import PLAY_MAX_ATTEMPTS
+
 
 class QueueMixin:
     def _enqueue(self, quest_id: str) -> bool:
@@ -54,6 +56,9 @@ class QueueMixin:
 
         with self._run_lock:
             for quest_id in accepted:
+                self._skipped.discard(quest_id)
+                self._failures.pop(quest_id, None)
+                self._retry_at.pop(quest_id, None)
                 if quest_id not in self._queue:
                     self._queue.append(quest_id)
         self._pump()
@@ -65,12 +70,21 @@ class QueueMixin:
     def clear_queue(self) -> int:
         with self._run_lock:
             count = len(self._queue) + (1 if self._watching else 0)
+            watching = self._watching
             self._queue.clear()
+            self._skipped.clear()
+            self._failures.clear()
+            self._retry_at.clear()
             self._watching = None
+            self._watching_task = ""
+            self._watching_target = 0
+            self._watch_posts = 0
             self._watch_seconds = 0.0
             self._watch_last = 0.0
             self._watch_next = 0.0
             self._watch_checked_at = 0.0
+        if watching is not None:
+            self._forget_progress(watching)
         return count
 
     def skip_watch(self) -> tuple[bool, str]:
@@ -112,10 +126,13 @@ class QueueMixin:
         return True, f"Removed it from the queue, {left} left"
 
     def _next_queued(self, kind: str, skip: str | None = None) -> str | None:
+        now = time.monotonic()
         with self._run_lock:
             pending = list(self._queue)
+            skipped = set(self._skipped)
+            cooling = {key for key, until in self._retry_at.items() if until > now}
         for quest_id in pending:
-            if quest_id == skip:
+            if quest_id == skip or quest_id in skipped or quest_id in cooling:
                 continue
             quest = self._find(quest_id)
             if quest is None:
@@ -141,16 +158,30 @@ class QueueMixin:
             try:
                 self.native.accept_quest(quest_id)
             except (DiscordNativeError, OSError) as exc:
-                self._log("warning", f"Queued video quest could not be accepted: {exc}")
+                self._log(
+                    "warning",
+                    f"Dropped the queued video quest {quest.get('name')!r}: "
+                    f"Discord would not accept it ({exc})",
+                )
+                with self._run_lock:
+                    self._skipped.add(quest_id)
+                    self._queue = [q for q in self._queue if q != quest_id]
+                self._changed()
+                return False
         now = time.monotonic()
+        resume = max(0, int(quest.get("progress_seconds") or 0))
         with self._run_lock:
             if quest_id in self._queue:
                 self._queue.remove(quest_id)
             self._watching = quest_id
             self._watching_name = str(quest.get("name") or "")
             self._watching_reward = self._reward_label(quest)
+            self._watching_task = str(quest.get("task_key") or "")
+            self._watching_target = int(quest.get("target_seconds") or 0)
             self._watching_at = now
-            self._watch_seconds = 0.0
+
+            self._watch_posts = 0
+            self._watch_seconds = float(resume)
             self._watch_last = now
             self._watch_next = now + random.uniform(7.0, 9.5)
             self._watch_checked_at = now
@@ -180,6 +211,25 @@ class QueueMixin:
             with self._run_lock:
                 if quest_id in self._queue:
                     self._queue.remove(quest_id)
+                self._retry_at.pop(quest_id, None)
             return True
-        self._log("warning", f"Queued quest did not start: {message}")
+
+        now = time.monotonic()
+        with self._run_lock:
+            attempts = self._failures.get(quest_id, 0) + 1
+            self._failures[quest_id] = attempts
+            dropped = attempts >= PLAY_MAX_ATTEMPTS
+            if dropped:
+                self._skipped.add(quest_id)
+                self._queue = [q for q in self._queue if q != quest_id]
+                self._retry_at.pop(quest_id, None)
+            else:
+                self._queue = [q for q in self._queue if q != quest_id] + [quest_id]
+                self._retry_at[quest_id] = now + 20.0
+        self._log(
+            "warning",
+            f"Queued quest did not start ({attempts}/{PLAY_MAX_ATTEMPTS}): {message}"
+            + (". Dropped it from the queue" if dropped else ""),
+        )
+        self._changed()
         return False

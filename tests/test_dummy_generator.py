@@ -1,4 +1,3 @@
-
 import sys
 import tempfile
 from pathlib import Path
@@ -55,7 +54,6 @@ def test_template_availability_check():
         is_available = gen.is_template_available()
         print(f"  Template available: {is_available}")
         print(f"  Template path: {gen.get_template_path()}")
-
 
     print("  PASSED")
 
@@ -310,7 +308,6 @@ def run_all_tests():
     print("=" * 50 + "\n")
 
     return len(failed) == 0
-
 
 if __name__ == "__main__":
     success = run_all_tests()

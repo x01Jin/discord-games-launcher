@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -11,6 +10,7 @@ from platformdirs import user_data_dir
 
 PLAY_SESSION_TAIL_MIN = "play_session_tail_min"
 RUN_MODE = "run_mode"
+TEST_MODE = "test_mode"
 
 MODE_ACTIVITY = "activity"
 MODE_SILENT = "silent"
@@ -19,6 +19,7 @@ RUN_MODES = (MODE_ACTIVITY, MODE_SILENT)
 DEFAULTS: dict[str, Any] = {
     PLAY_SESSION_TAIL_MIN: 2,
     RUN_MODE: MODE_ACTIVITY,
+    TEST_MODE: False,
 }
 
 MAX_TAIL_MINUTES = 30
@@ -50,6 +51,10 @@ def _clean(values: Any, base: dict[str, Any]) -> dict[str, Any]:
     mode = values.get(RUN_MODE, result[RUN_MODE])
     if isinstance(mode, str) and mode.strip().lower() in RUN_MODES:
         result[RUN_MODE] = mode.strip().lower()
+
+    test_mode = values.get(TEST_MODE, result[TEST_MODE])
+    if isinstance(test_mode, bool):
+        result[TEST_MODE] = test_mode
     return result
 
 
@@ -76,7 +81,6 @@ def save(values: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
 def update(path: Path | None = None, **changes: Any) -> dict[str, Any]:
     return save(changes, path)
 
-
 __all__ = [
     "DEFAULTS",
     "MAX_TAIL_MINUTES",
@@ -85,6 +89,7 @@ __all__ = [
     "PLAY_SESSION_TAIL_MIN",
     "RUN_MODE",
     "RUN_MODES",
+    "TEST_MODE",
     "default_path",
     "load",
     "save",

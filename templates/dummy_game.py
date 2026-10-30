@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import sys
 from datetime import datetime, timezone
 
@@ -93,7 +91,6 @@ def main():
         return
 
     run_gui(game_name)
-
 
 if __name__ == "__main__":
     main()

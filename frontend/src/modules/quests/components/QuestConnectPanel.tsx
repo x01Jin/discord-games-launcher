@@ -1,10 +1,10 @@
 import type { DiscordStatus, SilentModeStatus } from "../../../shared/api-client";
 import {
   AlertIcon,
-  CheckIcon,
   DiscordIcon,
   PlayIcon,
   RefreshIcon,
+  TrashIcon,
 } from "../../../shared/components/icons";
 import { Button, StatusDot } from "../../../shared/components/primitives";
 
@@ -15,25 +15,10 @@ interface Props {
   connecting: boolean;
   starting: boolean;
   disabling: boolean;
-  canStart: boolean;
   onConnect: () => void;
   onStartDiscord: () => void;
   onRefresh: () => void;
   onDisableSilent: () => void;
-}
-
-function Step({ index, title, children }: { index: number; title: string; children?: React.ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-active text-[11px] font-semibold text-muted">
-        {index}
-      </span>
-      <span className="min-w-0 flex-1 text-[12px] leading-5 text-subtle">
-        <span className="font-medium text-muted">{title}</span>
-        {children}
-      </span>
-    </li>
-  );
 }
 
 export function QuestConnectPanel({
@@ -43,26 +28,60 @@ export function QuestConnectPanel({
   connecting,
   starting,
   disabling,
-  canStart,
   onConnect,
   onStartDiscord,
   onRefresh,
   onDisableSilent,
 }: Props) {
   const notInstalled = status?.installed === false;
-  const notRunning = Boolean(status?.installed && !status.running);
-  const noEndpoint = Boolean(status?.running && !status.connected);
-  const setupDone = Boolean(silent?.enabled ?? status?.silent);
+  const running = Boolean(status?.running);
+  const patched = Boolean(silent?.enabled ?? status?.silent);
 
   const title = notInstalled
     ? "Discord is not installed"
-    : notRunning
+    : !running
       ? "Discord is not running"
-      : setupDone
+      : patched
         ? "One restart finishes setup"
-        : noEndpoint
-          ? "Connect to the Discord client"
-          : "Quests unavailable";
+        : "Discord is running without the endpoint";
+
+  const body = notInstalled ? (
+    <>Quests are read from the Discord desktop client. Install it, sign in, then return here.</>
+  ) : !running ? (
+    patched ? (
+      <>
+        The launch patch is in place. Start Discord and this page can read quests.
+      </>
+    ) : (
+      <>
+        Quests need a local endpoint that has to exist when Discord starts.
+        Patching the launch entries and starting Discord here does both in one
+        step.
+      </>
+    )
+  ) : patched ? (
+    <>
+      The launch patch is in place. Discord is still running the copy started
+      before it, so it needs one more start.
+    </>
+  ) : (
+    <>
+      Discord is open without the local endpoint. Patching the launch entries
+      and restarting Discord once turns it on. You stay signed in.
+    </>
+  );
+
+  const primary = running
+    ? {
+        label: patched ? "Restart Discord now" : "Patch and restart Discord",
+        onClick: onConnect,
+        busy: connecting,
+      }
+    : {
+        label: patched ? "Start Discord" : "Patch and run Discord",
+        onClick: onStartDiscord,
+        busy: starting,
+      };
 
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4 px-6 py-8">
@@ -71,61 +90,9 @@ export function QuestConnectPanel({
         <h2 className="text-[16px] font-semibold text-ink">{title}</h2>
       </div>
 
-      <p className="text-[13px] leading-[21px] text-muted">
-        {notInstalled ? (
-          <>
-            Quests are read from the Discord desktop client. Install it, sign
-            in, then return here.
-          </>
-        ) : notRunning ? (
-          <>
-            Discord is closed. Start it here and this page can read quests when
-            it loads.
-          </>
-        ) : setupDone ? (
-          <>
-            The switch is in place. Discord is still running the copy started
-            before it, so it needs one more start.
-          </>
-        ) : (
-          <>
-            Discord is running without the local debug endpoint. One switch adds
-            it for future starts.
-          </>
-        )}
-      </p>
+      <p className="text-[13px] leading-[21px] text-muted">{body}</p>
 
-      {noEndpoint && !setupDone ? (
-        <ol className="flex flex-col gap-3 rounded-[6px] border border-line bg-raised/60 px-4 py-3.5">
-          <Step index={1} title="Set up silent start.">
-            {" "}
-            Adds the switch to Discord's shortcuts and startup entry.
-          </Step>
-          <Step index={2} title="Discord restarts once.">
-            {" "}
-            You stay signed in. Calls and games in Discord end.
-          </Step>
-          <Step index={3} title="Nothing to repeat.">
-            {" "}
-            The list appears whenever Discord starts.
-          </Step>
-        </ol>
-      ) : null}
-
-      {setupDone && noEndpoint ? (
-        <p className="flex items-start gap-2 rounded-[6px] border border-line bg-raised px-3 py-2.5 text-[12px] leading-5 text-muted">
-          <span className="pt-0.5 text-success">
-            <CheckIcon size={14} />
-          </span>
-          <span>
-            Silent connection is on for {silent ? (silent.patched ?? 0) : 0} of{" "}
-            {silent ? (silent.total ?? 0) : 0} launch entries. Close Discord
-            from the tray and open it again, or press the button below.
-          </span>
-        </p>
-      ) : null}
-
-      {error && !noEndpoint ? (
+      {error && !notInstalled ? (
         <div className="flex items-start gap-2 rounded-[6px] border border-line-strong bg-raised px-3 py-2.5 text-[12px] leading-5 text-muted">
           <span className="pt-0.5 text-warning">
             <AlertIcon size={14} />
@@ -138,8 +105,8 @@ export function QuestConnectPanel({
         <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5 rounded-[6px] border border-line bg-raised/60 px-3 py-2.5 text-[12px]">
           <dt className="text-subtle">Client</dt>
           <dd className="flex items-center gap-2 text-muted">
-            <StatusDot tone={status.running ? "success" : "neutral"} />
-            {status.running ? "Running" : "Stopped"}
+            <StatusDot tone={running ? "success" : "neutral"} />
+            {running ? "Running" : "Stopped"}
             {status.version ? (
               <span className="text-subtle">
                 {status.channel} {status.version}
@@ -153,10 +120,10 @@ export function QuestConnectPanel({
           >
             {status.connected ? "open on port " + status.debug_port : "closed"}
           </dd>
-          <dt className="text-subtle">Silent connection</dt>
+          <dt className="text-subtle">Launch patch</dt>
           <dd className="flex items-center gap-2 text-muted">
-            <StatusDot tone={setupDone ? "success" : "neutral"} />
-            {setupDone ? "on" : "off"}
+            <StatusDot tone={patched ? "success" : "neutral"} />
+            {patched ? "on" : "off"}
             {silent && (silent.total ?? 0) > 0 ? (
               <span className="text-subtle">
                 {silent.patched ?? 0} of {silent.total ?? 0} launch entries
@@ -167,37 +134,42 @@ export function QuestConnectPanel({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {canStart ? (
+        {notInstalled ? null : (
           <Button
             variant="primary"
-            busy={starting}
+            busy={primary.busy}
             icon={<PlayIcon size={11} />}
-            onClick={onStartDiscord}
+            onClick={primary.onClick}
+            title={
+              patched
+                ? "Discord is already patched, so this only starts it"
+                : "Adds the endpoint to every launch entry, then starts Discord with it"
+            }
           >
-            Start Discord
+            {primary.label}
           </Button>
-        ) : null}
-        {noEndpoint ? (
-          <Button variant="primary" busy={connecting} onClick={onConnect}>
-            {setupDone ? "Restart Discord now" : "Set up and restart Discord"}
-          </Button>
-        ) : null}
+        )}
         <Button
-          variant={canStart || noEndpoint ? "secondary" : "primary"}
+          variant={notInstalled ? "primary" : "secondary"}
           icon={<RefreshIcon size={13} />}
           onClick={onRefresh}
         >
           Check again
         </Button>
-        {setupDone ? (
+        {patched ? (
           <Button
             variant="ghost"
             busy={disabling}
             className="ml-auto"
             onClick={onDisableSilent}
-            title="Remove the launch switch from every Discord shortcut and startup entry"
+            icon={<TrashIcon size={12} />}
+            title={
+              running
+                ? "Removes the endpoint from every launch entry and restarts Discord without it"
+                : "Removes the endpoint from every launch entry"
+            }
           >
-            Turn silent connection off
+            Remove launch patch
           </Button>
         ) : null}
       </div>
